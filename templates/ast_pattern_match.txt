@@ -1,0 +1,19 @@
+ast match {
+      case Source(defs) => ???
+      case Block(stats) => ???
+      case FunDef(funName, args, retType, body) => ???
+      case StructDef(structName, fields) => ???
+      case Param(paramName, tpe) => ???
+      case ValDef(valName, optType, rhs) => ???
+      case VarDef(varName, optType, rhs) => ???
+      case literal: Literal => ???
+      case VariableRef(name) => ???
+      case Call(callee, args) => ???
+      case ArrayDecl(elemType, size) => ???
+      case UnaryOp(operator, operand) => ???
+      case BinaryOp(lhs, operator, rhs) => ???
+      case Select(lhs, selected) => ???
+      case IfThenElse(cond, thenBr, elseBrOpt) => ???
+      case WhileLoop(cond, body) => ???
+      case ReturnStat(value) => ???
+    }
