@@ -1,0 +1,29 @@
+struct Vertex {
+    x: Double,
+    y: Double
+};
+
+struct Rectangle {
+    upperLeftCorner: Vertex,
+    width: Double,
+    height: Double
+};
+
+fn computeArea(rectangle: Rectangle) -> Double {
+    return rectangle.width * rectangle.height
+};
+
+fn main(){
+    var width = 0.1 - 0.05 * (2.41 + 1.2) * 0.3;
+    var alternate = true;
+    while width < 4 {
+        if alternate {
+            width = width + 0.3
+        } else {
+            width = width * 1.4
+        }
+    };
+    val r = new Rectangle { new Vertex { 11.5, 9 }, width, 2.5 };
+    computeArea(r)
+}
+

@@ -8,6 +8,8 @@ import scala.util.Try
 trait SourceCodeProvider {
   def lines: Try[Seq[String]]
   def name: String
+  
+  def content: Try[String] = lines.map(_.mkString("\n"))
 
   override def toString: String = name
 }

@@ -114,6 +114,8 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
 
       case StructInit(structName, args) =>
         pps
+          .add(New.str)
+          .addSpace()
           .add(structName)
           .addSpace()
         addBracesList(args, ", ", onMultipleLines = false)

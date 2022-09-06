@@ -16,7 +16,7 @@ object TestMain {
   def main(args: Array[String]): Unit = {
     val er = new ErrorReporter(System.err.println)
     val formatter = new Lexer(er) andThen new Parser(er) andThen new PrettyPrinter()
-    val file = new SourceFile("examples/geometry.rsn")
+    val file = SourceFile("examples/geometry.rsn")
     val formatted = formatter.apply(file)
     println(formatted)
   }
