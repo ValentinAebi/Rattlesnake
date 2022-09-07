@@ -26,7 +26,7 @@ object Asts {
   final case class Block(stats: List[Statement]) extends Statement
 
   sealed abstract class TopLevelDef extends Ast
-  final case class FunDef(funName: String, args: List[Param], optRetType: Option[Type], body: Block) extends TopLevelDef
+  final case class FunDef(funName: String, params: List[Param], optRetType: Option[Type], body: Block) extends TopLevelDef
   final case class StructDef(structName: String, fields: List[Param]) extends TopLevelDef
   final case class Param(paramName: String, tpe: Type) extends Ast
 
@@ -57,6 +57,61 @@ object Asts {
 
   final case class IfThenElse(cond: Expr, thenBr: Statement, elseBrOpt: Option[Statement]) extends Statement
   final case class WhileLoop(cond: Expr, body: Statement) extends Statement
-  final case class ReturnStat(value: Expr) extends Statement
+  final case class ReturnStat(value: Expr) extends Statement {
+    private var retType: Option[Type] = None
+    def setRetType(tpe: Type): Unit = {
+      retType = Some(tpe)
+    }
+
+    def getRetType: Option[Type] = retType
+  }
+  
+  
+  def collect[T](ast: Ast)(pf: PartialFunction[Ast, T]): List[T] = {
+    
+    def recurse(ast: Ast): List[T] = collect(ast)(pf)
+    
+    val t = pf.lift.apply(ast)
+    val recursive = ast match {
+      case Source(defs) =>
+        defs.flatMap(recurse)
+      case Block(stats) =>
+        stats.flatMap(recurse)
+      case FunDef(_, params, _, body) =>
+        params.flatMap(recurse) ++ recurse(body)
+      case StructDef(_, fields) =>
+        fields.flatMap(recurse)
+      case Param(_, _) => Nil
+      case ValDef(_, _, rhs) =>
+        recurse(rhs)
+      case VarDef(_, _, rhs) =>
+        recurse(rhs)
+      case _: Literal => Nil
+      case VariableRef(_) => Nil
+      case Call(callee, args) =>
+        recurse(callee) ++ args.flatMap(recurse)
+      case Indexing(indexed, arg) =>
+        recurse(indexed) ++ recurse(arg)
+      case ArrayInit(_, size) =>
+        recurse(size)
+      case StructInit(_, args) =>
+        args.flatMap(recurse)
+      case UnaryOp(_, operand) =>
+        recurse(operand)
+      case BinaryOp(lhs, _, rhs) =>
+        recurse(lhs) ++ recurse(rhs)
+      case Select(lhs, _) =>
+        recurse(lhs)
+      case VarAssig(lhs, rhs) =>
+        recurse(lhs) ++ recurse(rhs)
+      case IfThenElse(cond, thenBr, elseBrOpt) =>
+        recurse(cond) ++ recurse(thenBr) ++ elseBrOpt.map(recurse).getOrElse(Nil)
+      case WhileLoop(cond, body) =>
+        recurse(cond) ++ recurse(body)
+      case ReturnStat(value) =>
+        recurse(value)
+    }
+    t.toList ++ recursive
+  }
 
 }

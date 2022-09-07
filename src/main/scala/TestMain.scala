@@ -1,8 +1,9 @@
 import compiler.Errors.ErrorReporter
-import compiler.{CompilerStep, SourceFile}
+import compiler.{CompilerStep, MultiStep, SourceFile}
 import compiler.lexer.Lexer
 import compiler.parser.Parser
 import compiler.prettyprinter.PrettyPrinter
+import compiler.typechecker.TypeChecker
 
 object TestMain {
 
@@ -15,10 +16,10 @@ object TestMain {
 
   def main(args: Array[String]): Unit = {
     val er = new ErrorReporter(System.err.println)
-    val formatter = new Lexer(er) andThen new Parser(er) andThen new PrettyPrinter()
+    val pipeline = MultiStep(new Lexer(er) andThen new Parser(er)) andThen new TypeChecker(er) andThen MultiStep(new PrettyPrinter())
     val file = SourceFile("examples/geometry.rsn")
-    val formatted = formatter.apply(file)
-    println(formatted)
+    val formatted = pipeline.apply(List(file))
+    formatted.foreach(println)
   }
 
 }

@@ -7,12 +7,12 @@ object Errors {
   /**
    * Exit code used when aborting because of non fatal error(s)
    */
-  val errorsExitCode = -20
+  val errorsExitCode: Int = -20
 
   /**
    * Exit code used when aborting because of a fatal error
    */
-  val fatalErrorExitCode = -21
+  val fatalErrorExitCode: Int = -21
 
   final case class CompilationError(compilationStep: CompilationStep, msg: String, posOpt: Option[Position]){
     override def toString: String =

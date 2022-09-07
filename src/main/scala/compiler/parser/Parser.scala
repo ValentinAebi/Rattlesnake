@@ -75,9 +75,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   // ---------- Syntax description -----------------------------------------------------------------------
 
   private def source(name: String): FinalTreeParser[Source] = {
-    setIgnoreEndl(true) ::: repeatWithEnd(topLevelDef, semicolon) ::: endOfFile.ignored map {
-      case defs => Source(defs)
-    }
+    setIgnoreEndl(true) ::: repeatWithEnd(topLevelDef, semicolon) ::: endOfFile.ignored map (defs => Source(defs))
   } setName "source"
 
 
@@ -120,9 +118,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "arrayType"
 
   private lazy val block = recursive {
-    openBrace ::: repeatWithEnd(stat, semicolon) ::: closeBrace map {
-      case stats => Block(stats)
-    }
+    openBrace ::: repeatWithEnd(stat, semicolon) ::: closeBrace map (stats => Block(stats))
   } setName "block"
 
   private lazy val exprOrAssig = recursive {
@@ -151,7 +147,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     openingBracket ::: expr ::: closingBracket
   } setName "indexing"
 
-  private lazy val varRef = lowName map(VariableRef(_)) setName "varDef"
+  private lazy val varRef = lowName map VariableRef.apply setName "varDef"
 
   private lazy val selectOrCallChain = recursive {
     (varRef OR literalValue OR arrayInit OR structInit OR parenthesizedExpr) ::: repeat((dot ::: lowName) OR callArgs OR indexing) map {
@@ -211,9 +207,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "ifThenElse"
 
   private lazy val returnStat = {
-    kw(Return).ignored ::: expr map {
-      case retVal => ReturnStat(retVal)
-    }
+    kw(Return).ignored ::: expr map (retVal => ReturnStat(retVal))
   } setName "returnStat"
 
 
