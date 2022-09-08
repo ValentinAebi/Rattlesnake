@@ -4,7 +4,7 @@ import compiler.CompilationStep.TypeChecking
 import compiler.Errors.{CompilationError, ErrorReporter}
 import compiler.irs.Asts.*
 import compiler.{CompilerStep, Position}
-import lang.Operator.{Equality, Inequality}
+import lang.Operator.{Equality, Inequality, Sharp}
 import lang.Operators
 import lang.Types.*
 import lang.Types.PrimitiveType.*
@@ -31,7 +31,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[
             ctxBuilder.addStruct(structDef)
       }
     }
-    ctxBuilder.built
+    ctxBuilder.build()
   }
 
   private def check(ast: Ast, ctx: AnalysisContext): Type = {
@@ -61,14 +61,14 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[
         if (!endStatus.alwaysStopped && expRetType != VoidType) {
           reportError("missing return in non-Void function", funDef.getPosition)
         }
-        endStatus.returned.foreach { actRetType =>
-          if (actRetType != expRetType) {
-            reportError(s"function '$funName' should return '$expRetType', found '$actRetType'", funDef.getPosition)
-          }
+        val faultyTypes = endStatus.returned.filter(!_.subtypeOf(expRetType))
+        if (faultyTypes.nonEmpty) {
+          val faultyTypeStr = faultyTypes.map("'" + _ + "'").mkString(", ")
+          reportError(s"function '$funName' should return '$expRetType', found $faultyTypeStr", funDef.getPosition)
         }
         VoidType
 
-      case valDef @ ValDef(valName, optType, rhs) =>
+      case valDef@ValDef(valName, optType, rhs) =>
         val actType = check(rhs, ctx)
         optType.foreach { expType =>
           if (actType != expType) {
@@ -78,7 +78,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[
         ctx.addLocal(valName, optType.getOrElse(actType), false)
         VoidType
 
-      case varDef @ VarDef(varName, optType, rhs) =>
+      case varDef@VarDef(varName, optType, rhs) =>
         val actType = check(rhs, ctx)
         optType.foreach { expType =>
           if (actType != expType) {
@@ -111,11 +111,11 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[
                 funSig.retType
 
               case None =>
-                reportError("syntax error, only functions can be called", call.getPosition)
+                reportError(s"not found: $name", call.getPosition)
                 VoidType
             }
           case _ =>
-            reportError("syntax error", call.getPosition)
+            reportError("syntax error, only functions can be called", call.getPosition)
             VoidType
         }
 
@@ -144,7 +144,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[
         }
         ArrayType(elemType)
 
-      case structInit @ StructInit(structName, args) =>
+      case structInit@StructInit(structName, args) =>
         ctx.structs.get(structName) match {
           case Some(structSig) =>
             checkCallArgs(structSig.fields.values.toList, args, ctx, structInit.getPosition)
@@ -155,20 +155,29 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[
             VoidType
         }
 
-      case unaryOp @ UnaryOp(operator, operand) =>
+      case unaryOp@UnaryOp(operator, operand) =>
         val operandType = check(operand, ctx)
-        Operators.unaryOpFor(operator, operandType) match {
-          case Some(sig) => sig.retType
-          case None =>
-            reportError(s"no definition of operator '$operator' found for operand '$operandType'", unaryOp.getPosition)
+        if (operator == Sharp) {
+          if (operandType.isInstanceOf[ArrayType]) {
+            IntType
+          } else {
+            reportError("# is only applicable to arrays", unaryOp.getPosition)
             VoidType
+          }
+        } else {
+          Operators.unaryOpFor(operator, operandType) match {
+            case Some(sig) => sig.retType
+            case None =>
+              reportError(s"no definition of operator '$operator' found for operand '$operandType'", unaryOp.getPosition)
+              VoidType
+          }
         }
 
-      case binOp @ BinaryOp(lhs, operator, rhs) =>
+      case binOp@BinaryOp(lhs, operator, rhs) =>
         val lhsType = check(lhs, ctx)
         val rhsType = check(rhs, ctx)
-        if (operator == Equality || operator == Inequality){
-          if (lhsType == rhsType){
+        if (operator == Equality || operator == Inequality) {
+          if (lhsType != rhsType) {
             reportError(s"operands of '${Equality.str}' and '${Inequality.str}' should have the same type", binOp.getPosition)
           }
           BoolType
@@ -181,7 +190,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[
           }
         }
 
-      case select @ Select(lhs, selected) =>
+      case select@Select(lhs, selected) =>
         val lhsType = check(lhs, ctx)
         lhsType match {
           case StructType(typeName) =>
@@ -197,13 +206,13 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[
             VoidType
         }
 
-      case varAssig @ VarAssig(lhs, rhs) =>
+      case varAssig@VarAssig(lhs, rhs) =>
         val rhsType = check(rhs, ctx)
         lhs match {
           case VariableRef(name) =>
             ctx.locals.get(name) match {
               case Some((tpe, mut)) if mut =>
-                if (tpe != rhsType){
+                if (tpe != rhsType) {
                   reportError(s"cannot assign a '$rhsType' to a variable of type $tpe", varAssig.getPosition)
                 }
               case Some(_) =>
@@ -211,21 +220,26 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[
               case None =>
                 reportError(s"not found: '$name'", varAssig.getPosition)
             }
+          case indexing: Indexing =>
+            val lhsType = check(indexing, ctx)
+            if (!rhsType.subtypeOf(lhsType)){
+              reportError(s"type mismatch in assignment", indexing.getPosition)
+            }
           case _ =>
-            reportError("syntax error: only variables can be assigned", varAssig.getPosition)
+            reportError("syntax error: only variables and array elements can be assigned", varAssig.getPosition)
         }
         VoidType
 
-      case ifThenElse @ IfThenElse(cond, thenBr, elseBrOpt) =>
+      case ifThenElse@IfThenElse(cond, thenBr, elseBrOpt) =>
         val condType = check(cond, ctx)
-        if (condType != BoolType){
+        if (condType != BoolType) {
           reportError(s"condition should be of type '${BoolType.str}', found '$condType'", ifThenElse.getPosition)
         }
         check(thenBr, ctx)
         elseBrOpt.foreach(check(_, ctx))
         VoidType
 
-      case whileLoop @ WhileLoop(cond, body) =>
+      case whileLoop@WhileLoop(cond, body) =>
         val condType = check(cond, ctx)
         if (condType != BoolType) {
           reportError(s"condition should be of type '${BoolType.str}', found '$condType'", whileLoop.getPosition)
@@ -233,16 +247,34 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[
         check(body, ctx)
         VoidType
 
-      case retStat @ ReturnStat(value) =>
+      case forLoop@ForLoop(initStats, cond, stepStats, body) =>
+        val newCtx = ctx.copied
+        initStats.foreach(check(_, newCtx))
+        val condType = check(cond, newCtx)
+        if (condType != BoolType) {
+          reportError(s"condition should be of type '${BoolType.str}', found '$condType'", forLoop.getPosition)
+        }
+        stepStats.foreach(check(_, newCtx))
+        check(body, newCtx)
+        VoidType
+
+      case retStat@ReturnStat(value) =>
         val tpe = check(value, ctx)
         retStat.setRetType(tpe)
+        VoidType
+
+      case panicStat@PanicStat(msg) =>
+        val msgType = check(msg, ctx)
+        if (msgType != StringType){
+          reportError(s"panic can only be applied to type ${StringType.str}", panicStat.getPosition)
+        }
         VoidType
 
       case _: (StructDef | Param) => assert(false)
     }
   }
 
-  private case class EndStatus(returned: Option[Type], alwaysStopped: Boolean)
+  private case class EndStatus(returned: Set[Type], alwaysStopped: Boolean)
 
   private def checkCallArgs(expTypes: List[Type], args: List[Expr], ctx: AnalysisContext, callPos: Option[Position]): Unit = {
     val expTypesIter = expTypes.iterator
@@ -276,10 +308,10 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[
         for df <- defs do {
           checkReturns(df)
         }
-        EndStatus(None, false)
+        EndStatus(Set.empty, false)
 
       case Block(stats) =>
-        var endStatus = EndStatus(None, false)
+        var endStatus = EndStatus(Set.empty, false)
         for stat <- stats do {
           if (endStatus.alwaysStopped) {
             reportError("dead code", stat.getPosition)
@@ -294,18 +326,15 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[
         elseBrOpt match {
           case Some(elseBr) =>
             val elseEndStatus = checkReturns(elseBr)
-            val alwaysStopped = thenEndStatus.alwaysStopped && elseEndStatus.alwaysStopped
-            if (thenEndStatus.returned.isDefined && elseEndStatus.returned.isDefined) {
-              if (thenEndStatus.returned != elseEndStatus.returned) {
-                reportError("branches of if lead to different return types", ifThenElse.getPosition)
+            if (thenEndStatus.returned.size == 1 && elseEndStatus.returned.size == 1) {
+              val thenRet = thenEndStatus.returned.head
+              val elseRet = elseEndStatus.returned.head
+              if (!(thenRet equalsOrNothing elseRet)) {
+                reportError(s"branches of if lead to different return types: '$thenRet', '$elseRet'", ifThenElse.getPosition)
               }
-              EndStatus(thenEndStatus.returned, alwaysStopped)
-            } else if (thenEndStatus.returned.isDefined) {
-              EndStatus(thenEndStatus.returned, alwaysStopped)
-            } else {
-              EndStatus(elseEndStatus.returned, alwaysStopped)
             }
-          case None => EndStatus(thenEndStatus.returned, false)
+            EndStatus(thenEndStatus.returned ++ elseEndStatus.returned, thenEndStatus.alwaysStopped && elseEndStatus.alwaysStopped)
+          case None => thenEndStatus.copy(alwaysStopped = false)
         }
 
       case whileLoop@WhileLoop(_, body) =>
@@ -315,17 +344,27 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[
         }
         EndStatus(bodyEndStatus.returned, false)
 
+      case forLoop@ForLoop(_, _, _, body) =>
+        val bodyEndStatus = checkReturns(body)
+        if (bodyEndStatus.alwaysStopped) {
+          reportError("for should be replaced by if", forLoop.getPosition)
+        }
+        EndStatus(bodyEndStatus.returned, false)
+
       case retStat: ReturnStat =>
         val retType = retStat.getRetType
         if (retType.isEmpty) {
           reportError("could not infer type of returned value", retStat.getPosition)
         }
-        EndStatus(retType, true)
+        EndStatus(Set(retType.getOrElse(VoidType)), true)
+
+      case _: PanicStat =>
+        EndStatus(Set(NothingType), true)
 
       case _: (FunDef | StructDef | Param) =>
         assert(false)
 
-      case _ => EndStatus(None, false)
+      case _ => EndStatus(Set.empty, false)
 
     }
   }

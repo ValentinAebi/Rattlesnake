@@ -9,8 +9,11 @@ import lang.Operator
 import compiler.CompilationStep
 import compiler.StringFormatting.stringLengthLimited
 import compiler.Position
-import scala.util.{Success, Failure}
+
+import scala.util.{Failure, Success}
 import lang.Types.PrimitiveType
+
+import scala.annotation.tailrec
 
 final class Lexer(errorReporter: ErrorReporter) extends CompilerStep[SourceCodeProvider, (List[PositionedToken], String)] {
 
@@ -38,8 +41,8 @@ final class Lexer(errorReporter: ErrorReporter) extends CompilerStep[SourceCodeP
     string("true") | string("false") into { str => BoolLitToken(str.toBoolean) },
     uppercaseLetter ++ repeat(letterDigitUnderscore) into { FirstUppercaseIdentifierToken(_) },
     lowercaseLetter ++ repeat(letterDigitUnderscore) into { FirstLowercaseIdentifierToken(_) },
-    digitsSeq intoOpt { str => str.toIntOption.map(IntLitToken(_)) },
-    digitsSeq ++ char('.') ++ digitsSeq intoOpt { str => str.toDoubleOption.map(DoubleLitToken(_)) },
+    digitsSeq intoOpt { str => str.toIntOption.map(IntLitToken.apply) },
+    digitsSeq ++ char('.') ++ digitsSeq intoOpt { str => str.toDoubleOption.map(DoubleLitToken.apply) },
     char('\'') ++ anyChar ++ char('\'') into { str => CharLitToken(str(1)) },
     char('"') ++ repeat(anyCharBut('"')) ++ char('"') into { str => StringLitToken(str.drop(1).dropRight(1)) },
   )
@@ -50,7 +53,7 @@ final class Lexer(errorReporter: ErrorReporter) extends CompilerStep[SourceCodeP
   private def tokenizeLine(line: String, lineIdx: Int, srcCodeProvider: SourceCodeProvider): List[(Token, Int)] = {
 
     // takes longest match, if two candidates with maximum match then first in order is taken
-    def tokenizeRemaining(rem: String, tokensReversed: List[(Token, Int)], col: Int): List[(Token, Int)] = {
+    @tailrec def tokenizeRemaining(rem: String, tokensReversed: List[(Token, Int)], col: Int): List[(Token, Int)] = {
       if rem.isEmpty then ((EndlToken, col) :: tokensReversed).reverse
       else {
         val matcherRes = matchersByPriorityOrder

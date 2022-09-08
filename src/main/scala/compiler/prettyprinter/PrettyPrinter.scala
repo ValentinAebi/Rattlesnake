@@ -17,7 +17,9 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
     ast match {
 
       case Source(defs) =>
-        pps.newLine()
+        pps
+          .newLine()
+          .newLine()
         val iter = defs.iterator
         while (iter.hasNext) {
           addAst(iter.next())
@@ -193,11 +195,42 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         pps.addSpace()
         addAst(body)
 
+      case ForLoop(initStats, cond, stepStats, body) =>
+        pps
+          .add(For.str)
+          .addSpace()
+        val initStatsIter = initStats.iterator
+        while (initStatsIter.hasNext) {
+          addAst(initStatsIter.next())
+          if (initStatsIter.hasNext) {
+            pps.add(", ")
+          }
+        }
+        pps.add("; ")
+        addAst(cond)
+        pps.add("; ")
+        val stepStatsIter = stepStats.iterator
+        while (stepStatsIter.hasNext) {
+          addAst(stepStatsIter.next())
+          if (stepStatsIter.hasNext) {
+            pps.add(", ")
+          }
+        }
+        pps.addSpace()
+        addAst(body)
+
       case ReturnStat(value) =>
         pps
           .add(Return.str)
           .addSpace()
         addAst(value)
+
+      case PanicStat(msg) =>
+        pps
+          .add(Panic.str)
+          .addSpace()
+        addAst(msg)
+
     }
   }
 

@@ -3,6 +3,7 @@ package compiler.typechecker
 import compiler.CompilationStep.TypeChecking
 import compiler.Errors.{CompilationError, ErrorReporter}
 import compiler.irs.Asts.{FunDef, StructDef}
+import lang.BuiltInFunctions
 import lang.Types.PrimitiveType.VoidType
 import lang.Types.Type
 
@@ -38,10 +39,11 @@ object AnalysisContext {
 
     def addFunction(funDef: FunDef): Unit = {
       val name = funDef.funName
-      if (functions.contains(name)) {
+      if (BuiltInFunctions.builtInFunctions.contains(name)){
+        errorReporter.push(new CompilationError(TypeChecking, s"function name '$name' conflicts with built-in function", funDef.getPosition))
+      } else if (functions.contains(name)) {
         errorReporter.push(new CompilationError(TypeChecking, s"redefinition of function '$name'", funDef.getPosition))
-      }
-      else {
+      } else {
         val sig = FunctionSignature(name, funDef.params.map(_.tpe), funDef.optRetType.getOrElse(VoidType))
         functions.put(name, sig)
       }
@@ -51,8 +53,7 @@ object AnalysisContext {
       val name = structDef.structName
       if (structs.contains(name)) {
         errorReporter.push(new CompilationError(TypeChecking, s"redefinition of struct '$name'", structDef.getPosition))
-      }
-      else {
+      } else {
         val fieldsMap = mutable.Map[String, Type]()
         for param <- structDef.fields do {
           if (fieldsMap.contains(param.paramName)){
@@ -66,7 +67,10 @@ object AnalysisContext {
       }
     }
 
-    def built: AnalysisContext = new AnalysisContext(functions.toMap, structs.toMap, mutable.Map.empty)
+    def build(): AnalysisContext = {
+      functions.addAll(BuiltInFunctions.builtInFunctions)
+      new AnalysisContext(functions.toMap, structs.toMap, mutable.Map.empty)
+    }
 
   }
 

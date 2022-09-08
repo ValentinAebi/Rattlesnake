@@ -12,6 +12,7 @@ object Operators {
 
   final case class BinaryOpSignature(leftOperandType: Type, op: Operator, rightOperandType: Type, retType: Type)
 
+  // len is treated separately
   val unaryOperators: List[UnaryOpSignature] = List(
     UnaryOpSignature(Minus, IntType, IntType),
     UnaryOpSignature(Minus, DoubleType, DoubleType),

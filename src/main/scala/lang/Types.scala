@@ -1,8 +1,18 @@
 package lang
 
+import lang.Types.PrimitiveType.NothingType
+
 object Types {
 
-  sealed trait Type
+  sealed trait Type {
+    def subtypeOf(that: Type): Boolean = {
+      this == that || this == NothingType
+    }
+    
+    def equalsOrNothing(that: Type): Boolean = {
+      this == that || this == NothingType || that == NothingType
+    }
+  }
   
   enum PrimitiveType(val str: String) extends Type {
     case IntType extends PrimitiveType("Int")
@@ -11,6 +21,7 @@ object Types {
     case BoolType extends PrimitiveType("Bool")
     case StringType extends PrimitiveType("String")
     case VoidType extends PrimitiveType("Void")
+    case NothingType extends PrimitiveType("Nothing")
 
     override def toString: String = str
   }

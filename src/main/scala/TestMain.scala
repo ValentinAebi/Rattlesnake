@@ -17,7 +17,7 @@ object TestMain {
   def main(args: Array[String]): Unit = {
     val er = new ErrorReporter(System.err.println)
     val pipeline = MultiStep(new Lexer(er) andThen new Parser(er)) andThen new TypeChecker(er) andThen MultiStep(new PrettyPrinter())
-    val file = SourceFile("examples/geometry.rsn")
+    val file = SourceFile("examples/sorting.rsn")
     val formatted = pipeline.apply(List(file))
     formatted.foreach(println)
   }

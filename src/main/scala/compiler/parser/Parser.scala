@@ -66,7 +66,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private val lessThan = op(LessThan).ignored
   private val greaterThan = op(GreaterThan).ignored
 
-  private val unaryOperator = op(Minus, ExclamationMark)
+  private val unaryOperator = op(Minus, ExclamationMark, Sharp)
 
   private val endl = treeParser("<endl>"){
     case EndlToken => ()
@@ -128,6 +128,12 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     }
   } setName "exprOrAssig"
 
+  private lazy val varAssig = recursive {
+    expr ::: assig ::: expr map {
+      case lhs ^: rhs => VarAssig(lhs, rhs)
+    }
+  } setName "varAssig"
+
   private lazy val expr: P[Expr] = recursive {
     BinaryOperatorsParser.buildFrom(Operator.operatorsByPriorityDecreasing, noBinopExpr)
   } setName "expr"
@@ -179,7 +185,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "structInit"
 
   private lazy val stat: P[Statement] = {
-    exprOrAssig OR valDef OR varDef OR whileLoop OR ifThenElse OR returnStat
+    exprOrAssig OR valDef OR varDef OR whileLoop OR forLoop OR ifThenElse OR returnStat OR panicStat
   } setName "stat"
 
   private lazy val valDef = {
@@ -200,6 +206,12 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     }
   } setName "whileLoop"
 
+  private lazy val forLoop = recursive {
+    kw(For).ignored ::: repeatWithSep(valDef OR varDef OR varAssig, comma) ::: semicolon ::: expr ::: semicolon ::: repeatWithSep(varAssig, comma) ::: block map {
+      case initStats ^: cond ^: stepStats ^: body => ForLoop(initStats, cond, stepStats, body)
+    }
+  } setName "forLoop"
+
   private lazy val ifThenElse: P[IfThenElse] = recursive {
     kw(If).ignored ::: expr ::: block ::: opt(kw(Else).ignored ::: (ifThenElse OR block)) map {
       case cond ^: thenBr ^: optElse => IfThenElse(cond, thenBr, optElse)
@@ -209,6 +221,10 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val returnStat = {
     kw(Return).ignored ::: expr map (retVal => ReturnStat(retVal))
   } setName "returnStat"
+
+  private lazy val panicStat = {
+    kw(Panic).ignored ::: expr map PanicStat.apply
+  }
 
 
   override def apply(input: (List[PositionedToken], String)): Source = {

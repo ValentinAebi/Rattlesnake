@@ -9,7 +9,6 @@ object Asts {
   sealed abstract class Ast {
     // Positions are propagated by the TreeParser
     // Each AST is assigned the position of its leftmost token (by the map method of TreeParser)
-    // For ASTs that are unreachable by this system, position is set by their constructor using their leftmost child
     private var positionOpt: Option[Position] = None
 
     final def setPosition(posOpt: Option[Position]): Unit = {
@@ -57,6 +56,7 @@ object Asts {
 
   final case class IfThenElse(cond: Expr, thenBr: Statement, elseBrOpt: Option[Statement]) extends Statement
   final case class WhileLoop(cond: Expr, body: Statement) extends Statement
+  final case class ForLoop(initStats: List[ValDef | VarDef | VarAssig], cond: Expr, stepStats: List[VarAssig], body: Block) extends Statement
   final case class ReturnStat(value: Expr) extends Statement {
     private var retType: Option[Type] = None
     def setRetType(tpe: Type): Unit = {
@@ -65,7 +65,7 @@ object Asts {
 
     def getRetType: Option[Type] = retType
   }
-  
+  final case class PanicStat(msg: Expr) extends Statement
   
   def collect[T](ast: Ast)(pf: PartialFunction[Ast, T]): List[T] = {
     
@@ -108,8 +108,12 @@ object Asts {
         recurse(cond) ++ recurse(thenBr) ++ elseBrOpt.map(recurse).getOrElse(Nil)
       case WhileLoop(cond, body) =>
         recurse(cond) ++ recurse(body)
+      case ForLoop(initStats, cond, stepStats, body) =>
+        initStats.flatMap(recurse) ++ recurse(cond) ++ stepStats.flatMap(recurse) ++ recurse(body)
       case ReturnStat(value) =>
         recurse(value)
+      case PanicStat(msg) =>
+        recurse(msg)
     }
     t.toList ++ recursive
   }

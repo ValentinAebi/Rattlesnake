@@ -19,6 +19,7 @@ enum Operator(val str: String) {
   case Or extends Operator("||")
 
   case ExclamationMark extends Operator("!")
+  case Sharp extends Operator("#")
 
   case Dot extends Operator(".")
 

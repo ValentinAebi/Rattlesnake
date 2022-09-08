@@ -1,3 +1,4 @@
+
 struct Vertex {
     x: Double,
     y: Double
