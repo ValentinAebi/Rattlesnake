@@ -229,7 +229,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   override def apply(input: (List[PositionedToken], String)): Source = {
     val (positionedTokens, srcName) = input
-    val filtered = positionedTokens.filter(_.token != SpaceToken)
+    val filtered = positionedTokens.filter(posTok => posTok.token != SpaceToken && !posTok.token.isInstanceOf[CommentToken])
     if (filtered.isEmpty) {
       errorReporter.pushFatal(Errors.CompilationError(CompilationStep.Parsing, "empty source", Some(Position(srcName, 1, 1))))
     }

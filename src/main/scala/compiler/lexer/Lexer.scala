@@ -45,6 +45,7 @@ final class Lexer(errorReporter: ErrorReporter) extends CompilerStep[SourceCodeP
     digitsSeq ++ char('.') ++ digitsSeq intoOpt { str => str.toDoubleOption.map(DoubleLitToken.apply) },
     char('\'') ++ anyChar ++ char('\'') into { str => CharLitToken(str(1)) },
     char('"') ++ repeat(anyCharBut('"')) ++ char('"') into { str => StringLitToken(str.drop(1).dropRight(1)) },
+    string("//") ++ repeat(anyChar) into { CommentToken(_) },
   )
 
   private val matchersByPriorityOrder =
@@ -80,7 +81,7 @@ final class Lexer(errorReporter: ErrorReporter) extends CompilerStep[SourceCodeP
 
   override def apply(sourceCodeProvider: SourceCodeProvider): (List[PositionedToken], String) = {
     sourceCodeProvider.lines match {
-      case Failure(exception) => errorReporter.pushFatal(CompilationError(CompilationStep.Lexing,
+      case Failure(_) => errorReporter.pushFatal(CompilationError(CompilationStep.Lexing,
         s"could not read source code from source ${sourceCodeProvider.name}", None))
       case Success(lines) => {
         val tokenizedLines = lines.toList.zipWithIndex.map((line, idx) => tokenizeLine(line, idx, sourceCodeProvider))

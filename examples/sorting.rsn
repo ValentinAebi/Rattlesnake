@@ -10,9 +10,10 @@ fn selectionSort(array: arr Int) {
     for var i = 0; i < #array; i = i + 1 {
         val maxIdx = maxIdx(array, i);
         swap(array, i, maxIdx)
-    }
+    };
 };
 
+// returns the index of the maximal element of the array
 fn maxIdx(array: arr Int, firstIdx: Int) -> Int {
     if #array == 0 {
         panic "max of empty array"

@@ -2,6 +2,8 @@ package compiler.lexer
 
 import compiler.ExprToStringMacro.exprToString
 
+import scala.annotation.tailrec
+
 object Matchers {
 
   /**
@@ -140,7 +142,7 @@ object Matchers {
   }
   
   private object AnyCharMatcher extends Matcher {
-    override def matches(str: String): Option[Int] = Some(1)
+    override def matches(str: String): Option[Int] = Some(if str.nonEmpty then 1 else 0)
   }
 
   private final case class StringMatcher(target: String) extends Matcher {
@@ -188,7 +190,7 @@ object Matchers {
   private final case class SeqMatcher(matchers: List[Matcher]) extends Matcher {
     override def matches(str: String): Option[Int] = {
 
-      def matchesRem(remStr: String, remMatchers: List[Matcher], cnt: Int): Option[Int] = {
+      @tailrec def matchesRem(remStr: String, remMatchers: List[Matcher], cnt: Int): Option[Int] = {
         remMatchers match {
           case Nil => Some(cnt)
           case headMatcher :: tailMatchers => {
@@ -208,7 +210,7 @@ object Matchers {
 
   private final case class DisjunctionMatcher(matchers: LazyList[Matcher]) extends Matcher {
     override def matches(str: String): Option[Int] = {
-      matchers.map(_.matches(str)).find(_.isDefined).map(_.get)
+      matchers.map(_.matches(str)).find(_.isDefined).flatten
     }
 
     override def toString: String = matchers.mkString("( ", " ) | ( ", " )")
@@ -217,7 +219,7 @@ object Matchers {
   private final case class RepetitionMatcher(repeatedMatcher: Matcher) extends Matcher {
     override def matches(str: String): Option[Int] = {
 
-      def matchesRem(remStr: String, cnt: Int): Option[Int] = {
+      @tailrec def matchesRem(remStr: String, cnt: Int): Option[Int] = {
         val matchRes = repeatedMatcher.matches(remStr)
         matchRes match {
           case None | Some(0) => Some(cnt)
@@ -256,7 +258,7 @@ object Matchers {
         case None => str
       }
     } catch {
-      case _ => "<description not available>"
+      case _: Throwable => "<description not available>"
     }
   }
 

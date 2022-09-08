@@ -57,6 +57,8 @@ object Tokens {
   }
   
   final case class ErrorToken(strValue: String) extends Token
+  
+  final case class CommentToken(strValue: String) extends Token
 
   case object EndOfFileToken extends Token {
     override def strValue: String = "<file-end>"
