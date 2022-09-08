@@ -1,4 +1,4 @@
-package ctxcreator
+package compiler.ctxcreator
 
 import compiler.CompilationStep.ContextCreation
 import compiler.Errors.{CompilationError, ErrorReporter, errorsExitCode}

@@ -1,10 +1,10 @@
 import compiler.Errors.ErrorReporter
+import compiler.ctxcreator.ContextCreator
 import compiler.{CompilerStep, Mapper, MultiStep, SourceFile}
 import compiler.lexer.Lexer
 import compiler.parser.Parser
 import compiler.prettyprinter.PrettyPrinter
 import compiler.typechecker.TypeChecker
-import ctxcreator.ContextCreator
 
 object TestMain {
 

@@ -2,9 +2,9 @@ package compiler.typechecker
 
 import compiler.CompilationStep.TypeChecking
 import compiler.Errors.{CompilationError, ErrorReporter}
+import compiler.ctxcreator.AnalysisContext
 import compiler.irs.Asts.*
 import compiler.{CompilerStep, Position}
-import ctxcreator.AnalysisContext
 import lang.Operator.{Equality, Inequality, Sharp}
 import lang.Operators
 import lang.Types.*
