@@ -186,7 +186,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[
         lhsType match {
           case StructType(typeName) =>
             val structSig = ctx.structs.apply(typeName)
-            structSig.fields.get(typeName) match {
+            structSig.fields.get(selected) match {
               case Some(fieldType) => fieldType
               case None =>
                 reportError(s"no '$selected' field found for type '$lhsType'", select.getPosition)
