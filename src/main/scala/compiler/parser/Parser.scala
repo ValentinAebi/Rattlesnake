@@ -224,7 +224,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   private lazy val panicStat = {
     kw(Panic).ignored ::: expr map PanicStat.apply
-  }
+  } setName "panicStat"
 
 
   override def apply(input: (List[PositionedToken], String)): Source = {
