@@ -39,7 +39,7 @@ object AnalysisContext {
     def addFunction(funDef: FunDef): Unit = {
       val name = funDef.funName
       if (functions.contains(name)) {
-        errorReporter.push(new CompilationError(TypeChecking, s"redefinition of function $name", funDef.getPosition))
+        errorReporter.push(new CompilationError(TypeChecking, s"redefinition of function '$name'", funDef.getPosition))
       }
       else {
         val sig = FunctionSignature(name, funDef.params.map(_.tpe), funDef.optRetType.getOrElse(VoidType))
@@ -50,13 +50,13 @@ object AnalysisContext {
     def addStruct(structDef: StructDef): Unit = {
       val name = structDef.structName
       if (structs.contains(name)) {
-        errorReporter.push(new CompilationError(TypeChecking, s"redefinition of struct $name", structDef.getPosition))
+        errorReporter.push(new CompilationError(TypeChecking, s"redefinition of struct '$name'", structDef.getPosition))
       }
       else {
         val fieldsMap = mutable.Map[String, Type]()
         for param <- structDef.fields do {
           if (fieldsMap.contains(param.paramName)){
-            errorReporter.push(new CompilationError(TypeChecking, s"duplicated field: ${param.paramName}", param.getPosition))
+            errorReporter.push(new CompilationError(TypeChecking, s"duplicated field: '${param.paramName}'", param.getPosition))
           } else {
             fieldsMap.put(param.paramName, param.tpe)
           }
