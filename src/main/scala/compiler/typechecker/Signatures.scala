@@ -18,11 +18,11 @@ final case class AnalysisContext(
                                   locals: mutable.Map[String, (Type, Boolean)]
                                 ){
   def copyWithoutLocals: AnalysisContext = {
-    new AnalysisContext(functions, structs, mutable.Map.empty)
+    copy(locals = mutable.Map.empty)
   }
 
   def copied: AnalysisContext = {
-    copy(locals = mutable.Map.empty)
+    copy(locals = mutable.Map.from(locals))
   }
 
   def addLocal(name: String, tpe: Type, mutable: Boolean): Unit = {
