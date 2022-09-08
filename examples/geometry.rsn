@@ -17,7 +17,7 @@ fn computeArea(rectangle: Rectangle) -> Double {
 fn main(){
     var width = 0.1 - 0.05 * (2.41 + 1.2) * 0.3;
     var alternate = true;
-    while width < 4 {
+    while width < 4.0 {
         if alternate {
             width = width + 0.3
         }
@@ -25,7 +25,7 @@ fn main(){
             width = width * 1.4
         }
     };
-    val r = new Rectangle { new Vertex { 11.5, 9 }, width, 2.5 };
+    val r = new Rectangle { new Vertex { 11.5, 9.0 }, width, 2.5 };
     computeArea(r);
 };
 
