@@ -31,7 +31,7 @@ object Operators {
     IntType $ Plus $ IntType is IntType,
     DoubleType $ Plus $ DoubleType is DoubleType,
     IntType $ Minus $ IntType is IntType,
-    DoubleType $ Minus $ DoubleType is IntType,
+    DoubleType $ Minus $ DoubleType is DoubleType,
     IntType $ Times $ IntType is IntType,
     DoubleType $ Times $ DoubleType is DoubleType,
     IntType $ Div $ IntType is IntType,
@@ -45,7 +45,7 @@ object Operators {
     IntType $ GreaterThan $ IntType is BoolType,
     DoubleType $ GreaterThan $ DoubleType is BoolType,
     IntType $ GreaterOrEq $ IntType is BoolType,
-    DoubleType $ GreaterOrEq $ DoubleType is DoubleType,
+    DoubleType $ GreaterOrEq $ DoubleType is BoolType,
 
     BoolType $ And $ BoolType is BoolType,
     BoolType $ Or $ BoolType is BoolType
