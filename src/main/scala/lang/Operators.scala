@@ -1,8 +1,8 @@
 package lang
 
 import lang.Operator.*
+import lang.Types.PrimitiveType.*
 import lang.Types.Type
-import Types.PrimitiveType.*
 
 import scala.annotation.targetName
 

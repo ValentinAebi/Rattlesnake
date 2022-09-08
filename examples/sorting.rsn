@@ -6,7 +6,6 @@ fn swap(array: arr Int, i1: Int, i2: Int) -> Void {
 };
 
 fn selectionSort(array: arr Int) {
-    var maxIdx = -1;
     for var i = 0; i < #array; i = i + 1 {
         val maxIdx = maxIdx(array, i);
         swap(array, i, maxIdx)

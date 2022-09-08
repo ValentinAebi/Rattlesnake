@@ -1,17 +1,15 @@
-package compiler.typechecker
+package ctxcreator
 
-import compiler.CompilationStep.TypeChecking
-import compiler.Errors.{CompilationError, ErrorReporter}
+import compiler.CompilationStep.ContextCreation
+import compiler.Errors.{CompilationError, ErrorReporter, errorsExitCode}
 import compiler.irs.Asts.{FunDef, StructDef}
 import lang.BuiltInFunctions
 import lang.Types.PrimitiveType.VoidType
 import lang.Types.Type
 
 import scala.collection.mutable
-
-final case class FunctionSignature(name: String, argTypes: List[Type], retType: Type)
-
-final case class StructSignature(name: String, fields: Map[String, Type])
+import lang.FunctionSignature
+import lang.StructSignature
 
 final case class AnalysisContext(
                                   functions: Map[String, FunctionSignature],
@@ -26,8 +24,12 @@ final case class AnalysisContext(
     copy(locals = mutable.Map.from(locals))
   }
 
-  def addLocal(name: String, tpe: Type, mutable: Boolean): Unit = {
-    locals.put(name, (tpe, mutable))
+  def addLocal(name: String, tpe: Type, mutable: Boolean, duplicateVarCallback: () => Unit): Unit = {
+    if (locals.contains(name)){
+      duplicateVarCallback()
+    } else {
+      locals.put(name, (tpe, mutable))
+    }
   }
 }
 
@@ -40,9 +42,9 @@ object AnalysisContext {
     def addFunction(funDef: FunDef): Unit = {
       val name = funDef.funName
       if (BuiltInFunctions.builtInFunctions.contains(name)){
-        errorReporter.push(new CompilationError(TypeChecking, s"function name '$name' conflicts with built-in function", funDef.getPosition))
+        errorReporter.push(new CompilationError(ContextCreation, s"function name '$name' conflicts with built-in function", funDef.getPosition))
       } else if (functions.contains(name)) {
-        errorReporter.push(new CompilationError(TypeChecking, s"redefinition of function '$name'", funDef.getPosition))
+        errorReporter.push(new CompilationError(ContextCreation, s"redefinition of function '$name'", funDef.getPosition))
       } else {
         val sig = FunctionSignature(name, funDef.params.map(_.tpe), funDef.optRetType.getOrElse(VoidType))
         functions.put(name, sig)
@@ -52,12 +54,12 @@ object AnalysisContext {
     def addStruct(structDef: StructDef): Unit = {
       val name = structDef.structName
       if (structs.contains(name)) {
-        errorReporter.push(new CompilationError(TypeChecking, s"redefinition of struct '$name'", structDef.getPosition))
+        errorReporter.push(new CompilationError(ContextCreation, s"redefinition of struct '$name'", structDef.getPosition))
       } else {
         val fieldsMap = mutable.Map[String, Type]()
         for param <- structDef.fields do {
           if (fieldsMap.contains(param.paramName)){
-            errorReporter.push(new CompilationError(TypeChecking, s"duplicated field: '${param.paramName}'", param.getPosition))
+            errorReporter.push(new CompilationError(ContextCreation, s"duplicated field: '${param.paramName}'", param.getPosition))
           } else {
             fieldsMap.put(param.paramName, param.tpe)
           }

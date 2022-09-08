@@ -4,34 +4,22 @@ import compiler.CompilationStep.TypeChecking
 import compiler.Errors.{CompilationError, ErrorReporter}
 import compiler.irs.Asts.*
 import compiler.{CompilerStep, Position}
+import ctxcreator.AnalysisContext
 import lang.Operator.{Equality, Inequality, Sharp}
 import lang.Operators
 import lang.Types.*
 import lang.Types.PrimitiveType.*
 
-final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[Source], List[Source]] {
+final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
 
-  override def apply(sources: List[Source]): List[Source] = {
-    val ctx = buildContext(sources)
+
+  override def apply(input: (List[Source], AnalysisContext)): (List[Source], AnalysisContext) = {
+    val (sources, ctx) = input
     for src <- sources do {
       check(src, ctx.copyWithoutLocals)
     }
     errorReporter.displayAndTerminateIfErrors()
-    sources
-  }
-
-  private def buildContext(sources: List[Source]): AnalysisContext = {
-    val ctxBuilder = new AnalysisContext.Builder(errorReporter)
-    for src <- sources do {
-      for df <- src.defs do {
-        df match
-          case funDef: FunDef =>
-            ctxBuilder.addFunction(funDef)
-          case structDef: StructDef =>
-            ctxBuilder.addStruct(structDef)
-      }
-    }
-    ctxBuilder.build()
+    input
   }
 
   private def check(ast: Ast, ctx: AnalysisContext): Type = {
@@ -54,7 +42,9 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[
         val expRetType = optRetType.getOrElse(VoidType)
         val ctxWithParams = ctx.copyWithoutLocals
         for param <- params do {
-          ctxWithParams.addLocal(param.paramName, param.tpe, false)
+          ctxWithParams.addLocal(param.paramName, param.tpe, false, { () =>
+            reportError(s"identifier '${param.paramName}' is already used by another parameter of function '$funName'", param.getPosition)
+          })
         }
         check(body, ctxWithParams)
         val endStatus = checkReturns(body)
@@ -75,7 +65,9 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[
             reportError(s"val should be of type '$expType', found '$actType'", valDef.getPosition)
           }
         }
-        ctx.addLocal(valName, optType.getOrElse(actType), false)
+        ctx.addLocal(valName, optType.getOrElse(actType), false, { () =>
+          reportError(s"'$valName' is already defined in this scope", valDef.getPosition)
+        })
         VoidType
 
       case varDef@VarDef(varName, optType, rhs) =>
@@ -85,7 +77,9 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[
             reportError(s"val should be of type '$expType', found '$actType'", varDef.getPosition)
           }
         }
-        ctx.addLocal(varName, optType.getOrElse(actType), true)
+        ctx.addLocal(varName, optType.getOrElse(actType), true, { () =>
+          reportError(s"'$varName' is already defined in this scope", varDef.getPosition)
+        })
         VoidType
 
       case _: IntLit => IntType
@@ -222,7 +216,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[
             }
           case indexing: Indexing =>
             val lhsType = check(indexing, ctx)
-            if (!rhsType.subtypeOf(lhsType)){
+            if (!rhsType.subtypeOf(lhsType)) {
               reportError(s"type mismatch in assignment", indexing.getPosition)
             }
           case _ =>
@@ -265,7 +259,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[List[
 
       case panicStat@PanicStat(msg) =>
         val msgType = check(msg, ctx)
-        if (msgType != StringType){
+        if (msgType != StringType) {
           reportError(s"panic can only be applied to type ${StringType.str}", panicStat.getPosition)
         }
         VoidType

@@ -1,6 +1,5 @@
 package lang
 
-import compiler.typechecker.FunctionSignature
 import lang.Types.ArrayType
 import lang.Types.PrimitiveType.*
 
