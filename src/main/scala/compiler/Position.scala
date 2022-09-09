@@ -7,6 +7,8 @@ final case class Position(srcCodeProviderName: String, line: Int, col: Int){
   require(srcCodeProviderName != null)
   require(line >= 1)
   require(col >= 1)
+  
+  def shiftedRightOf(n: Int): Position = copy(col = col + n)
 
   override def toString: String = s"$srcCodeProviderName:$line:$col"
 

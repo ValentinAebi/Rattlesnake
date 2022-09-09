@@ -9,7 +9,9 @@ object Tokens {
   /**
    * Token along with its position
    */
-  final case class PositionedToken(token: Token, position: Position)
+  final case class PositionedToken(token: Token, position: Position){
+    def endPosition: Position = position.shiftedRightOf(token.strValue.length)
+  }
 
   sealed trait Token {
     def strValue: String

@@ -14,6 +14,10 @@ object Asts {
     final def setPosition(posOpt: Option[Position]): Unit = {
       positionOpt = posOpt
     }
+    
+    final def setPosition(pos: Position): Unit = {
+      setPosition(Some(pos))
+    }
 
     final def getPosition: Option[Position] = positionOpt
   }

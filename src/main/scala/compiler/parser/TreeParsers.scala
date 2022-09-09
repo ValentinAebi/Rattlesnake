@@ -27,13 +27,6 @@ object TreeParsers {
   }
 
   /**
-   * Creates a parser that parses nothing but configures the LL1Iterator to ignore `EndlToken`s or not
-   */
-  def setIgnoreEndl(ignore: Boolean): NonFinalIgnored = {
-    IgnoreEndlSetter(ignore).ignored
-  }
-
-  /**
    * Creates a parser that returns a `Some[U]` with the result of `optional` if `optional` accepts the token and `None` o.w.
    */
   def opt[U](optional: AnyTreeParser[U])
@@ -233,10 +226,10 @@ object TreeParsers {
         export original.admits
         override def extract(ll1Iterator: LL1Iterator, suffixAdmits: () => Boolean,
                              suffixDescr: => String, firstSuffix: AnyTreeParser[_]): Option[T] = {
-          val posOpt = ll1Iterator.currentOpt.map(_.position)
+          val pos = ll1Iterator.current.position
           val res = original.extract(ll1Iterator, suffixAdmits, suffixDescr, firstSuffix).map(f)
           // if is an AST, set position unless it is already set
-          res.filter(_.isInstanceOf[Ast]).map(_.asInstanceOf[Ast]).filter(_.getPosition.isEmpty).foreach(_.setPosition(posOpt))
+          res.filter(_.isInstanceOf[Ast]).map(_.asInstanceOf[Ast]).filter(_.getPosition.isEmpty).foreach(_.setPosition(pos))
           res
         }
         export original.firstExpectedDescr
@@ -286,10 +279,10 @@ object TreeParsers {
       new FinalTreeParser[T] {
         export original.admits
         override def extract(ll1Iterator: LL1Iterator): Option[T] = {
-          val posOpt = ll1Iterator.currentOpt.map(_.position)
+          val pos = ll1Iterator.current.position
           val res = original.extract(ll1Iterator).map(f)
           // if is an AST, set position unless it is already set
-          res.filter(_.isInstanceOf[Ast]).map(_.asInstanceOf[Ast]).filter(_.getPosition.isEmpty).foreach(_.setPosition(posOpt))
+          res.filter(_.isInstanceOf[Ast]).map(_.asInstanceOf[Ast]).filter(_.getPosition.isEmpty).foreach(_.setPosition(pos))
           res
         }
         export original.firstExpectedDescr
@@ -429,7 +422,7 @@ object TreeParsers {
       else if rightAdmits then right.extract(ll1Iterator)
       else {
         reportMismatch(errorReporter, firstExpectedDescr,
-          ll1Iterator.currentOpt.map(_.token.strValue).getOrElse("end"), ll1Iterator.lastPositionOpt)
+          ll1Iterator.current.token.strValue, ll1Iterator.current.position)
         None
       }
     }
@@ -462,7 +455,7 @@ object TreeParsers {
       else if rightAdmits then right.extract(ll1Iterator, suffixAdmits, suffixDescr, firstSuffix)
       else {
         reportMismatch(errorReporter, firstExpectedDescr(suffixDescr),
-          ll1Iterator.currentOpt.map(_.token.strValue).getOrElse("end"), ll1Iterator.lastPositionOpt)
+          ll1Iterator.current.token.strValue, ll1Iterator.current.position)
         None
       }
     }
@@ -483,25 +476,16 @@ object TreeParsers {
     private val liftedPf = pf.lift
 
     override def admits(ll1Iterator: LL1Iterator): Boolean = {
-      ll1Iterator.currentOpt.exists(posTok => pf.isDefinedAt(posTok.token))
+      pf.isDefinedAt(ll1Iterator.current.token)
     }
 
     override def extract(ll1Iterator: LL1Iterator): Option[U] = {
-      val extractedOpt = ll1Iterator.moveForwardOpt()
-      extractedOpt match {
-        case None => {
-          reportMismatch(errorReporter, firstExpectedDescr, "end of file", ll1Iterator.lastPositionOpt)
+      val extractedPosTok = ll1Iterator.moveForward()
+      liftedPf.apply(extractedPosTok.token) match {
+        case None =>
+          reportMismatch(errorReporter, firstExpectedDescr, extractedPosTok.token.strValue, extractedPosTok.position)
           None
-        }
-        case Some(extractedPosTok) => {
-          liftedPf.apply(extractedPosTok.token) match {
-            case None => {
-              reportMismatch(errorReporter, firstExpectedDescr, extractedPosTok.token.strValue, ll1Iterator.lastPositionOpt)
-              None
-            }
-            case s@Some(_) => s
-          }
-        }
+        case s@Some(_) => s
       }
     }
 
@@ -528,8 +512,8 @@ object TreeParsers {
       else if optAdmitsVal then optional.extract(ll1Iterator, suffixAdmits, suffixDescr, firstSuffix).map(Some(_))
       else if suffixAdmitsVal then Some(None)
       else {
-        reportMismatch(errorReporter, firstExpectedDescr(suffixDescr), ll1Iterator.currentOpt.map(_.token.strValue).getOrElse("end of file"),
-          ll1Iterator.lastPositionOpt)
+        reportMismatch(errorReporter, firstExpectedDescr(suffixDescr), ll1Iterator.current.token.strValue,
+          ll1Iterator.current.position)
         None
       }
     }
@@ -541,28 +525,17 @@ object TreeParsers {
     }
   }
 
-  private final class IgnoreEndlSetter(setValue: Boolean) extends AnyTreeParser[Unit] {
-    override def admits(ll1Iterator: LL1Iterator, suffixAdmits: () => Boolean): Boolean = suffixAdmits()
-    override def extract(ll1Iterator: LL1Iterator, suffixAdmits: () => Boolean,
-                         suffixDescr: => String, firstSuffix: AnyTreeParser[_]): Option[Unit] = {
-      ll1Iterator.setIgnoreEndl(setValue)
-      Some(())
-    }
-    override def firstExpectedDescr(suffixDescr: => String): String = suffixDescr
-    override protected[TreeParsers] def safeToStringImpl(remDepth: Int): String = s"IgnoreEndlSetter($setValue)"
-  }
-
   private def reportMismatch(errorReporter: ErrorReporter, expectedDescr: String,
-                             found: String, posOpt: Option[Position]): Unit = {
+                             found: String, pos: Position): Unit = {
     val msg = s"expected $expectedDescr, found $found"
-    errorReporter.push(CompilationError(CompilationStep.Parsing, msg, posOpt))
+    errorReporter.push(CompilationError(CompilationStep.Parsing, msg, Some(pos)))
   }
 
   private def reportNonLL1Error(ll1Iterator: LL1Iterator,
                                       opt1: Any, opt2: Any, name1: String,
                                       name2: String, situationDescr: String): Nothing = {
     val nKeep = 10
-    val remaining = ll1Iterator.remainingAsList
+    val remaining = ll1Iterator.remaining
     throw new Error(s"grammar is not LL1: conflict found: $situationDescr at ${
       remaining.take(nKeep)
     }${if remaining.size > nKeep then "..." else ""}\n" +

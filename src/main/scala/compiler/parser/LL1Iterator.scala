@@ -2,62 +2,52 @@ package compiler.parser
 
 import compiler.Position
 import compiler.irs.Tokens.*
+import lang.Operator.{ClosingBrace, Semicolon}
+import lang.Keyword.Else
 
 import scala.annotation.tailrec
 
 /**
  * Iterator allowing at most one lookahead
  */
-final class LL1Iterator private(tokensSeq: Iterable[PositionedToken]) {
-  require(tokensSeq.nonEmpty)
-  private val _iterator: Iterator[PositionedToken] = tokensSeq.iterator
-  private var _current: Option[PositionedToken] = _iterator.nextOption()
-  private var _previous: Option[PositionedToken] = None
-  private var _ignoreEndl: Boolean = true
+final class LL1Iterator private(initTokensList: List[PositionedToken]) {
+  require(initTokensList.nonEmpty)
+  private var _curr: PositionedToken = _
+  private var _remTokens: List[PositionedToken] = initTokensList
+  moveForward()
 
-  /**
-   * Lookahead method
-   * @return the token the iterator is currently pointing to (unless none remain)
-   */
-  def currentOpt: Option[PositionedToken] = _current
+  def current: PositionedToken = _curr
 
-  /**
-   * Moves the iterator 1 token forward (unless it is empty)
-   * @return the token the iterator was pointing to before the call to `movesForwardOpt`
-   */
-  def moveForwardOpt(): Option[PositionedToken] = {
-    _previous = _current
+  def moveForward(): PositionedToken = {
 
-    @tailrec def next(): Unit = {
-      _current = _iterator.nextOption()
-      if (_ignoreEndl && _current.isDefined && _current.get.token == EndlToken) next()
+    // save previous
+    val prev = _curr
+
+    val next = _remTokens.headOption.getOrElse(PositionedToken(EndOfFileToken, prev.endPosition))
+
+    // move iterator
+    _curr = next
+    _remTokens = if _remTokens.nonEmpty then _remTokens.tail else Nil
+
+    // ignore multiple semicolons and line breaks
+    if (_curr.token == OperatorToken(Semicolon) || _curr.token == EndlToken) {
+      _remTokens = _remTokens.dropWhile(posTok => posTok.token == OperatorToken(Semicolon) || posTok.token == EndlToken)
     }
 
-    next()
-    _previous
-  }
-  
-  def lastPositionOpt: Option[Position] = _current.map(_.position)
-
-  /**
-   * @return a list with all remaining tokens
-   */
-  def remainingAsList: List[PositionedToken] = (_current ++ _iterator.toList).toList
-
-  /**
-   * Configures whether this iterator should skip `EndlToken`s
-   */
-  def setIgnoreEndl(ignoreEndl: Boolean): Unit = {
-    _ignoreEndl = ignoreEndl
-    while (currentOpt.isDefined && currentOpt.get.token == EndlToken){
-      _current = _iterator.nextOption()
+    // ignore spaces, comments and line breaks
+    if (_curr.token == SpaceToken || _curr.token.isInstanceOf[CommentToken] || _curr.token == EndlToken) {
+      moveForward()
     }
+
+    prev
   }
-  
+
+  def remaining: List[PositionedToken] = _remTokens
+
 }
 
 object LL1Iterator {
-  def from(tokensSeq: Iterable[PositionedToken]): LL1Iterator = {
+  def from(tokensSeq: List[PositionedToken]): LL1Iterator = {
     new LL1Iterator(tokensSeq)
   }
 }

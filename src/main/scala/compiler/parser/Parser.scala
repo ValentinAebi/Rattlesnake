@@ -4,7 +4,7 @@ import compiler.Errors.ErrorReporter
 import compiler.irs.Asts.*
 import compiler.irs.Tokens.*
 import compiler.parser.ParseTree.^:
-import compiler.parser.TreeParsers.{AnyTreeParser, FinalTreeParser, opt, recursive, repeat, repeatWithEnd, repeatWithSep, setIgnoreEndl, treeParser}
+import compiler.parser.TreeParsers.{AnyTreeParser, FinalTreeParser, opt, recursive, repeat, repeatNonZero, repeatWithEnd, repeatWithSep, treeParser}
 import compiler.{CompilationStep, CompilerStep, Errors, Position}
 import lang.Keyword.*
 import lang.Operator.*
@@ -17,7 +17,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private implicit val implErrorReporter: ErrorReporter = errorReporter
 
   private type P[X] = AnyTreeParser[X]
-  
+
   // ---------- Syntax primitives -----------------------------------------------------------------------
 
   private def op(operators: Operator*) = treeParser(s"operator(s) ${operators.mkString("'", "', '", "'")}") {
@@ -60,7 +60,6 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private val dot = op(Dot).ignored
   private val colon = op(Colon).ignored
   private val doubleColon = colon ::: colon
-  private val semicolon = op(Semicolon).ignored
   private val -> = (op(Minus) ::: op(GreaterThan)).ignored
   private val `=>` = (op(Assig) ::: op(GreaterThan)).ignored
   private val lessThan = op(LessThan).ignored
@@ -69,16 +68,20 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private val unaryOperator = op(Minus, ExclamationMark, Sharp)
   private val assignmentOperator = op(PlusEq, MinusEq, TimesEq, DivEq, ModuloEq, Assig)
 
-  private val endl = treeParser("<endl>"){
+  private val endl = treeParser("<endl>") {
     case EndlToken => ()
-  }.ignored
+  }
+
+  private val semicolon = op(Semicolon).ignored
+  private val semicolonOrEndl = (op(Semicolon) OR endl).ignored
 
   // ---------- Syntax description -----------------------------------------------------------------------
 
-  private def source(name: String): FinalTreeParser[Source] = {
-    setIgnoreEndl(true) ::: repeatWithEnd(topLevelDef, semicolon) ::: endOfFile.ignored map (defs => Source(defs))
+  private lazy val source: FinalTreeParser[Source] = {
+    repeatWithEnd(topLevelDef, semicolonOrEndl) ::: endOfFile.ignored map {
+      defs => Source(defs)
+    }
   } setName "source"
-
 
   private lazy val topLevelDef: P[TopLevelDef] = funDef OR structDef
 
@@ -111,15 +114,17 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "tpe"
 
   private lazy val atomicType = {
-    highName map(name => Types.primTypeFor(name).getOrElse(StructType(name)))
+    highName map (name => Types.primTypeFor(name).getOrElse(StructType(name)))
   } setName "atomicType"
 
   private lazy val arrayType = recursive {
-    kw(Arr).ignored ::: atomicType map(ArrayType(_))
+    kw(Arr).ignored ::: atomicType map (ArrayType(_))
   } setName "arrayType"
 
   private lazy val block = recursive {
-    openBrace ::: repeatWithEnd(stat, semicolon) ::: closeBrace map (stats => Block(stats))
+    openBrace ::: opt(endl).ignored ::: repeatWithEnd(stat, semicolonOrEndl) ::: closeBrace map {
+      stats => Block(stats)
+    }
   } setName "block"
 
   private lazy val exprOrAssig = recursive {
@@ -161,7 +166,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val selectOrCallChain = recursive {
     (varRef OR literalValue OR arrayInit OR structInit OR parenthesizedExpr) ::: repeat((dot ::: lowName) OR callArgs OR indexing) map {
       case callee ^: ls =>
-        ls.foldLeft[Expr](callee){ (acc, curr) =>
+        ls.foldLeft[Expr](callee) { (acc, curr) =>
           curr match {
             case field: String => Select(acc, field)
             case args: List[Expr] => Call(acc, args)
@@ -232,13 +237,11 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   override def apply(input: (List[PositionedToken], String)): Source = {
     val (positionedTokens, srcName) = input
-    val filtered = positionedTokens.filter(posTok => posTok.token != SpaceToken && !posTok.token.isInstanceOf[CommentToken])
-    if (filtered.isEmpty) {
+    if (positionedTokens.isEmpty) {
       errorReporter.pushFatal(Errors.CompilationError(CompilationStep.Parsing, "empty source", Some(Position(srcName, 1, 1))))
-    }
-    else {
-      val iterator = LL1Iterator.from(filtered :+ PositionedToken(EndOfFileToken, positionedTokens.last.position))
-      source(srcName).extract(iterator) match {
+    } else {
+      val iterator = LL1Iterator.from(positionedTokens)
+      source.extract(iterator) match {
         case Some(source) => source
         case None => errorReporter.displayErrorsAndTerminate()
       }
