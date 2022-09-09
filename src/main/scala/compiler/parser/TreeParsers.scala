@@ -127,7 +127,7 @@ object TreeParsers {
    */
   def recursive[T](recursed: => AnyTreeParser[T]): AnyTreeParser[T] = {
     new AnyTreeParser[T] {
-      lazy val underlying = recursed
+      lazy val underlying: AnyTreeParser[T] = recursed
       export underlying.admits
       export underlying.extract
       export underlying.firstExpectedDescr
@@ -140,7 +140,7 @@ object TreeParsers {
    */
   def recursive[T](recursed: => FinalTreeParser[T]): FinalTreeParser[T] = {
     new FinalTreeParser[T] {
-      lazy val underlying = recursed
+      lazy val underlying: FinalTreeParser[T] = recursed
       export underlying.admits
       export underlying.extract
       export underlying.firstExpectedDescr
@@ -241,7 +241,7 @@ object TreeParsers {
         }
         export original.firstExpectedDescr
         override def safeToStringImpl(remDepth: Int): String = s"mapped of ${original.safeToString(remDepth)}"
-      } setNameResetable s"mapped of ${getName}"
+      } setNameResetable s"mapped of $getName"
     }
 
     // toString with a depth check to avoid infinite recursions
@@ -294,7 +294,7 @@ object TreeParsers {
         }
         export original.firstExpectedDescr
         override def safeToStringImpl(remDepth: Int): String = s"mapped of ${original.safeToStringImpl(remDepth)}"
-      } setNameResetable s"mapped of ${getName}"
+      } setNameResetable s"mapped of $getName"
     }
 
     final override def :::[L](left: AnyTreeParser[L]): FinalTreeParser[L ^: U] = {
@@ -483,7 +483,7 @@ object TreeParsers {
     private val liftedPf = pf.lift
 
     override def admits(ll1Iterator: LL1Iterator): Boolean = {
-      ll1Iterator.currentOpt.filter(posTok => pf.isDefinedAt(posTok.token)).isDefined
+      ll1Iterator.currentOpt.exists(posTok => pf.isDefinedAt(posTok.token))
     }
 
     override def extract(ll1Iterator: LL1Iterator): Option[U] = {
@@ -558,7 +558,7 @@ object TreeParsers {
     errorReporter.push(CompilationError(CompilationStep.Parsing, msg, posOpt))
   }
 
-  private def reportNonLL1Error[R, L](ll1Iterator: LL1Iterator,
+  private def reportNonLL1Error(ll1Iterator: LL1Iterator,
                                       opt1: Any, opt2: Any, name1: String,
                                       name2: String, situationDescr: String): Nothing = {
     val nKeep = 10
@@ -574,7 +574,7 @@ object TreeParsers {
       val raw = exprToString(pf)
       raw.dropWhile(c => c != '{').dropRight(1).replaceAll("compiler.Tokens.", "")
     } catch {
-      case _ => "<description not available>"
+      case _: Throwable => "<description not available>"
     }
   }
 
