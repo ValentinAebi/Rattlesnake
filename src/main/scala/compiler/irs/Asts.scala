@@ -52,11 +52,20 @@ object Asts {
   final case class BinaryOp(lhs: Expr, operator: Operator, rhs: Expr) extends Expr
   final case class Select(lhs: Expr, selected: String) extends Expr
   
-  final case class VarAssig(lhs: Expr, rhs: Expr) extends Statement
+  sealed abstract class Assignment extends Statement
+  
+  final case class VarAssig(lhs: Expr, rhs: Expr) extends Assignment
+
+  final case class VarModif(lhs: Expr, rhs: Expr, op: Operator) extends Assignment
 
   final case class IfThenElse(cond: Expr, thenBr: Statement, elseBrOpt: Option[Statement]) extends Statement
   final case class WhileLoop(cond: Expr, body: Statement) extends Statement
-  final case class ForLoop(initStats: List[ValDef | VarDef | VarAssig], cond: Expr, stepStats: List[VarAssig], body: Block) extends Statement
+  final case class ForLoop(
+                            initStats: List[ValDef | VarDef | Assignment],
+                            cond: Expr,
+                            stepStats: List[Assignment],
+                            body: Block
+                          ) extends Statement
   final case class ReturnStat(value: Expr) extends Statement {
     private var retType: Option[Type] = None
     def setRetType(tpe: Type): Unit = {
@@ -103,6 +112,8 @@ object Asts {
       case Select(lhs, _) =>
         recurse(lhs)
       case VarAssig(lhs, rhs) =>
+        recurse(lhs) ++ recurse(rhs)
+      case VarModif(lhs, rhs, _) =>
         recurse(lhs) ++ recurse(rhs)
       case IfThenElse(cond, thenBr, elseBrOpt) =>
         recurse(cond) ++ recurse(thenBr) ++ elseBrOpt.map(recurse).getOrElse(Nil)

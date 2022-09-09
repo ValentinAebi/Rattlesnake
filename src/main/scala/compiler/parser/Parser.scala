@@ -9,7 +9,7 @@ import compiler.{CompilationStep, CompilerStep, Errors, Position}
 import lang.Keyword.*
 import lang.Operator.*
 import lang.Types.{ArrayType, StructType, Type}
-import lang.{Keyword, Operator, Types}
+import lang.{Keyword, Operator, Operators, Types}
 
 import scala.util.Try
 
@@ -67,6 +67,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private val greaterThan = op(GreaterThan).ignored
 
   private val unaryOperator = op(Minus, ExclamationMark, Sharp)
+  private val assignmentOperator = op(PlusEq, MinusEq, TimesEq, DivEq, ModuloEq, Assig)
 
   private val endl = treeParser("<endl>"){
     case EndlToken => ()
@@ -122,17 +123,19 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "block"
 
   private lazy val exprOrAssig = recursive {
-    expr ::: opt(assig ::: expr) map {
+    expr ::: opt(assignmentOperator ::: expr) map {
       case singleExpr ^: None => singleExpr
-      case lhs ^: Some(rhs) => VarAssig(lhs, rhs)
+      case lhs ^: Some(Assig ^: rhs) => VarAssig(lhs, rhs)
+      case lhs ^: Some(op ^: rhs) => VarModif(lhs, rhs, Operators.assigOperators.apply(op))
     }
   } setName "exprOrAssig"
 
-  private lazy val varAssig = recursive {
-    expr ::: assig ::: expr map {
-      case lhs ^: rhs => VarAssig(lhs, rhs)
+  private lazy val assignmentStat = recursive {
+    expr ::: assignmentOperator ::: expr map {
+      case lhs ^: Assig ^: rhs => VarAssig(lhs, rhs)
+      case lhs ^: operator ^: rhs => VarModif(lhs, rhs, Operators.assigOperators.apply(operator))
     }
-  } setName "varAssig"
+  } setName "assignmentStat"
 
   private lazy val expr: P[Expr] = recursive {
     BinaryOperatorsParser.buildFrom(Operator.operatorsByPriorityDecreasing, noBinopExpr)
@@ -207,7 +210,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "whileLoop"
 
   private lazy val forLoop = recursive {
-    kw(For).ignored ::: repeatWithSep(valDef OR varDef OR varAssig, comma) ::: semicolon ::: expr ::: semicolon ::: repeatWithSep(varAssig, comma) ::: block map {
+    kw(For).ignored ::: repeatWithSep(valDef OR varDef OR assignmentStat, comma) ::: semicolon ::: expr ::: semicolon ::: repeatWithSep(assignmentStat, comma) ::: block map {
       case initStats ^: cond ^: stepStats ^: body => ForLoop(initStats, cond, stepStats, body)
     }
   } setName "forLoop"

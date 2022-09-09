@@ -33,6 +33,12 @@ enum Operator(val str: String) {
   case Colon extends Operator(":")
   case Semicolon extends Operator(";")
   case Comma extends Operator(",")
+  
+  case PlusEq extends Operator("+=")
+  case MinusEq extends Operator("-=")
+  case TimesEq extends Operator("*=")
+  case DivEq extends Operator("/=")
+  case ModuloEq extends Operator("%=")
 
   override def toString: String = str
 

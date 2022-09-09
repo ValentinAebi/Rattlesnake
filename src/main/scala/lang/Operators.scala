@@ -58,6 +58,14 @@ object Operators {
         leftOperandType == left && op == operator && rightOperandType == right
     }
   }
+  
+  val assigOperators: Map[Operator, Operator] = Map(
+    PlusEq -> Plus,
+    MinusEq -> Minus,
+    TimesEq -> Times,
+    DivEq -> Div,
+    ModuloEq -> Modulo
+  )
 
   private case class PartialBinop1(leftOperandType: Type, op: Operator) {
     @targetName("andThen") def $(rightOperandType: Type): PartialBinop2 = {

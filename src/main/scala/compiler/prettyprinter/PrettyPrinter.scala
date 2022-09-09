@@ -172,6 +172,15 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         pps.add(" = ")
         addAst(rhs)
 
+      case VarModif(lhs, rhs, op) =>
+        addAst(lhs)
+        pps
+          .addSpace()
+          .add(op.str)
+          .add("=")
+          .addSpace()
+        addAst(rhs)
+
       case IfThenElse(cond, thenBr, elseBrOpt) =>
         pps
           .add(If.str)

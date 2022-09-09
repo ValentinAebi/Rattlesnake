@@ -6,7 +6,7 @@ fn swap(array: arr Int, i1: Int, i2: Int) -> Void {
 };
 
 fn selectionSort(array: arr Int) {
-    for var i = 0; i < #array; i = i + 1 {
+    for var i = 0; i < #array; i += 1 {
         val maxIdx = maxIdx(array, i);
         swap(array, i, maxIdx)
     };
@@ -18,11 +18,21 @@ fn maxIdx(array: arr Int, firstIdx: Int) -> Int {
         panic "max of empty array"
     } else {
         var maxIdx = firstIdx;
-        for val len = #array, var i = firstIdx + 1; i < len; i = i + 1 {
+        for val len = #array, var i = firstIdx + 1; i < len; i += 1 {
             if array[i] > array[maxIdx] {
                 maxIdx = i;
             }
         };
         return maxIdx
     }
+};
+
+fn main() {
+    val nbs = arr Int[10];
+    for var i = 0; i < 10; i += 1 {
+        nbs[i] = (2*i - i*i + 200) % 25;
+        nbs[i] += 1;
+    };
+    selectionSort(nbs);
+    // TODO print(nbs), using Any supertype
 }

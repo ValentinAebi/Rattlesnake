@@ -209,17 +209,51 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
                   reportError(s"cannot assign a '$rhsType' to a variable of type $tpe", varAssig.getPosition)
                 }
               case Some(_) =>
-                reportError(s"cannot mutate '$name': is a val, not a var", varAssig.getPosition)
+                reportError(s"cannot mutate '$name': not a var", varAssig.getPosition)
               case None =>
                 reportError(s"not found: '$name'", varAssig.getPosition)
             }
           case indexing: Indexing =>
             val lhsType = check(indexing, ctx)
-            if (!rhsType.subtypeOf(lhsType)) {
+            if (rhsType != lhsType) {
               reportError(s"type mismatch in assignment", indexing.getPosition)
             }
           case _ =>
             reportError("syntax error: only variables and array elements can be assigned", varAssig.getPosition)
+        }
+        VoidType
+
+      case varModif@VarModif(lhs, rhs, op) =>
+        val rhsType = check(rhs, ctx)
+        lhs match {
+          case VariableRef(name) =>
+            ctx.locals.get(name) match {
+              case Some((tpe, mut)) if mut =>
+                Operators.binaryOpFor(tpe, op, rhsType) match {
+                  case Some(opSig) =>
+                    if (opSig.retType != tpe){
+                      reportError(s"$tpe ${op.str} $rhsType ==> ${opSig.retType}, not ${op.str}", varModif.getPosition)
+                    }
+                  case None =>
+                    reportError(s"no definition of operator '$op' found for operands '$tpe' and '$rhsType'", varModif.getPosition)
+                }
+              case Some(_) =>
+                reportError(s"cannot mutate '$name': not a var", varModif.getPosition)
+              case None =>
+                reportError(s"not found: '$name'", varModif.getPosition)
+            }
+          case indexing: Indexing =>
+            val lhsType = check(indexing, ctx)
+            Operators.binaryOpFor(lhsType, op, rhsType) match {
+              case Some(opSig) =>
+                if (opSig.retType != lhsType) {
+                  reportError(s"$lhsType ${op.str} $rhsType ==> ${opSig.retType}, not ${op.str}", varModif.getPosition)
+                }
+              case None =>
+                reportError(s"no definition of operator '$op' found for operands '$lhsType' and '$rhsType'", varModif.getPosition)
+            }
+          case _ =>
+            reportError("syntax error: only variables and array elements can be assigned", varModif.getPosition)
         }
         VoidType
 
