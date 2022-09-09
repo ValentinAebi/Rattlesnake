@@ -1,6 +1,6 @@
 package compiler.ctxcreator
 
-import compiler.CompilerStep
+import compiler.{AnalysisContext, CompilerStep}
 import compiler.Errors.ErrorReporter
 import compiler.irs.Asts.{FunDef, Source, StructDef}
 

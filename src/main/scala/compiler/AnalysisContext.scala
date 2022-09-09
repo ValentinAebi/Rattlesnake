@@ -1,15 +1,14 @@
-package compiler.ctxcreator
+package compiler
 
 import compiler.CompilationStep.ContextCreation
 import compiler.Errors.{CompilationError, ErrorReporter, errorsExitCode}
+import compiler.AnalysisContext
 import compiler.irs.Asts.{FunDef, StructDef}
-import lang.BuiltInFunctions
 import lang.Types.PrimitiveType.VoidType
 import lang.Types.Type
+import lang.{BuiltInFunctions, FunctionSignature, StructSignature}
 
 import scala.collection.mutable
-import lang.FunctionSignature
-import lang.StructSignature
 
 final case class AnalysisContext(
                                   functions: Map[String, FunctionSignature],
