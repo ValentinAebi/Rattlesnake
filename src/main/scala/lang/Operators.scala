@@ -22,7 +22,7 @@ object Operators {
   def unaryOpFor(operator: Operator, operand: Type): Option[UnaryOpSignature] = {
     unaryOperators.find {
       case UnaryOpSignature(op, operandType, _) =>
-        operator == op && operandType == operand
+        operator == op && operand.subtypeOf(operandType)
     }
   }
 
@@ -55,7 +55,7 @@ object Operators {
   def binaryOpFor(left: Type, operator: Operator, right: Type): Option[BinaryOpSignature] = {
     binaryOperators.find {
       case BinaryOpSignature(leftOperandType, op, rightOperandType, _) =>
-        leftOperandType == left && op == operator && rightOperandType == right
+        left.subtypeOf(leftOperandType) && op == operator && right.subtypeOf(rightOperandType)
     }
   }
   

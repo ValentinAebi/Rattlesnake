@@ -34,5 +34,5 @@ fn main() {
         nbs[i] += 1;
     };
     selectionSort(nbs);
-    // TODO print(nbs), using Any supertype
+    print(nbs)
 }

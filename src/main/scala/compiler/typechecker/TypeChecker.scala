@@ -47,7 +47,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         }
         check(body, ctxWithParams)
         val endStatus = checkReturns(body)
-        if (!endStatus.alwaysStopped && expRetType != VoidType) {
+        if (!endStatus.alwaysStopped && !expRetType.subtypeOf(VoidType)) {
           reportError("missing return in non-Void function", funDef.getPosition)
         }
         val faultyTypes = endStatus.returned.filter(!_.subtypeOf(expRetType))
@@ -60,7 +60,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       case valDef@ValDef(valName, optType, rhs) =>
         val actType = check(rhs, ctx)
         optType.foreach { expType =>
-          if (actType != expType) {
+          if (!actType.subtypeOf(expType)) {
             reportError(s"val should be of type '$expType', found '$actType'", valDef.getPosition)
           }
         }
@@ -72,7 +72,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       case varDef@VarDef(varName, optType, rhs) =>
         val actType = check(rhs, ctx)
         optType.foreach { expType =>
-          if (actType != expType) {
+          if (!actType.subtypeOf(expType)) {
             reportError(s"val should be of type '$expType', found '$actType'", varDef.getPosition)
           }
         }
@@ -119,7 +119,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
           reportError("indexed expression is not an array", indexed.getPosition)
         }
         val argType = check(arg, ctx)
-        val argError = argType != IntType
+        val argError = !argType.subtypeOf(IntType)
         if (argError) {
           reportError(s"indexing expression should be an '${IntType.str}'", arg.getPosition)
         }
@@ -127,7 +127,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
 
       case ArrayInit(elemType, size) =>
         val sizeType = check(size, ctx)
-        if (sizeType != IntType) {
+        if (!sizeType.subtypeOf(IntType)) {
           reportError(s"array size should be an '${IntType.str}'", size.getPosition)
         }
         size match {
@@ -171,7 +171,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         val rhsType = check(rhs, ctx)
         if (operator == Equality || operator == Inequality) {
           if (lhsType != rhsType) {
-            reportError(s"operands of '${Equality.str}' and '${Inequality.str}' should have the same type", binOp.getPosition)
+            reportError(s"cannot compare $lhsType and $rhsType using ${Equality.str} or ${Inequality.str}", binOp.getPosition)
           }
           BoolType
         } else {
@@ -205,7 +205,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
           case VariableRef(name) =>
             ctx.locals.get(name) match {
               case Some((tpe, mut)) if mut =>
-                if (tpe != rhsType) {
+                if (!rhsType.subtypeOf(tpe)) {
                   reportError(s"cannot assign a '$rhsType' to a variable of type $tpe", varAssig.getPosition)
                 }
               case Some(_) =>
@@ -215,7 +215,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
             }
           case indexing: Indexing =>
             val lhsType = check(indexing, ctx)
-            if (rhsType != lhsType) {
+            if (!rhsType.subtypeOf(lhsType)) {
               reportError(s"type mismatch in assignment", indexing.getPosition)
             }
           case _ =>
@@ -231,7 +231,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
               case Some((tpe, mut)) if mut =>
                 Operators.binaryOpFor(tpe, op, rhsType) match {
                   case Some(opSig) =>
-                    if (opSig.retType != tpe){
+                    if (!opSig.retType.subtypeOf(tpe)){
                       reportError(s"$tpe ${op.str} $rhsType ==> ${opSig.retType}, not ${op.str}", varModif.getPosition)
                     }
                   case None =>
@@ -246,7 +246,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
             val lhsType = check(indexing, ctx)
             Operators.binaryOpFor(lhsType, op, rhsType) match {
               case Some(opSig) =>
-                if (opSig.retType != lhsType) {
+                if (!opSig.retType.subtypeOf(lhsType)) {
                   reportError(s"$lhsType ${op.str} $rhsType ==> ${opSig.retType}, not ${op.str}", varModif.getPosition)
                 }
               case None =>
@@ -259,7 +259,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
 
       case ifThenElse@IfThenElse(cond, thenBr, elseBrOpt) =>
         val condType = check(cond, ctx)
-        if (condType != BoolType) {
+        if (!condType.subtypeOf(BoolType)) {
           reportError(s"condition should be of type '${BoolType.str}', found '$condType'", ifThenElse.getPosition)
         }
         check(thenBr, ctx)
@@ -268,7 +268,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
 
       case whileLoop@WhileLoop(cond, body) =>
         val condType = check(cond, ctx)
-        if (condType != BoolType) {
+        if (!condType.subtypeOf(BoolType)) {
           reportError(s"condition should be of type '${BoolType.str}', found '$condType'", whileLoop.getPosition)
         }
         check(body, ctx)
@@ -278,7 +278,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         val newCtx = ctx.copied
         initStats.foreach(check(_, newCtx))
         val condType = check(cond, newCtx)
-        if (condType != BoolType) {
+        if (!condType.subtypeOf(BoolType)) {
           reportError(s"condition should be of type '${BoolType.str}', found '$condType'", forLoop.getPosition)
         }
         stepStats.foreach(check(_, newCtx))
@@ -292,7 +292,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
 
       case panicStat@PanicStat(msg) =>
         val msgType = check(msg, ctx)
-        if (msgType != StringType) {
+        if (!msgType.subtypeOf(StringType)) {
           reportError(s"panic can only be applied to type ${StringType.str}", panicStat.getPosition)
         }
         VoidType
@@ -311,7 +311,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       val expType = expTypesIter.next()
       val arg = argsIter.next()
       val actType = check(arg, ctx)
-      if (expType != actType) {
+      if (!actType.subtypeOf(expType)) {
         reportError(s"expected $expType, found $actType", arg.getPosition)
         errorFound = true
       }
@@ -356,7 +356,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
             if (thenEndStatus.returned.size == 1 && elseEndStatus.returned.size == 1) {
               val thenRet = thenEndStatus.returned.head
               val elseRet = elseEndStatus.returned.head
-              if (!(thenRet equalsOrNothing elseRet)) {
+              if (!thenRet.subtypeOrSupertype(elseRet)) {
                 reportError(s"branches of if lead to different return types: '$thenRet', '$elseRet'", ifThenElse.getPosition)
               }
             }
