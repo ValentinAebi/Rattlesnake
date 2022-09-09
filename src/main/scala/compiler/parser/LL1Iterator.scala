@@ -3,6 +3,8 @@ package compiler.parser
 import compiler.Position
 import compiler.irs.Tokens.*
 
+import scala.annotation.tailrec
+
 /**
  * Iterator allowing at most one lookahead
  */
@@ -26,26 +28,13 @@ final class LL1Iterator private(tokensSeq: Iterable[PositionedToken]) {
   def moveForwardOpt(): Option[PositionedToken] = {
     _previous = _current
 
-    def next(): Unit = {
+    @tailrec def next(): Unit = {
       _current = _iterator.nextOption()
       if (_ignoreEndl && _current.isDefined && _current.get.token == EndlToken) next()
     }
 
     next()
     _previous
-  }
-
-  /**
-   * @return the position the iterator stopped at, that is,
-   *         the start position of the current token if there is one such token,
-   *         or the end position of the last token if no token remain
-   *
-   * <b>WARNING</b> will crash if the iterator was moved more than once after becoming empty
-   */
-  def lastPosition: Position = _current.map(_.position).getOrElse {
-    val prev = _previous.get
-    val pos = prev.position
-    pos.copy(col = pos.col + prev.token.strValue.length)
   }
   
   def lastPositionOpt: Option[Position] = _current.map(_.position)
