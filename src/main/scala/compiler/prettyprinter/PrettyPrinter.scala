@@ -89,8 +89,26 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         pps.add(" = ")
         addAst(rhs)
 
-      case literal: Literal =>
-        pps.add(literal.value.toString)
+      case IntLit(value) =>
+        pps.add(value.toString)
+
+      case DoubleLit(value) =>
+        pps.add(value.toString)
+
+      case CharLit(value) =>
+        pps
+          .add("'")
+          .add(value.toString)
+          .add("'")
+
+      case BoolLit(value) =>
+        pps.add(value.toString)
+
+      case StringLit(value) =>
+        pps
+          .add("\"")
+          .add(value)
+          .add("\"")
 
       case VariableRef(name) =>
         pps.add(name)
@@ -134,7 +152,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         }
 
       case BinaryOp(lhs, operator, rhs) =>
-        val displayParenthLeft = displayAllParentheses && rhs.isInstanceOf[UnaryOp | BinaryOp]
+        val displayParenthLeft = parenthesesNeededLeft(operator, lhs, displayAllParentheses)
         if (displayParenthLeft) {
           pps.add("(")
         }
@@ -146,13 +164,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           .addSpace()
           .add(operator.str)
           .addSpace()
-        val displayParenthRight =
-          rhs match {
-            case UnaryOp(_, _) => true
-            case BinaryOp(_, subOp, _) =>
-              displayAllParentheses || (Operator.priorities(subOp) < Operator.priorities(operator))
-            case _ => false
-          }
+        val displayParenthRight = parenthesesNeededRight(operator, rhs, displayAllParentheses)
         if (displayParenthRight) {
           pps.add("(")
         }
@@ -241,6 +253,22 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         addAst(msg)
 
     }
+  }
+
+  private def parenthesesNeededLeft(externalOp: Operator, leftOperand: Expr, displayAllParentheses: Boolean): Boolean = {
+    leftOperand match
+      case _: UnaryOp => displayAllParentheses
+      case BinaryOp(_, operator, _) =>
+        displayAllParentheses || Operator.priorities(operator) < Operator.priorities(externalOp)
+      case _ => false
+  }
+
+  private def parenthesesNeededRight(externalOp: Operator, rightOperand: Expr, displayAllParentheses: Boolean): Boolean = {
+    rightOperand match
+      case _: UnaryOp => true
+      case BinaryOp(_, operator, _) =>
+        displayAllParentheses || Operator.priorities(operator) <= Operator.priorities(externalOp)
+      case _ => false
   }
 
   private def addBracesList(ls: List[Ast], sep: String, onMultipleLines: Boolean)(implicit pps: PrettyPrintString): Unit = {
