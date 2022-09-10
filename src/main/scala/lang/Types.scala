@@ -1,12 +1,12 @@
 package lang
 
-import lang.Types.PrimitiveType.{AnyType, NothingType}
+import lang.Types.PrimitiveType.NothingType
 
 object Types {
 
   sealed trait Type {
     def subtypeOf(that: Type): Boolean = {
-      this == that || this == NothingType || that == AnyType
+      this == that || this == NothingType
     }
     
     def subtypeOrSupertype(that: Type): Boolean = {
@@ -20,10 +20,9 @@ object Types {
     case CharType extends PrimitiveType("Char")
     case BoolType extends PrimitiveType("Bool")
     case StringType extends PrimitiveType("String")
-    case VoidType extends PrimitiveType("Void")
 
+    case VoidType extends PrimitiveType("Void")
     case NothingType extends PrimitiveType("Nothing")
-    case AnyType extends PrimitiveType("Any")
 
     override def toString: String = str
   }

@@ -1,6 +1,6 @@
 package compiler.prettyprinter
 
-import compiler.CompilerStep
+import compiler.{CompilerStep, PrettyPrintString}
 import compiler.irs.Asts.*
 import lang.Keyword.*
 import lang.Operator
@@ -17,20 +17,12 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
     ast match {
 
       case Source(defs) =>
-        pps
-          .newLine()
-          .newLine()
-        val iter = defs.iterator
-        while (iter.hasNext) {
-          addAst(iter.next())
-          if (iter.hasNext) {
-            pps
-              .add(";")
-              .newLine()
-              .newLine()
-          }
-        }
         pps.newLine()
+        for df <- defs do {
+          pps.newLine()
+          addAst(df)
+          pps.newLine()
+        }
 
       case Block(stats) =>
         addBracesList(stats, ";", onMultipleLines = true)
@@ -128,9 +120,9 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           .add(Arr.str)
           .addSpace()
           .add(elemType.toString)
-          .add("(")
+          .add("[")
         addAst(size)
-        pps.add(")")
+        pps.add("]")
 
       case StructInit(structName, args) =>
         pps

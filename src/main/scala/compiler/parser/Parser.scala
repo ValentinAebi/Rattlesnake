@@ -73,12 +73,11 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   }
 
   private val semicolon = op(Semicolon).ignored
-  private val semicolonOrEndl = (op(Semicolon) OR endl).ignored
 
   // ---------- Syntax description -----------------------------------------------------------------------
 
   private lazy val source: FinalTreeParser[Source] = {
-    repeatWithEnd(topLevelDef, semicolonOrEndl) ::: endOfFile.ignored map {
+    repeat(topLevelDef ::: opt(op(Semicolon)).ignored) ::: endOfFile.ignored map {
       defs => Source(defs)
     }
   } setName "source"
@@ -122,7 +121,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "arrayType"
 
   private lazy val block = recursive {
-    openBrace ::: opt(endl).ignored ::: repeatWithEnd(stat, semicolonOrEndl) ::: closeBrace map {
+    openBrace ::: opt(endl).ignored ::: repeatWithEnd(stat, semicolon) ::: closeBrace map {
       stats => Block(stats)
     }
   } setName "block"
@@ -242,7 +241,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     } else {
       val iterator = LL1Iterator.from(positionedTokens)
       source.extract(iterator) match {
-        case Some(source) => source
+        case Some(source) => source.setName(srcName)
         case None => errorReporter.displayErrorsAndTerminate()
       }
     }

@@ -2,17 +2,11 @@
 struct Vertex {
     x: Double,
     y: Double
-};
-
-struct Rectangle {
-    upperLeftCorner: Vertex,
-    width: Double,
-    height: Double
-};
+}
 
 fn computeArea(rectangle: Rectangle) -> Double {
     return rectangle.width * rectangle.height
-};
+}
 
 fn main(){
     var width = 0.1 - 0.05 * (2.41 + 1.2) * 0.3;
@@ -27,5 +21,10 @@ fn main(){
     };
     val r = new Rectangle { new Vertex { 11.5, 9.0 }, width, 2.5 };
     computeArea(r);
-};
+}
 
+struct Rectangle {
+    upperLeftCorner: Vertex,
+    width: Double,
+    height: Double
+}

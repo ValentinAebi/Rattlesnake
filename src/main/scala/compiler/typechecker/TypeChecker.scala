@@ -43,6 +43,8 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         for param <- params do {
           ctxWithParams.addLocal(param.paramName, param.tpe, false, { () =>
             reportError(s"identifier '${param.paramName}' is already used by another parameter of function '$funName'", param.getPosition)
+          }, { () =>
+            reportError(s"parameter '${param.paramName}' of function '$funName' has type '${param.tpe}', which is forbidden", param.getPosition)
           })
         }
         check(body, ctxWithParams)
@@ -58,26 +60,34 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         VoidType
 
       case valDef@ValDef(valName, optType, rhs) =>
-        val actType = check(rhs, ctx)
+        val inferredType = check(rhs, ctx)
         optType.foreach { expType =>
-          if (!actType.subtypeOf(expType)) {
-            reportError(s"val should be of type '$expType', found '$actType'", valDef.getPosition)
+          if (!inferredType.subtypeOf(expType)) {
+            reportError(s"val should be of type '$expType', found '$inferredType'", valDef.getPosition)
           }
         }
-        ctx.addLocal(valName, optType.getOrElse(actType), false, { () =>
+        val actualType = optType.getOrElse(inferredType)
+        valDef.optType = Some(actualType)
+        ctx.addLocal(valName, actualType, false, { () =>
           reportError(s"'$valName' is already defined in this scope", valDef.getPosition)
+        }, { () =>
+          reportError(s"val '$valName' has type '$actualType', which is forbidden", valDef.getPosition)
         })
         VoidType
 
       case varDef@VarDef(varName, optType, rhs) =>
-        val actType = check(rhs, ctx)
+        val inferredType = check(rhs, ctx)
         optType.foreach { expType =>
-          if (!actType.subtypeOf(expType)) {
-            reportError(s"val should be of type '$expType', found '$actType'", varDef.getPosition)
+          if (!inferredType.subtypeOf(expType)) {
+            reportError(s"val should be of type '$expType', found '$inferredType'", varDef.getPosition)
           }
         }
-        ctx.addLocal(varName, optType.getOrElse(actType), true, { () =>
+        val actualType = optType.getOrElse(inferredType)
+        varDef.optType = Some(actualType)
+        ctx.addLocal(varName, actualType, true, { () =>
           reportError(s"'$varName' is already defined in this scope", varDef.getPosition)
+        }, { () =>
+          reportError(s"var '$varName' has type '$actualType', which is forbidden", varDef.getPosition)
         })
         VoidType
 

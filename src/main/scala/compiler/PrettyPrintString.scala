@@ -1,4 +1,4 @@
-package compiler.prettyprinter
+package compiler
 
 import scala.collection.mutable
 

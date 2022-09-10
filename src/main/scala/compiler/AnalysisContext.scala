@@ -1,10 +1,10 @@
 package compiler
 
+import compiler.AnalysisContext
 import compiler.CompilationStep.ContextCreation
 import compiler.Errors.{CompilationError, ErrorReporter, errorsExitCode}
-import compiler.AnalysisContext
 import compiler.irs.Asts.{FunDef, StructDef}
-import lang.Types.PrimitiveType.VoidType
+import lang.Types.PrimitiveType.{NothingType, VoidType}
 import lang.Types.Type
 import lang.{BuiltInFunctions, FunctionSignature, StructSignature}
 
@@ -14,7 +14,7 @@ final case class AnalysisContext(
                                   functions: Map[String, FunctionSignature],
                                   structs: Map[String, StructSignature],
                                   locals: mutable.Map[String, (Type, Boolean)]
-                                ){
+                                ) {
   def copyWithoutLocals: AnalysisContext = {
     copy(locals = mutable.Map.empty)
   }
@@ -23,8 +23,10 @@ final case class AnalysisContext(
     copy(locals = mutable.Map.from(locals))
   }
 
-  def addLocal(name: String, tpe: Type, mutable: Boolean, duplicateVarCallback: () => Unit): Unit = {
-    if (locals.contains(name)){
+  def addLocal(name: String, tpe: Type, mutable: Boolean, duplicateVarCallback: () => Unit, forbiddenTypeCallback: () => Unit): Unit = {
+    if (tpe == NothingType || tpe == VoidType) {
+      forbiddenTypeCallback()
+    } else if (locals.contains(name)) {
       duplicateVarCallback()
     } else {
       locals.put(name, (tpe, mutable))
@@ -40,7 +42,7 @@ object AnalysisContext {
 
     def addFunction(funDef: FunDef): Unit = {
       val name = funDef.funName
-      if (BuiltInFunctions.builtInFunctions.contains(name)){
+      if (BuiltInFunctions.builtInFunctions.contains(name)) {
         errorReporter.push(new CompilationError(ContextCreation, s"function name '$name' conflicts with built-in function", funDef.getPosition))
       } else if (functions.contains(name)) {
         errorReporter.push(new CompilationError(ContextCreation, s"redefinition of function '$name'", funDef.getPosition))
@@ -57,7 +59,9 @@ object AnalysisContext {
       } else {
         val fieldsMap = mutable.Map[String, Type]()
         for param <- structDef.fields do {
-          if (fieldsMap.contains(param.paramName)){
+          if (param.tpe == VoidType || param.tpe == NothingType){
+            
+          } else if (fieldsMap.contains(param.paramName)) {
             errorReporter.push(new CompilationError(ContextCreation, s"duplicated field: '${param.paramName}'", param.getPosition))
           } else {
             fieldsMap.put(param.paramName, param.tpe)

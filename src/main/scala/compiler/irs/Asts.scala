@@ -25,7 +25,17 @@ object Asts {
   sealed abstract class Statement extends Ast
   sealed abstract class Expr extends Statement
 
-  final case class Source(defs: List[TopLevelDef]) extends Ast
+  final case class Source (defs: List[TopLevelDef]) extends Ast {
+    private var name: String = "<missing name>"
+
+    def setName(name: String): Source = {
+      this.name = name
+      this
+    }
+
+    def getName: String = name
+  }
+
   final case class Block(stats: List[Statement]) extends Statement
 
   sealed abstract class TopLevelDef extends Ast
@@ -33,8 +43,8 @@ object Asts {
   final case class StructDef(structName: String, fields: List[Param]) extends TopLevelDef
   final case class Param(paramName: String, tpe: Type) extends Ast
 
-  final case class ValDef(valName: String, optType: Option[Type], rhs: Expr) extends Statement
-  final case class VarDef(varName: String, optType: Option[Type], rhs: Expr) extends Statement
+  final case class ValDef(valName: String, var optType: Option[Type], rhs: Expr) extends Statement
+  final case class VarDef(varName: String, var optType: Option[Type], rhs: Expr) extends Statement
 
   sealed abstract class Literal extends Expr {
     val value: Any

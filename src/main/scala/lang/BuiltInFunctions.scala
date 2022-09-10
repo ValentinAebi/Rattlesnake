@@ -6,7 +6,11 @@ import lang.Types.PrimitiveType.*
 object BuiltInFunctions {
 
   val builtInFunctions: Map[String, FunctionSignature] = Map(
-    FunctionSignature("print", List(AnyType), VoidType).keyed
+    FunctionSignature("print", List(StringType), VoidType).keyed,
+    FunctionSignature("intToString", List(IntType), StringType).keyed,
+    FunctionSignature("doubleToString", List(DoubleType), StringType).keyed,
+    FunctionSignature("charToString", List(CharType), StringType).keyed,
+    FunctionSignature("boolToString", List(BoolType), StringType).keyed
   )
 
   extension(sig: FunctionSignature) private def keyed: (String, FunctionSignature) = {
