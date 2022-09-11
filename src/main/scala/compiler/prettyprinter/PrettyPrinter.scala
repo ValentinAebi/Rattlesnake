@@ -1,6 +1,6 @@
 package compiler.prettyprinter
 
-import compiler.{CompilerStep, PrettyPrintString}
+import compiler.CompilerStep
 import compiler.irs.Asts.*
 import lang.Keyword.*
 import lang.Operator

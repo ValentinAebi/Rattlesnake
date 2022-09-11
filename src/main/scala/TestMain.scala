@@ -1,4 +1,5 @@
 import compiler.Errors.ErrorReporter
+import compiler.backend.Backend
 import compiler.ctxcreator.ContextCreator
 import compiler.desugarer.Desugarer
 import compiler.irs.Asts
@@ -7,6 +8,8 @@ import compiler.lexer.Lexer
 import compiler.parser.Parser
 import compiler.prettyprinter.PrettyPrinter
 import compiler.typechecker.TypeChecker
+
+import java.nio.file.Path
 
 object TestMain {
 
@@ -21,10 +24,10 @@ object TestMain {
     val er = new ErrorReporter(System.err.println)
     val pipeline =
       MultiStep(new Lexer(er) andThen new Parser(er)) andThen new ContextCreator(er) andThen
-        new TypeChecker(er) andThen new Desugarer() andThen Mapper(_._1) andThen MultiStep(new PrettyPrinter())
+        new TypeChecker(er) andThen new Desugarer() andThen
+        new Backend(Backend.AssemblyMode, er, Path.of("testoutput"))
     val file = SourceFile("examples/sorting.rsn")
-    val formatted = pipeline.apply(List(file))
-    formatted.foreach(println)
+    pipeline.apply(List(file))
   }
 
 }

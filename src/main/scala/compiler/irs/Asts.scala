@@ -1,8 +1,9 @@
 package compiler.irs
 
 import compiler.Position
-import lang.Operator
+import lang.{FunctionSignature, Operator}
 import lang.Types.*
+import lang.Types.PrimitiveType.VoidType
 
 object Asts {
 
@@ -39,7 +40,9 @@ object Asts {
   final case class Block(stats: List[Statement]) extends Statement
 
   sealed abstract class TopLevelDef extends Ast
-  final case class FunDef(funName: String, params: List[Param], optRetType: Option[Type], body: Block) extends TopLevelDef
+  final case class FunDef(funName: String, params: List[Param], optRetType: Option[Type], body: Block) extends TopLevelDef {
+    val signature: FunctionSignature = FunctionSignature(funName, params.map(_.tpe), optRetType.getOrElse(VoidType))
+  }
   final case class StructDef(structName: String, fields: List[Param]) extends TopLevelDef
   final case class Param(paramName: String, tpe: Type) extends Ast
 

@@ -1,4 +1,4 @@
-# .gitignore taken from https://alvinalexander.com/source-code/scala/sample-gitignore-file-scala-sbt-intellij-eclipse/
+# .gitignore taken from https://alvinalexander.com/source-code/scala/sample-gitignore-file-scala-sbt-intellij-eclipse/ (slightly modified)
 
 # bloop and metals
 .bloop
@@ -45,3 +45,5 @@ bin/
 
 # general
 *.class
+
+*.asm

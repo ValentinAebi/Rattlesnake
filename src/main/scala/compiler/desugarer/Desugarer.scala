@@ -21,7 +21,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
     (sources.map(desugar), ctx)
   }
 
-  private def desugar(src: Source): Source = Source(src.defs.map(desugar))
+  private def desugar(src: Source): Source = Source(src.defs.map(desugar)).setName(src.getName)
 
   private def desugar(block: Block): Block = Block(block.stats.map(desugar))
 

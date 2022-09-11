@@ -47,8 +47,7 @@ object AnalysisContext {
       } else if (functions.contains(name)) {
         errorReporter.push(new CompilationError(ContextCreation, s"redefinition of function '$name'", funDef.getPosition))
       } else {
-        val sig = FunctionSignature(name, funDef.params.map(_.tpe), funDef.optRetType.getOrElse(VoidType))
-        functions.put(name, sig)
+        functions.put(name, funDef.signature)
       }
     }
 
