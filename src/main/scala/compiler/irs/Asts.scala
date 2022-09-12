@@ -24,9 +24,24 @@ object Asts {
   }
 
   sealed abstract class Statement extends Ast
-  sealed abstract class Expr extends Statement
+  sealed abstract class Expr extends Statement {
+    private var tpeOpt: Option[Type] = None
+    
+    def setTypeOpt(tpe: Option[Type]): Unit = {
+      tpeOpt = tpe
+    }
 
-  final case class Source (defs: List[TopLevelDef]) extends Ast {
+    def setType(tpe: Type): Unit = {
+      setTypeOpt(Some(tpe))
+    }
+    
+    def getTypeOpt: Option[Type] = tpeOpt
+    
+    def getType: Type = tpeOpt.get
+    
+  }
+
+  final case class Source(defs: List[TopLevelDef]) extends Ast {
     private var name: String = "<missing name>"
 
     def setName(name: String): Source = {
@@ -84,12 +99,7 @@ object Asts {
                             body: Block
                           ) extends Statement
   final case class ReturnStat(value: Expr) extends Statement {
-    private var retType: Option[Type] = None
-    def setRetType(tpe: Type): Unit = {
-      retType = Some(tpe)
-    }
-
-    def getRetType: Option[Type] = retType
+    def getRetType: Option[Type] = value.getTypeOpt
   }
   final case class PanicStat(msg: Expr) extends Statement
   

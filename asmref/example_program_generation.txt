@@ -1,0 +1,42 @@
+import org.objectweb.asm.{ClassWriter, Opcodes}
+import org.objectweb.asm.Opcodes.ACC_PUBLIC
+import org.objectweb.asm.Opcodes.ACC_STATIC
+import org.objectweb.asm.util.{TraceAnnotationVisitor, TraceClassVisitor}
+
+import java.io.FileOutputStream
+import scala.util.Using
+
+object TestModule {
+
+  private val publicStatic = ACC_PUBLIC + ACC_STATIC
+
+  // TODO remove these tests
+  def main(args: Array[String]): Unit = {
+
+    val cw = new ClassWriter(ClassWriter.COMPUTE_FRAMES)
+    cw.visit(Opcodes.V1_8, Opcodes.ACC_PUBLIC, "GeneratedClass", null, "java/lang/Object", null)
+
+    val createIntV = cw.visitMethod(publicStatic, "createInt", "()I", null, null)
+    createIntV.visitLdcInsn(15)
+    createIntV.visitLdcInsn(12)
+    createIntV.visitInsn(Opcodes.IADD)
+    createIntV.visitInsn(Opcodes.IRETURN)
+    createIntV.visitMaxs(0, 0)
+    createIntV.visitEnd()
+
+    val mainV = cw.visitMethod(publicStatic, "main", "([Ljava/lang/String;)V", null, null)
+    mainV.visitCode()
+    mainV.visitFieldInsn(Opcodes.GETSTATIC, "java/lang/System", "out", "Ljava/io/PrintStream;")
+    mainV.visitMethodInsn(Opcodes.INVOKESTATIC, "GeneratedClass", "createInt", "()I", false)
+    mainV.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", "println", "(I)V", false)
+    mainV.visitInsn(Opcodes.RETURN)
+    mainV.visitMaxs(0, 0)
+    mainV.visitEnd()
+
+    cw.visitEnd()
+
+    Using(new FileOutputStream("GeneratedClass.class"))(
+      _.write(cw.toByteArray)
+    )
+  }
+}

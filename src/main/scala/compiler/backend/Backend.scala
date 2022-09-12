@@ -6,9 +6,14 @@ import compiler.irs.Asts.*
 import compiler.{AnalysisContext, CompilerStep, FileExtensions}
 import compiler.CompilationStep.CodeGeneration
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
+import compiler.backend.TypesConverter.{convertToAsmType, convertToAsmTypeCode, opcodeFor}
+import lang.Types.{ArrayType, PrimitiveType, StructType}
+import lang.Types.PrimitiveType.StringType
+import lang.{BuiltInFunctions, Types}
 import org.objectweb.asm.Opcodes.*
 import org.objectweb.asm.util.{Textifier, TraceClassVisitor}
 import org.objectweb.asm.*
+import org.objectweb.asm
 
 import java.io.{File, FileOutputStream, FileWriter, PrintWriter}
 import java.nio.file.Files
@@ -24,10 +29,11 @@ final class Backend[V <: ClassVisitor](
                                       ) extends CompilerStep[(List[Source], AnalysisContext), Unit] {
 
   private val javaVersion = V17
-  private val superType = "java/lang/Object"
+  private val objectTypeStr = "java/lang/Object"
+  private val stringTypeStr = "java/lang/String"
 
   override def apply(input: (List[Source], AnalysisContext)): Unit = {
-    val (sources, ctx) = input
+    val (sources, analysisContext) = input
     if (sources.isEmpty) {
       errorReporter.push(new CompilationError(CodeGeneration, "nothing to write: no sources", None))
     }
@@ -50,7 +56,7 @@ final class Backend[V <: ClassVisitor](
       for struct <- structs do {
         val structFilePath = outputDir.resolve(mode.withExtension(struct.structName))
         val cv = mode.createVisitor(structFilePath)
-        cv.visit(javaVersion, ACC_PUBLIC, struct.structName, null, superType, null)
+        cv.visit(javaVersion, ACC_PUBLIC, struct.structName, null, objectTypeStr, null)
         generateStruct(struct, cv)
         cv.visitEnd()
       }
@@ -58,10 +64,10 @@ final class Backend[V <: ClassVisitor](
       Files.createDirectories(outputDir)
       val coreFilePath = outputDir.resolve(mode.withExtension(outputName))
       val cv: V = mode.createVisitor(coreFilePath)
-      cv.visit(V17, ACC_PUBLIC, outputName, null, superType, null)
+      cv.visit(V17, ACC_PUBLIC, outputName, null, objectTypeStr, null)
       for function <- functions do {
         val mv = cv.visitMethod(ACC_PUBLIC + ACC_STATIC, function.funName, descriptorForFunc(function.signature), null, null)
-        generateFunction(function, mv)
+        generateFunction(function, mv, analysisContext, outputName)
       }
       cv.visitEnd()
       mode.terminate(cv, coreFilePath) match
@@ -78,79 +84,102 @@ final class Backend[V <: ClassVisitor](
     }
   }
 
-  private def generateFunction(funDef: FunDef, mv: MethodVisitor): Unit = {
+  private def generateFunction(funDef: FunDef, mv: MethodVisitor, analysisContext: AnalysisContext, outputName: String): Unit = {
     mv.visitCode()
-
-    // TODO
-
+    generateCode(funDef.body, CodeGenerationContext.from(analysisContext))(mv, outputName)
+    mv.visitMaxs(0, 0)
     mv.visitEnd()
   }
 
-//  private def generateCode(ast: Ast, ctx: AnalysisContext): Unit = {
-//    ast match {
-//
-//      case Source(defs) =>
-//        for df <- defs do {
-//          generateCode(df, ctx.copyWithoutLocals)
-//        }
-//
-//      case Block(stats) =>
-//        val newCtx = ctx.copied
-//        for stat <- stats do {
-//          generateCode(stat, newCtx)
-//        }
-//
-//      case FunDef(funName, params, optRetType, body) =>
-//
-//
-//      case StructDef(_, fields) =>
-//
-//      case Param(_, _) =>
-//
-//      case ValDef(_, _, rhs) =>
-//
-//      case VarDef(_, _, rhs) =>
-//
-//      case _: Literal =>
-//
-//      case VariableRef(_) =>
-//
-//      case Call(callee, args) =>
-//
-//      case Indexing(indexed, arg) =>
-//
-//      case ArrayInit(_, size) =>
-//
-//      case StructInit(_, args) =>
-//
-//      case UnaryOp(_, operand) =>
-//
-//      case BinaryOp(lhs, _, rhs) =>
-//
-//      case Select(lhs, _) =>
-//
-//      case VarAssig(lhs, rhs) =>
-//
-//      case VarModif(lhs, rhs, _) =>
-//
-//      case IfThenElse(cond, thenBr, elseBrOpt) =>
-//
-//      case WhileLoop(cond, body) =>
-//
-//      case ForLoop(initStats, cond, stepStats, body) =>
-//
-//      case ReturnStat(value) =>
-//
-//      case PanicStat(msg) =>
-//
-//    }
-//    ??? // TODO
-//  }
+  private def generateCode(ast: Ast, ctx: CodeGenerationContext)(implicit mv: MethodVisitor, outputName: String): Unit = {
+    val analysisContext = ctx.analysisContext
+    // TODO
+    ast match {
 
-  extension(str: String) private def withHeadUppercase: String = {
+      case Block(stats) =>
+        val newCtx = ctx.withNewLocalsFrame
+        for stat <- stats do {
+          generateCode(stat, newCtx)
+        }
+
+      case VarDef(varName, tpeOpt, rhs) =>
+        generateCode(rhs, ctx)
+        mv.visitVarInsn(Opcodes.ASTORE, ctx.currLocalIdx)
+        ctx.addLocal(varName, tpeOpt.get)
+
+      case IntLit(value) => mv.visitLdcInsn(value)
+      case DoubleLit(value) => mv.visitLdcInsn(value)
+      case CharLit(value) => mv.visitLdcInsn(value)
+      case BoolLit(value) => mv.visitLdcInsn(if value then 1 else 0)
+      case StringLit(value) => mv.visitLdcInsn(value)
+
+      case VariableRef(name) =>
+        val (tpe, localIdx) = ctx.getLocal(name)
+        val opCode = opcodeFor(tpe, Opcodes.ILOAD, Opcodes.ALOAD)
+        mv.visitVarInsn(opCode, localIdx)
+
+      // typechecker ensures that callee is a VariableRef
+      case Call(VariableRef(name), args) =>
+        // load arguments
+        for arg <- args do {
+          generateCode(arg, ctx)
+        }
+        if (BuiltInFunctions.builtInFunctions.contains(name)) {
+          ??? // TODO generation of built in functions
+        } else {
+          val descriptor = descriptorForFunc(analysisContext.functions.apply(name))
+          mv.visitMethodInsn(Opcodes.INVOKESTATIC, outputName, name, descriptor, false)
+        }
+
+      case Indexing(indexed, arg) =>
+        generateCode(indexed, ctx)
+        generateCode(arg, ctx)
+        val elemType = indexed.getType.asInstanceOf[ArrayType].elemType
+        val opcode = opcodeFor(elemType, Opcodes.IALOAD, Opcodes.AALOAD)
+        mv.visitInsn(opcode)
+
+      case ArrayInit(elemType, size) =>
+        generateCode(size, ctx)
+        elemType match {
+          case PrimitiveType.StringType =>
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, stringTypeStr)
+          case StructType(typeName) =>
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, typeName)
+          case ArrayType(elemType) =>
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, ???)  // TODO multidim arrays
+          case _: Types.PrimitiveType =>
+            val elemTypeCode = convertToAsmTypeCode(elemType).get
+            mv.visitIntInsn(Opcodes.NEWARRAY, elemTypeCode)
+        }
+
+      case StructInit(structName, args) =>
+
+      case UnaryOp(operator, operand) =>
+
+      case BinaryOp(lhs, operator, rhs) =>
+
+      case Select(lhs, selected) =>
+
+      case VarAssig(lhs, rhs) =>
+
+      case IfThenElse(cond, thenBr, elseBrOpt) =>
+
+      case WhileLoop(cond, body) =>
+
+      case ReturnStat(value) =>
+
+      case PanicStat(msg) =>
+
+      case _ => shouldNotHappen()
+    }
+  }
+
+  extension (str: String) private def withHeadUppercase: String = {
     if str.isEmpty then str
     else str.head.toUpper +: str.tail
   }
+
+  private def shouldNotHappen(): Nothing = assert(false)
 
 }
 
@@ -158,8 +187,11 @@ object Backend {
 
   sealed trait Mode[V <: ClassVisitor] {
     val extension: String
+
     def createVisitor(path: Path): V
+
     def terminate(visitor: V, path: Path): Try[Unit]
+
     final def withExtension(filename: String): String = s"$filename.$extension"
   }
 
@@ -168,7 +200,7 @@ object Backend {
     override val extension: String = FileExtensions.binary
 
     override def createVisitor(path: Path): ClassWriter = {
-      new ClassWriter(ClassWriter.COMPUTE_MAXS)
+      new ClassWriter(ClassWriter.COMPUTE_FRAMES)
     }
 
     override def terminate(visitor: ClassWriter, path: Path): Try[Unit] = {

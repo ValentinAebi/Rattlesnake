@@ -13,16 +13,16 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
 
 
   override def apply(input: (List[Source], AnalysisContext)): (List[Source], AnalysisContext) = {
-    val (sources, ctx) = input
+    val (sources, analysisContext) = input
     for src <- sources do {
-      check(src, ctx.copyWithoutLocals)
+      check(src, TypeCheckingContext(analysisContext))
     }
     errorReporter.displayAndTerminateIfErrors()
     input
   }
 
-  private def check(ast: Ast, ctx: AnalysisContext): Type = {
-    ast match {
+  private def check(ast: Ast, ctx: TypeCheckingContext): Type = {
+    val tpe = ast match {
 
       case Source(defs) =>
         for df <- defs if df.isInstanceOf[FunDef] do {
@@ -295,9 +295,8 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         check(body, newCtx)
         VoidType
 
-      case retStat@ReturnStat(value) =>
-        val tpe = check(value, ctx)
-        retStat.setRetType(tpe)
+      case ReturnStat(value) =>
+        check(value, ctx)
         VoidType
 
       case panicStat@PanicStat(msg) =>
@@ -309,11 +308,17 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
 
       case _: (StructDef | Param) => assert(false)
     }
+    // if expression save type
+    ast match {
+      case expr: Expr => expr.setType(tpe)
+      case _ => ()
+    }
+    tpe
   }
 
   private case class EndStatus(returned: Set[Type], alwaysStopped: Boolean)
 
-  private def checkCallArgs(expTypes: List[Type], args: List[Expr], ctx: AnalysisContext, callPos: Option[Position]): Unit = {
+  private def checkCallArgs(expTypes: List[Type], args: List[Expr], ctx: TypeCheckingContext, callPos: Option[Position]): Unit = {
     val expTypesIter = expTypes.iterator
     val argsIter = args.iterator
     var errorFound = false

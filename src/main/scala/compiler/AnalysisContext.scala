@@ -10,29 +10,7 @@ import lang.{BuiltInFunctions, FunctionSignature, StructSignature}
 
 import scala.collection.mutable
 
-final case class AnalysisContext(
-                                  functions: Map[String, FunctionSignature],
-                                  structs: Map[String, StructSignature],
-                                  locals: mutable.Map[String, (Type, Boolean)]
-                                ) {
-  def copyWithoutLocals: AnalysisContext = {
-    copy(locals = mutable.Map.empty)
-  }
-
-  def copied: AnalysisContext = {
-    copy(locals = mutable.Map.from(locals))
-  }
-
-  def addLocal(name: String, tpe: Type, mutable: Boolean, duplicateVarCallback: () => Unit, forbiddenTypeCallback: () => Unit): Unit = {
-    if (tpe == NothingType || tpe == VoidType) {
-      forbiddenTypeCallback()
-    } else if (locals.contains(name)) {
-      duplicateVarCallback()
-    } else {
-      locals.put(name, (tpe, mutable))
-    }
-  }
-}
+final case class AnalysisContext(functions: Map[String, FunctionSignature], structs: Map[String, StructSignature])
 
 object AnalysisContext {
 
@@ -58,8 +36,8 @@ object AnalysisContext {
       } else {
         val fieldsMap = mutable.Map[String, Type]()
         for param <- structDef.fields do {
-          if (param.tpe == VoidType || param.tpe == NothingType){
-            
+          if (param.tpe == VoidType || param.tpe == NothingType) {
+
           } else if (fieldsMap.contains(param.paramName)) {
             errorReporter.push(new CompilationError(ContextCreation, s"duplicated field: '${param.paramName}'", param.getPosition))
           } else {
@@ -73,7 +51,7 @@ object AnalysisContext {
 
     def build(): AnalysisContext = {
       functions.addAll(BuiltInFunctions.builtInFunctions)
-      new AnalysisContext(functions.toMap, structs.toMap, mutable.Map.empty)
+      new AnalysisContext(functions.toMap, structs.toMap)
     }
 
   }
