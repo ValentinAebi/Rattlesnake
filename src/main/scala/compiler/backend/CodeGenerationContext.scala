@@ -20,18 +20,18 @@ final class CodeGenerationContext(val analysisContext: AnalysisContext, locals: 
 
   def getLocal(name: String): (Type, Int) = {
 
-    @tailrec def recurse(remFrames: List[mutable.Map[String, (Type, Int)]]): (Type, Int) = {
+    @tailrec def searchLocal(remFrames: List[mutable.Map[String, (Type, Int)]]): (Type, Int) = {
       remFrames match {
-        case Nil => throw new NoSuchElementException(s"should not happen: local $name not found")
+        case Nil => throw new NoSuchElementException(s"should not happen: local '$name' not found")
         case head :: tail =>
           head.get(name) match {
             case Some(value) => value
-            case None => recurse(tail)
+            case None => searchLocal(tail)
           }
       }
     }
 
-    recurse(locals)
+    searchLocal(locals)
   }
 
   export analysisContext.*

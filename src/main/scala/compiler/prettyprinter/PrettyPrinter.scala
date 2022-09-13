@@ -200,6 +200,22 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           addAst(elseBr)
         }
 
+      case Ternary(cond, thenBr, elseBr) =>
+        pps
+          .add(When.str)
+          .addSpace()
+        addAst(cond)
+        pps
+          .addSpace()
+          .add(Then.str)
+          .addSpace()
+        addAst(thenBr)
+        pps
+          .addSpace()
+          .add(Else.str)
+          .addSpace()
+        addAst(elseBr)
+
       case WhileLoop(cond, body) =>
         pps
           .add(While.str)

@@ -135,7 +135,10 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         }
         if (indexedError) VoidType else indexedType.asInstanceOf[ArrayType].elemType
 
-      case ArrayInit(elemType, size) =>
+      case arrayInit@ArrayInit(elemType, size) =>
+        if (elemType == VoidType || elemType == NothingType){
+          reportError(s"array cannot have element type $elemType", arrayInit.getPosition)
+        }
         val sizeType = check(size, ctx)
         if (!sizeType.subtypeOf(IntType)) {
           reportError(s"array size should be an '${IntType.str}'", size.getPosition)
@@ -215,6 +218,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
           case VariableRef(name) =>
             ctx.locals.get(name) match {
               case Some((tpe, mut)) if mut =>
+                lhs.setType(tpe)
                 if (!rhsType.subtypeOf(tpe)) {
                   reportError(s"cannot assign a '$rhsType' to a variable of type $tpe", varAssig.getPosition)
                 }
@@ -241,6 +245,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
               case Some((tpe, mut)) if mut =>
                 Operators.binaryOpFor(tpe, op, rhsType) match {
                   case Some(opSig) =>
+                    lhs.setType(tpe)
                     if (!opSig.retType.subtypeOf(tpe)){
                       reportError(s"$tpe ${op.str} $rhsType ==> ${opSig.retType}, not ${op.str}", varModif.getPosition)
                     }
@@ -275,6 +280,20 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         check(thenBr, ctx)
         elseBrOpt.foreach(check(_, ctx))
         VoidType
+
+      case ternary@Ternary(cond, thenBr, elseBr) =>
+        val condType = check(cond, ctx)
+        if (condType != BoolType){
+          reportError(s"condition should be of type '${BoolType.str}', found '$condType'", ternary.getPosition)
+        }
+        val thenType = check(thenBr, ctx)
+        val elseType = check(elseBr, ctx)
+        if (thenType == elseType){
+          thenType
+        } else {
+          reportError(s"type mismatch in ternary operator: first branch has type $thenType, second has type $elseType", ternary.getPosition)
+          VoidType
+        }
 
       case whileLoop@WhileLoop(cond, body) =>
         val condType = check(cond, ctx)
@@ -378,6 +397,8 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
             EndStatus(thenEndStatus.returned ++ elseEndStatus.returned, thenEndStatus.alwaysStopped && elseEndStatus.alwaysStopped)
           case None => thenEndStatus.copy(alwaysStopped = false)
         }
+
+      case _: Ternary => EndStatus(Set.empty, false)
 
       case whileLoop@WhileLoop(_, body) =>
         val bodyEndStatus = checkReturns(body)

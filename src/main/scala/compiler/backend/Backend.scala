@@ -7,9 +7,11 @@ import compiler.{AnalysisContext, CompilerStep, FileExtensions}
 import compiler.CompilationStep.CodeGeneration
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
 import compiler.backend.TypesConverter.{convertToAsmType, convertToAsmTypeCode, opcodeFor}
+import lang.Operator.*
 import lang.Types.{ArrayType, PrimitiveType, StructType}
 import lang.Types.PrimitiveType.StringType
 import lang.{BuiltInFunctions, Types}
+import Types.PrimitiveType.*
 import org.objectweb.asm.Opcodes.*
 import org.objectweb.asm.util.{Textifier, TraceClassVisitor}
 import org.objectweb.asm.*
@@ -85,8 +87,15 @@ final class Backend[V <: ClassVisitor](
   }
 
   private def generateFunction(funDef: FunDef, mv: MethodVisitor, analysisContext: AnalysisContext, outputName: String): Unit = {
+    val ctx = CodeGenerationContext.from(analysisContext)
+    for param <- funDef.params do {
+      ctx.addLocal(param.paramName, param.tpe)
+    }
     mv.visitCode()
-    generateCode(funDef.body, CodeGenerationContext.from(analysisContext))(mv, outputName)
+    generateCode(funDef.body, ctx)(mv, outputName)
+    if (ctx.analysisContext.functions.apply(funDef.funName).retType == VoidType) {
+      mv.visitInsn(Opcodes.RETURN)
+    }
     mv.visitMaxs(0, 0)
     mv.visitEnd()
   }
@@ -104,7 +113,8 @@ final class Backend[V <: ClassVisitor](
 
       case VarDef(varName, tpeOpt, rhs) =>
         generateCode(rhs, ctx)
-        mv.visitVarInsn(Opcodes.ASTORE, ctx.currLocalIdx)
+        val opcode = opcodeFor(rhs.getType, Opcodes.ISTORE, Opcodes.ASTORE)
+        mv.visitVarInsn(opcode, ctx.currLocalIdx)
         ctx.addLocal(varName, tpeOpt.get)
 
       case IntLit(value) => mv.visitLdcInsn(value)
@@ -119,17 +129,30 @@ final class Backend[V <: ClassVisitor](
         mv.visitVarInsn(opCode, localIdx)
 
       // typechecker ensures that callee is a VariableRef
-      case Call(VariableRef(name), args) =>
-        // load arguments
-        for arg <- args do {
-          generateCode(arg, ctx)
+      case Call(VariableRef(name), args) => {
+
+        val generateArgs: () => Unit = { () =>
+          for arg <- args do {
+            generateCode(arg, ctx)
+          }
         }
+
         if (BuiltInFunctions.builtInFunctions.contains(name)) {
-          ??? // TODO generation of built in functions
+          import BuiltinFunctionsImpl.*
+          name match {
+            case BuiltInFunctions.print => generatePrintCall(generateArgs)
+            case BuiltInFunctions.intToString => generateIntToString(generateArgs)
+            case BuiltInFunctions.doubleToString => generateDoubleToString(generateArgs)
+            case BuiltInFunctions.boolToString => generateBoolToString(generateArgs)
+            case BuiltInFunctions.charToString => generateCharToString(generateArgs)
+            case _ => shouldNotHappen()
+          }
         } else {
+          generateArgs()
           val descriptor = descriptorForFunc(analysisContext.functions.apply(name))
           mv.visitMethodInsn(Opcodes.INVOKESTATIC, outputName, name, descriptor, false)
         }
+      }
 
       case Indexing(indexed, arg) =>
         generateCode(indexed, ctx)
@@ -146,31 +169,178 @@ final class Backend[V <: ClassVisitor](
           case StructType(typeName) =>
             mv.visitTypeInsn(Opcodes.ANEWARRAY, typeName)
           case ArrayType(elemType) =>
-            mv.visitTypeInsn(Opcodes.ANEWARRAY, ???)  // TODO multidim arrays
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, ???) // TODO multidim arrays
           case _: Types.PrimitiveType =>
             val elemTypeCode = convertToAsmTypeCode(elemType).get
             mv.visitIntInsn(Opcodes.NEWARRAY, elemTypeCode)
         }
 
       case StructInit(structName, args) =>
+        mv.visitTypeInsn(Opcodes.NEW, structName)
+        mv.visitInsn(Opcodes.DUP)
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, structName, "<init>", "()V", false)
+        val structSig = analysisContext.structs.apply(structName)
+        for (arg, (paramName, tpe)) <- args.zip(structSig.fields) do {
+          generateCode(arg, ctx)
+          mv.visitFieldInsn(Opcodes.PUTFIELD, structName, paramName, descriptorForType(tpe))
+        }
 
       case UnaryOp(operator, operand) =>
+        generateCode(operand, ctx)
+        operator match {
+          case Sharp => mv.visitInsn(Opcodes.ARRAYLENGTH)
+          case _ => shouldNotHappen()
+        }
 
       case BinaryOp(lhs, operator, rhs) =>
+        generateCode(lhs, ctx)
+        generateCode(rhs, ctx)
+        val tpe = lhs.getType
+        if (operator == Equality) {
+          /*
+           *   if lhs == rhs goto trueLabel:
+           *   push false
+           *   goto endLabel
+           * trueLabel:
+           *   push true
+           * endLabel:
+           */
+          val opcode = opcodeFor(tpe, Opcodes.IF_ICMPEQ, Opcodes.IF_ACMPEQ)
+          val trueLabel = new Label()
+          val endLabel = new Label()
+          mv.visitJumpInsn(opcode, trueLabel)
+          mv.visitInsn(Opcodes.ICONST_0)
+          mv.visitJumpInsn(Opcodes.GOTO, endLabel)
+          mv.visitLabel(trueLabel)
+          mv.visitInsn(Opcodes.ICONST_1)
+          mv.visitLabel(endLabel)
+
+        } else if (operator == LessThan && tpe == IntType) {
+          /*
+           *   if_icmplt trueLabel  (goto trueLabel if lhs < rhs)
+           *   push false
+           *   goto endLabel
+           * trueLabel:
+           *   push true
+           * endLabel:
+           */
+          val trueLabel = new Label()
+          val endLabel = new Label()
+          mv.visitJumpInsn(Opcodes.IF_ICMPLT, trueLabel)
+          mv.visitInsn(Opcodes.ICONST_0)
+          mv.visitJumpInsn(Opcodes.GOTO, endLabel)
+          mv.visitLabel(trueLabel)
+          mv.visitInsn(Opcodes.ICONST_1)
+          mv.visitLabel(endLabel)
+        } else if (operator == LessThan && tpe == DoubleType) {
+          /*
+           *   dcmpg  (returns -1 if lhs < rhs)
+           *   if < 0 goto trueLabel
+           *   push false
+           *   goto endLabel
+           * trueLabel:
+           *   push true
+           * endLabel:
+           */
+          mv.visitInsn(Opcodes.DCMPG)
+          val trueLabel = new Label()
+          val endLabel = new Label()
+          mv.visitJumpInsn(Opcodes.IFLT, trueLabel)
+          mv.visitInsn(Opcodes.ICONST_0)
+          mv.visitJumpInsn(Opcodes.GOTO, endLabel)
+          mv.visitLabel(trueLabel)
+          mv.visitInsn(Opcodes.ICONST_1)
+          mv.visitLabel(endLabel)
+        } else {
+          val intOpcode = operator match {
+            case Plus => Opcodes.IADD
+            case Minus => Opcodes.ISUB
+            case Times => Opcodes.IMUL
+            case Div => Opcodes.IDIV
+            case Modulo => Opcodes.IREM
+            case And => Opcodes.IAND
+            case Or => Opcodes.IOR
+            case _ => throw new IllegalStateException(s"unexpected $operator in backend")
+          }
+          val opcode = opcodeFor(tpe, intOpcode, shouldNotHappen())
+          mv.visitInsn(opcode)
+        }
 
       case Select(lhs, selected) =>
+        generateCode(lhs, ctx)
+        val structName = lhs.getType.asInstanceOf[StructType].typeName
+        val selectedType = analysisContext.structs.apply(structName).fields.apply(selected)
+        mv.visitFieldInsn(Opcodes.GETFIELD, structName, selected, descriptorForType(selectedType))
 
       case VarAssig(lhs, rhs) =>
+        lhs match {
+          case VariableRef(name) =>
+            generateCode(rhs, ctx)
+            val (varType, varIdx) = ctx.getLocal(name)
+            val opcode = opcodeFor(varType, Opcodes.ISTORE, Opcodes.ASTORE)
+            mv.visitVarInsn(opcode, varIdx)
+          case Indexing(indexed, arg) =>
+            generateCode(indexed, ctx)
+            generateCode(arg, ctx)
+            generateCode(rhs, ctx)
+            val elemType = indexed.getType.asInstanceOf[ArrayType].elemType
+            mv.visitInsn(opcodeFor(elemType, Opcodes.IASTORE, Opcodes.AASTORE))
+          case _ => shouldNotHappen()
+        }
 
       case IfThenElse(cond, thenBr, elseBrOpt) =>
+        /*
+         *   if !cond goto falseLabel
+         *   <thenBr>
+         *   goto endLabel
+         * falseLabel:
+         *   <elseBr>
+         * endLabel:
+         */
+        generateCode(cond, ctx)
+        val falseLabel = new Label()
+        val endLabel = new Label()
+        mv.visitJumpInsn(Opcodes.IFLE, falseLabel)
+        generateCode(thenBr, ctx)
+        mv.visitJumpInsn(Opcodes.GOTO, endLabel)
+        mv.visitLabel(falseLabel)
+        elseBrOpt.foreach(generateCode(_, ctx))
+        mv.visitLabel(endLabel)
+
+      case Ternary(cond, thenBr, elseBr) =>
+        generateCode(IfThenElse(cond, thenBr, Some(elseBr)), ctx)
 
       case WhileLoop(cond, body) =>
+        /*
+         * loopLabel:
+         *   if !cond goto endLabel
+         *   <body>
+         *   goto loopLabel
+         * endLabel:
+         */
+        val loopLabel = new Label()
+        val endLabel = new Label()
+        mv.visitLabel(loopLabel)
+        generateCode(cond, ctx)
+        mv.visitJumpInsn(Opcodes.IFLE, endLabel)
+        generateCode(body, ctx)
+        mv.visitJumpInsn(Opcodes.GOTO, loopLabel)
+        mv.visitLabel(endLabel)
 
       case ReturnStat(value) =>
+        generateCode(value, ctx)
+        val opcode = opcodeFor(value.getType, Opcodes.IRETURN, Opcodes.ARETURN)
+        mv.visitInsn(opcode)
 
       case PanicStat(msg) =>
+        mv.visitTypeInsn(NEW, "java/lang/RuntimeException")
+        mv.visitInsn(DUP)
+        generateCode(msg, ctx)
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/RuntimeException",
+          "<init>", s"(L$stringTypeStr;)V", false)
+        mv.visitInsn(Opcodes.ATHROW)
 
-      case _ => shouldNotHappen()
+      case other => throw new IllegalStateException(s"unexpected in backend: ${other.getClass}")
     }
   }
 

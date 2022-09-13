@@ -27,7 +27,7 @@ fn maxIdx(array: arr Int, firstIdx: Int) -> Int {
     }
 }
 
-fn main() {
+fn main(args: arr String) {
     val nbs = arr Int[10];
     for var i = 0; i < 10; i += 1 {
         nbs[i] = (2*i - i*i + 200) % 25;
@@ -35,6 +35,7 @@ fn main() {
     };
     selectionSort(nbs);
     for var i = 0; i < 10; i += 1 {
-        print(intToString(nbs[i]))
+        print(intToString(nbs[i]));
+        print(" ")
     }
 }

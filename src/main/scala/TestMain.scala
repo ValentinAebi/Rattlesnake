@@ -26,7 +26,7 @@ object TestMain {
       MultiStep(new Lexer(er) andThen new Parser(er)) andThen new ContextCreator(er) andThen
         new TypeChecker(er) andThen new Desugarer() andThen
         new Backend(Backend.AssemblyMode, er, Path.of("testoutput"))
-    val file = SourceFile("examples/sorting.rsn")
+    val file = SourceFile("examples/geometry.rsn")
     pipeline.apply(List(file))
   }
 

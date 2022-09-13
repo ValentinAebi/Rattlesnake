@@ -5,6 +5,8 @@ enum Keyword(val str: String) {
   case Var extends Keyword("var")
   case If extends Keyword("if")
   case Else extends Keyword("else")
+  case When extends Keyword("when")
+  case Then extends Keyword("then")
   case While extends Keyword("while")
   case For extends Keyword("for")
   case Fn extends Keyword("fn")

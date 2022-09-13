@@ -5,14 +5,18 @@ import compiler.{AnalysisContext, CompilerStep}
 import compiler.irs.Asts.*
 import lang.Operator.*
 import lang.Operators
+import lang.Types.PrimitiveType.{IntType, DoubleType, BoolType}
 
 /**
  * Desugaring replaces:
  *  - `ValDef` -> `VarDef`
  *  - `>`, `>=` -> reversed
+ *  - `x <= y` -> `(x < y) || (x == y)`
  *  - `x != y` -> `!(x == y)`
  *  - `VarModif`: `x += y` -> `x = x + y`
  *  - `for` -> `while`
+ *  - `-x` -> `0 - x`
+ *  - `!x` -> `when x then false else true`
  */
 final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
 
@@ -39,13 +43,13 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
 
   private def desugar(varDef: VarDef): VarDef = VarDef(varDef.varName, varDef.optType, desugar(varDef.rhs))
 
-  private def desugar(varAssig: VarAssig): VarAssig = VarAssig(varAssig.lhs, varAssig.rhs)
+  private def desugar(varAssig: VarAssig): VarAssig = VarAssig(desugar(varAssig.lhs), desugar(varAssig.rhs))
 
   private def desugar(varModif: VarModif): VarAssig = {
     val VarModif(lhs, rhs, op) = varModif
     val desugaredLhs = desugar(lhs)
     val desugaredRhs = desugar(rhs)
-    VarAssig(desugaredLhs, BinaryOp(desugaredLhs, Operators.assigOperators(op), desugaredRhs))
+    VarAssig(desugaredLhs, BinaryOp(desugaredLhs, op, desugaredRhs).setType(lhs.getType))
   }
 
   private def desugar(ifThenElse: IfThenElse): IfThenElse = {
@@ -61,7 +65,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
       forLoop.body.stats ++ forLoop.stepStats
     )
     val stats: List[Statement] = forLoop.initStats :+ WhileLoop(forLoop.cond, body)
-    Block(stats)
+    desugar(Block(stats))
   }
 
   private def desugar(returnStat: ReturnStat): ReturnStat = ReturnStat(desugar(returnStat.value))
@@ -76,20 +80,32 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
       case indexing: Indexing => Indexing(desugar(indexing.indexed), desugar(indexing.arg))
       case arrayInit: ArrayInit => ArrayInit(arrayInit.elemType, desugar(arrayInit.size))
       case structInit: StructInit => StructInit(structInit.structName, structInit.args.map(desugar))
-      case unaryOp: UnaryOp => UnaryOp(unaryOp.operator, desugar(unaryOp.operand))
+      case UnaryOp(operator, operand) =>
+        val desugaredOperand = desugar(operand)
+        operator match {
+          case Minus if operand.getType == IntType => BinaryOp(IntLit(0), Minus, desugaredOperand)
+          case Minus if operand.getType == DoubleType => BinaryOp(DoubleLit(0.0), Minus, desugaredOperand)
+          case ExclamationMark => Ternary(desugaredOperand, BoolLit(false), BoolLit(true))
+          case _ => UnaryOp(operator, desugaredOperand)
+        }
       case binaryOp: BinaryOp => {
         val desugaredLhs = desugar(binaryOp.lhs)
         val desugaredRhs = desugar(binaryOp.rhs)
         binaryOp.operator match
+          case LessOrEq => BinaryOp(
+            BinaryOp(desugaredLhs, LessThan, desugaredRhs).setType(BoolType),
+            Or,
+            BinaryOp(desugaredRhs, Equality, desugaredRhs).setType(BoolType)
+          )
           case GreaterThan => BinaryOp(desugaredRhs, LessThan, desugaredLhs)
-          case GreaterOrEq => BinaryOp(desugaredRhs, LessOrEq, desugaredLhs)
-          case Inequality => UnaryOp(ExclamationMark, BinaryOp(desugaredRhs, Equality, desugaredLhs))
+          case GreaterOrEq => desugar(BinaryOp(desugaredRhs, LessOrEq, desugaredLhs).setType(BoolType))
+          case Inequality => UnaryOp(ExclamationMark, BinaryOp(desugaredLhs, Equality, desugaredRhs))
           case _ => BinaryOp(desugaredLhs, binaryOp.operator, desugaredRhs)
       }
       case select: Select => Select(desugar(select.lhs), select.selected)
+      case Ternary(cond, thenBr, elseBr) => Ternary(desugar(cond), desugar(thenBr), desugar(elseBr))
     }
     desugared.setTypeOpt(expr.getTypeOpt)
-    desugared
   }
 
   private def desugar(statement: Statement): Statement = {

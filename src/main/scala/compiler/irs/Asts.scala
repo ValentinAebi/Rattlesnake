@@ -3,7 +3,7 @@ package compiler.irs
 import compiler.Position
 import lang.{FunctionSignature, Operator}
 import lang.Types.*
-import lang.Types.PrimitiveType.VoidType
+import lang.Types.PrimitiveType.*
 
 object Asts {
 
@@ -27,17 +27,18 @@ object Asts {
   sealed abstract class Expr extends Statement {
     private var tpeOpt: Option[Type] = None
     
-    def setTypeOpt(tpe: Option[Type]): Unit = {
+    def setTypeOpt(tpe: Option[Type]): Expr = {
       tpeOpt = tpe
+      this
     }
 
-    def setType(tpe: Type): Unit = {
+    final def setType(tpe: Type): Expr = {
       setTypeOpt(Some(tpe))
     }
     
     def getTypeOpt: Option[Type] = tpeOpt
     
-    def getType: Type = tpeOpt.get
+    final def getType: Type = tpeOpt.get
     
   }
 
@@ -67,11 +68,21 @@ object Asts {
   sealed abstract class Literal extends Expr {
     val value: Any
   }
-  final case class IntLit(value: Int) extends Literal
-  final case class DoubleLit(value: Double) extends Literal
-  final case class CharLit(value: Char) extends Literal
-  final case class BoolLit(value: Boolean) extends Literal
-  final case class StringLit(value: String) extends Literal
+  final case class IntLit(value: Int) extends Literal {
+    override def getTypeOpt: Option[Type] = Some(IntType)
+  }
+  final case class DoubleLit(value: Double) extends Literal {
+    override def getTypeOpt: Option[Type] = Some(DoubleType)
+  }
+  final case class CharLit(value: Char) extends Literal {
+    override def getTypeOpt: Option[Type] = Some(CharType)
+  }
+  final case class BoolLit(value: Boolean) extends Literal {
+    override def getTypeOpt: Option[Type] = Some(BoolType)
+  }
+  final case class StringLit(value: String) extends Literal {
+    override def getTypeOpt: Option[Type] = Some(StringType)
+  }
 
   final case class VariableRef(name: String) extends Expr
   final case class Call(callee: Expr, args: List[Expr]) extends Expr
@@ -91,6 +102,7 @@ object Asts {
   final case class VarModif(lhs: Expr, rhs: Expr, op: Operator) extends Assignment
 
   final case class IfThenElse(cond: Expr, thenBr: Statement, elseBrOpt: Option[Statement]) extends Statement
+  final case class Ternary(cond: Expr, thenBr: Expr, elseBr: Expr) extends Expr
   final case class WhileLoop(cond: Expr, body: Statement) extends Statement
   final case class ForLoop(
                             initStats: List[ValDef | VarDef | Assignment],
