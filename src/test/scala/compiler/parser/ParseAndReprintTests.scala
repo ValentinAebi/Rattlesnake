@@ -1,7 +1,7 @@
 package compiler.parser
 
 import compiler.Errors.ErrorReporter
-import compiler.SourceFile
+import compiler.io.SourceFile
 import compiler.lexer.Lexer
 import compiler.prettyprinter.PrettyPrinter
 

@@ -184,7 +184,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         val rhsType = check(rhs, ctx)
         if (operator == Equality || operator == Inequality) {
           if (lhsType != rhsType) {
-            reportError(s"cannot compare $lhsType and $rhsType using ${Equality.str} or ${Inequality.str}", binOp.getPosition)
+            reportError(s"cannot compare '$lhsType' and '$rhsType' using ${Equality.str} or ${Inequality.str}", binOp.getPosition)
           }
           BoolType
         } else {

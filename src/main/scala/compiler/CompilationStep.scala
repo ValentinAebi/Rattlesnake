@@ -1,5 +1,5 @@
 package compiler
 
 enum CompilationStep {
-  case Lexing, Parsing, ContextCreation, TypeChecking, CodeGeneration
+  case Lexing, Parsing, ContextCreation, TypeChecking, CodeGeneration, SourceFileWriting
 }
