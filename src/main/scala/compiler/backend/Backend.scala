@@ -1,25 +1,23 @@
 package compiler.backend
 
-import com.sun.org.apache.bcel.internal.generic.{ALOAD, INVOKESPECIAL}
-import compiler.Errors.{CompilationError, ErrorReporter}
-import compiler.irs.Asts.*
-import compiler.{AnalysisContext, CompilerStep, FileExtensions}
 import compiler.CompilationStep.CodeGeneration
+import compiler.Errors.{CompilationError, ErrorReporter}
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
 import compiler.backend.TypesConverter.{convertToAsmType, convertToAsmTypeCode, opcodeFor}
+import compiler.irs.Asts.*
+import compiler.{AnalysisContext, CompilerStep, FileExtensions}
+import BuiltinFunctionsImpl.*
 import lang.Operator.*
+import lang.Types.PrimitiveType.*
 import lang.Types.{ArrayType, PrimitiveType, StructType}
-import lang.Types.PrimitiveType.StringType
 import lang.{BuiltInFunctions, Types}
-import Types.PrimitiveType.*
+import org.objectweb.asm
+import org.objectweb.asm.*
 import org.objectweb.asm.Opcodes.*
 import org.objectweb.asm.util.{Textifier, TraceClassVisitor}
-import org.objectweb.asm.*
-import org.objectweb.asm
 
 import java.io.{File, FileOutputStream, FileWriter, PrintWriter}
-import java.nio.file.Files
-import java.nio.file.Path
+import java.nio.file.{Files, Path}
 import scala.collection.immutable.Nil
 import scala.util.{Failure, Success, Try, Using}
 
@@ -61,6 +59,7 @@ final class Backend[V <: ClassVisitor](
         cv.visit(javaVersion, ACC_PUBLIC, struct.structName, null, objectTypeStr, null)
         generateStruct(struct, cv)
         cv.visitEnd()
+        mode.terminate(cv, structFilePath, errorReporter)
       }
 
       Files.createDirectories(outputDir)
@@ -68,22 +67,27 @@ final class Backend[V <: ClassVisitor](
       val cv: V = mode.createVisitor(coreFilePath)
       cv.visit(V17, ACC_PUBLIC, outputName, null, objectTypeStr, null)
       for function <- functions do {
-        val mv = cv.visitMethod(ACC_PUBLIC + ACC_STATIC, function.funName, descriptorForFunc(function.signature), null, null)
+        val mv = cv.visitMethod(ACC_PUBLIC | ACC_STATIC, function.funName, descriptorForFunc(function.signature), null, null)
         generateFunction(function, mv, analysisContext, outputName)
       }
       cv.visitEnd()
-      mode.terminate(cv, coreFilePath) match
-        case Success(_) => ()
-        case Failure(exception) =>
-          errorReporter.push(new CompilationError(CodeGeneration, exception.getMessage, None))
+      mode.terminate(cv, coreFilePath, errorReporter)
     }
     errorReporter.displayAndTerminateIfErrors()
   }
 
   private def generateStruct(structDef: StructDef, cv: ClassVisitor): Unit = {
     for field <- structDef.fields do {
-      cv.visitField(ACC_PUBLIC, field.paramName, descriptorForType(field.tpe), null, null)
+      val fieldVisitor = cv.visitField(Opcodes.ACC_PUBLIC, field.paramName, descriptorForType(field.tpe), null, null)
+      fieldVisitor.visitEnd()
     }
+    val constructorVisitor = cv.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null)
+    constructorVisitor.visitCode()
+    constructorVisitor.visitVarInsn(Opcodes.ALOAD, 0)
+    constructorVisitor.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false)
+    constructorVisitor.visitInsn(Opcodes.RETURN)
+    constructorVisitor.visitMaxs(0, 0)
+    constructorVisitor.visitEnd()
   }
 
   private def generateFunction(funDef: FunDef, mv: MethodVisitor, analysisContext: AnalysisContext, outputName: String): Unit = {
@@ -138,7 +142,6 @@ final class Backend[V <: ClassVisitor](
         }
 
         if (BuiltInFunctions.builtInFunctions.contains(name)) {
-          import BuiltinFunctionsImpl.*
           name match {
             case BuiltInFunctions.print => generatePrintCall(generateArgs)
             case BuiltInFunctions.intToString => generateIntToString(generateArgs)
@@ -176,14 +179,23 @@ final class Backend[V <: ClassVisitor](
         }
 
       case StructInit(structName, args) =>
+        val structType = StructType(structName)
+        val tmpVarIdx = ctx.currLocalIdx
+        val tempLocalName = "$" + tmpVarIdx
+        ctx.addLocal(tempLocalName, structType)
+        val storeTmpOpcode = opcodeFor(structType, Opcodes.ISTORE, Opcodes.ASTORE)
         mv.visitTypeInsn(Opcodes.NEW, structName)
         mv.visitInsn(Opcodes.DUP)
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, structName, "<init>", "()V", false)
+        mv.visitVarInsn(storeTmpOpcode, tmpVarIdx)
         val structSig = analysisContext.structs.apply(structName)
+        val loadTmpOpcode = opcodeFor(structType, Opcodes.ILOAD, Opcodes.ALOAD)
         for (arg, (paramName, tpe)) <- args.zip(structSig.fields) do {
+          mv.visitVarInsn(loadTmpOpcode, tmpVarIdx)
           generateCode(arg, ctx)
           mv.visitFieldInsn(Opcodes.PUTFIELD, structName, paramName, descriptorForType(tpe))
         }
+        mv.visitVarInsn(loadTmpOpcode, tmpVarIdx)
 
       case UnaryOp(operator, operand) =>
         generateCode(operand, ctx)
@@ -192,7 +204,7 @@ final class Backend[V <: ClassVisitor](
           case _ => shouldNotHappen()
         }
 
-      case BinaryOp(lhs, operator, rhs) =>
+      case BinaryOp(lhs, operator, rhs) => {
         generateCode(lhs, ctx)
         generateCode(rhs, ctx)
         val tpe = lhs.getType
@@ -214,7 +226,6 @@ final class Backend[V <: ClassVisitor](
           mv.visitLabel(trueLabel)
           mv.visitInsn(Opcodes.ICONST_1)
           mv.visitLabel(endLabel)
-
         } else if (operator == LessThan && tpe == IntType) {
           /*
            *   if_icmplt trueLabel  (goto trueLabel if lhs < rhs)
@@ -265,6 +276,7 @@ final class Backend[V <: ClassVisitor](
           val opcode = opcodeFor(tpe, intOpcode, shouldNotHappen())
           mv.visitInsn(opcode)
         }
+      }
 
       case Select(lhs, selected) =>
         generateCode(lhs, ctx)
@@ -360,7 +372,7 @@ object Backend {
 
     def createVisitor(path: Path): V
 
-    def terminate(visitor: V, path: Path): Try[Unit]
+    def terminate(visitor: V, path: Path, errorReporter: ErrorReporter): Unit
 
     final def withExtension(filename: String): String = s"$filename.$extension"
   }
@@ -373,13 +385,17 @@ object Backend {
       new ClassWriter(ClassWriter.COMPUTE_FRAMES)
     }
 
-    override def terminate(visitor: ClassWriter, path: Path): Try[Unit] = {
+    override def terminate(visitor: ClassWriter, path: Path, errorReporter: ErrorReporter): Unit = {
       val file = path.toFile
       file.createNewFile()
-      Using(new FileOutputStream(file)) { fileOutputStream =>
+      val status = Using(new FileOutputStream(file)) { fileOutputStream =>
         fileOutputStream.write(visitor.toByteArray)
         fileOutputStream.flush()
       }
+      status match
+        case Success(_) => ()
+        case Failure(exception) =>
+          errorReporter.push(new CompilationError(CodeGeneration, exception.getMessage, None))
     }
   }
 
@@ -393,7 +409,7 @@ object Backend {
       new TraceClassVisitor(new PrintWriter(file))
     }
 
-    override def terminate(visitor: TraceClassVisitor, path: Path): Try[Unit] = {
+    override def terminate(visitor: TraceClassVisitor, path: Path, errorReporter: ErrorReporter): Unit = {
       // nothing to do
       Success(())
     }

@@ -2,7 +2,8 @@ package compiler.backend
 
 import compiler.AnalysisContext
 import compiler.backend.CodeGenerationContext.from
-import lang.Types.Type
+import lang.Types.{PrimitiveType, Type}
+import lang.Types.PrimitiveType.*
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -15,7 +16,7 @@ final class CodeGenerationContext(val analysisContext: AnalysisContext, locals: 
 
   def addLocal(name: String, tpe: Type): Unit = {
     locals.head.put(name, (tpe, currLocalIdx))
-    currLocalIdx += 1
+    currLocalIdx += numSlotsFor(tpe)
   }
 
   def getLocal(name: String): (Type, Int) = {
@@ -35,6 +36,12 @@ final class CodeGenerationContext(val analysisContext: AnalysisContext, locals: 
   }
 
   export analysisContext.*
+
+  private def numSlotsFor(tpe: Type): Int = {
+    tpe match
+      case DoubleType => 2
+      case _ => 1
+  }
 
 }
 

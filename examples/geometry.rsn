@@ -8,7 +8,7 @@ fn computeArea(rectangle: Rectangle) -> Double {
     return rectangle.width * rectangle.height
 }
 
-fn main(){
+fn main(args: arr String){
     var width = 0.1 - 0.05 * (2.41 + 1.2) * 0.3;
     var alternate = true;
     while width < 4.0 {
@@ -17,10 +17,12 @@ fn main(){
         }
         else {
             width = width * 1.4
-        }
+        };
+        alternate = !alternate;
     };
     val r = new Rectangle { new Vertex { 11.5, 9.0 }, width, 2.5 };
-    computeArea(r);
+    val area = computeArea(r);
+    print(doubleToString(area))
 }
 
 struct Rectangle {
