@@ -22,6 +22,9 @@ object TestMain {
     val compilerTask2 = TasksPipelines.compiler(Path.of("testoutput"))
     compilerTask2.apply(List(SourceFile("examples/geometry.rsn")))
 
+    val compilerTask3 = TasksPipelines.compiler(Path.of("testoutput"))
+    compilerTask3.apply(List(SourceFile("examples/hello.rsn")))
+
   }
 
 }

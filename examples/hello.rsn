@@ -1,0 +1,4 @@
+
+fn main(args: arr String){
+    print("Hello world!")
+}
