@@ -273,7 +273,8 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
 
   private def parenthesesNeededRight(externalOp: Operator, rightOperand: Expr, displayAllParentheses: Boolean): Boolean = {
     rightOperand match
-      case _: UnaryOp => true
+      case UnaryOp(operator, _) =>
+        displayAllParentheses || operator == Operator.Minus
       case BinaryOp(_, operator, _) =>
         displayAllParentheses || Operator.priorities(operator) <= Operator.priorities(externalOp)
       case _ => false
