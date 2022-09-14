@@ -95,7 +95,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
           case LessOrEq => BinaryOp(
             BinaryOp(desugaredLhs, LessThan, desugaredRhs).setType(BoolType),
             Or,
-            BinaryOp(desugaredRhs, Equality, desugaredRhs).setType(BoolType)
+            BinaryOp(desugaredLhs, Equality, desugaredRhs).setType(BoolType)
           )
           case GreaterThan => BinaryOp(desugaredRhs, LessThan, desugaredLhs)
           case GreaterOrEq => desugar(BinaryOp(desugaredRhs, LessOrEq, desugaredLhs).setType(BoolType))

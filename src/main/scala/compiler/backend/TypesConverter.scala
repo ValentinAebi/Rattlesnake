@@ -31,7 +31,20 @@ object TypesConverter {
       case PrimitiveType.BoolType => Opcodes.T_BOOLEAN.toSome
       case _ => None
   }
+  
+  def internalNameOf(tpe: Types.Type): String = {
+    tpe match
+      case PrimitiveType.IntType => "I"
+      case PrimitiveType.DoubleType => "D"
+      case PrimitiveType.CharType => "C"
+      case PrimitiveType.BoolType => "Z"
+      case PrimitiveType.StringType => "java/lang/String"
+      case PrimitiveType.VoidType => "V"
+      case PrimitiveType.NothingType => "V"
+      case Types.StructType(typeName) => s"$typeName"
+      case Types.ArrayType(elemType) => s"[${internalNameOf(elemType)}"
+  }
 
-  extension[T](t: T) private def toSome = Some(t)
+  extension[T] (t: T) private def toSome = Some(t)
 
 }

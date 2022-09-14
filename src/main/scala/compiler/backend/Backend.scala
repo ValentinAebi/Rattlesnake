@@ -3,7 +3,7 @@ package compiler.backend
 import compiler.CompilationStep.CodeGeneration
 import compiler.Errors.{CompilationError, ErrorReporter}
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
-import compiler.backend.TypesConverter.{convertToAsmType, convertToAsmTypeCode, opcodeFor}
+import compiler.backend.TypesConverter.{convertToAsmType, convertToAsmTypeCode, internalNameOf, opcodeFor}
 import compiler.irs.Asts.*
 import compiler.{AnalysisContext, CompilerStep, FileExtensions}
 import BuiltinFunctionsImpl.*
@@ -172,12 +172,8 @@ final class Backend[V <: ClassVisitor](
       case ArrayInit(elemType, size) =>
         generateCode(size, ctx)
         elemType match {
-          case PrimitiveType.StringType =>
-            mv.visitTypeInsn(Opcodes.ANEWARRAY, stringTypeStr)
-          case StructType(typeName) =>
-            mv.visitTypeInsn(Opcodes.ANEWARRAY, typeName)
-          case ArrayType(elemType) =>
-            mv.visitTypeInsn(Opcodes.ANEWARRAY, ???) // TODO multidim arrays
+          case _: (PrimitiveType.StringType.type | StructType | ArrayType) =>
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, internalNameOf(elemType))
           case _: Types.PrimitiveType =>
             val elemTypeCode = convertToAsmTypeCode(elemType).get
             mv.visitIntInsn(Opcodes.NEWARRAY, elemTypeCode)

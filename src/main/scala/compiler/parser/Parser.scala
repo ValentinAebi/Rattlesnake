@@ -117,7 +117,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "atomicType"
 
   private lazy val arrayType = recursive {
-    kw(Arr).ignored ::: atomicType map (ArrayType(_))
+    kw(Arr).ignored ::: tpe map (ArrayType.apply)
   } setName "arrayType"
 
   private lazy val block = recursive {

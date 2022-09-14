@@ -67,7 +67,7 @@ class CompilerTests {
 
     def scalaImplementation(x: Int): Int = {
       if (x < 0) {
-        if (x > -5) {
+        if (x >= -5) {
           -12
         } else if (x > -11) {
           if (x != -7){
@@ -81,7 +81,7 @@ class CompilerTests {
       } else if (x == 0) {
         -75
       } else {
-        if ((x > 25 && x < 35) || x == 100) {
+        if ((x > 25 && x <= 35) || x == 100) {
           100
         } else {
           1005
@@ -95,6 +95,17 @@ class CompilerTests {
       val exp = scalaImplementation(i)
       val act = actualResults(i-range.start)
       assertEquals(exp, act)
+    }
+  }
+
+  @Test
+  def multiplicationTableTest(): Unit = {
+    val actRes = compileAndExecOneIter("multable", "createMultiplicationTable", 50)
+    assertTrue(actRes.isInstanceOf[Array[Array[Int]]])
+    val actResArray = actRes.asInstanceOf[Array[Array[Int]]]
+    val expRes = Array.tabulate(50, 50)((i, j) => (i + 1) * (j + 1))
+    for i <- 0 until 50 do {
+      assertArrayEquals(expRes(i), actResArray(i))
     }
   }
 

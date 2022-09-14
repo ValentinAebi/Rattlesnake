@@ -1,7 +1,7 @@
 
 fn testFunc(x: Int) -> Int {
     if x < 0 {
-        if x > -5 {
+        if x >= -5 {
             return -12;
         } else if x > -11 {
           if (x != -7){
@@ -15,7 +15,7 @@ fn testFunc(x: Int) -> Int {
     } else if x == 0 {
         return -75;
     } else {
-        if (x > 25 && x < 35) || x == 100 {
+        if (x > 25 && x <= 35) || x == 100 {
             return 100;
         } else {
             return 1005;
