@@ -109,6 +109,18 @@ class CompilerTests {
     }
   }
 
+  @Test
+  def modifStructTest(): Unit = {
+    val input = Array(12, 25, 33, 41, 28, 22, 27, 91, 0, -7, 14, -5, 9)
+    val actRes = compileAndExecOneIter("modifstruct", "testFunc", input)
+    assertTrue(actRes.isInstanceOf[Array[Int]])
+    val actResArray = actRes.asInstanceOf[Array[Int]]
+    val evenCnt = input.count(_ % 2 == 0)
+    val oddCnt = input.length - evenCnt
+    val expRes = Array(evenCnt, oddCnt)
+    assertArrayEquals(expRes, actResArray)
+  }
+
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
     compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
   }

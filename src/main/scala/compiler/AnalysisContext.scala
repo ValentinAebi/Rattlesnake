@@ -34,7 +34,7 @@ object AnalysisContext {
       if (structs.contains(name)) {
         errorReporter.push(new CompilationError(ContextCreation, s"redefinition of struct '$name'", structDef.getPosition))
       } else {
-        val fieldsMap = mutable.Map[String, Type]()
+        val fieldsMap = new mutable.LinkedHashMap[String, Type]()
         for param <- structDef.fields do {
           if (param.tpe == VoidType || param.tpe == NothingType) {
 
@@ -44,7 +44,7 @@ object AnalysisContext {
             fieldsMap.put(param.paramName, param.tpe)
           }
         }
-        val sig = StructSignature(name, fieldsMap.toMap)
+        val sig = StructSignature(name, fieldsMap)
         structs.put(name, sig)
       }
     }

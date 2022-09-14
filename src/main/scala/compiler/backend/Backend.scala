@@ -298,6 +298,11 @@ final class Backend[V <: ClassVisitor](
             generateCode(rhs, ctx)
             val elemType = indexed.getType.asInstanceOf[ArrayType].elemType
             mv.visitInsn(opcodeFor(elemType, Opcodes.IASTORE, Opcodes.AASTORE))
+          case Select(ownerStruct, fieldName) =>
+            generateCode(ownerStruct, ctx)
+            generateCode(rhs, ctx)
+            val ownerName = ownerStruct.getType.asInstanceOf[StructType].typeName
+            mv.visitFieldInsn(Opcodes.PUTFIELD, ownerName, fieldName, descriptorForType(rhs.getType))
           case _ => shouldNotHappen()
         }
 

@@ -232,6 +232,11 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
             if (!rhsType.subtypeOf(lhsType)) {
               reportError(s"type mismatch in assignment", indexing.getPosition)
             }
+          case select: Select =>
+            val lhsType = check(select, ctx)
+            if (lhsType != rhsType){
+              reportError(s"cannot assign a value of type '$rhsType' to a field of type '$lhsType'", select.getPosition)
+            }
           case _ =>
             reportError("syntax error: only variables and array elements can be assigned", varAssig.getPosition)
         }
@@ -257,8 +262,8 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
               case None =>
                 reportError(s"not found: '$name'", varModif.getPosition)
             }
-          case indexing: Indexing =>
-            val lhsType = check(indexing, ctx)
+          case indexingOrSelect: (Indexing | Select) =>
+            val lhsType = check(indexingOrSelect, ctx)
             Operators.binaryOpFor(lhsType, op, rhsType) match {
               case Some(opSig) =>
                 if (!opSig.retType.subtypeOf(lhsType)) {
