@@ -38,7 +38,11 @@ object Asts {
     
     def getTypeOpt: Option[Type] = tpeOpt
     
-    final def getType: Type = tpeOpt.get
+    final def getType: Type = {
+      getTypeOpt match
+        case Some(tpe) => tpe
+        case None => throw new NoSuchElementException(s"type missing in $this")
+    }
     
   }
 

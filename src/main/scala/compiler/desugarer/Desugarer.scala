@@ -99,7 +99,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
           )
           case GreaterThan => BinaryOp(desugaredRhs, LessThan, desugaredLhs)
           case GreaterOrEq => desugar(BinaryOp(desugaredRhs, LessOrEq, desugaredLhs).setType(BoolType))
-          case Inequality => UnaryOp(ExclamationMark, BinaryOp(desugaredLhs, Equality, desugaredRhs))
+          case Inequality => desugar(UnaryOp(ExclamationMark, BinaryOp(desugaredLhs, Equality, desugaredRhs)))
           case _ => BinaryOp(desugaredLhs, binaryOp.operator, desugaredRhs)
       }
       case select: Select => Select(desugar(select.lhs), select.selected)

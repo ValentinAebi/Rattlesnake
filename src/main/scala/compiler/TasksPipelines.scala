@@ -16,26 +16,23 @@ import java.nio.file.Path
 
 object TasksPipelines {
 
-  type SingleSourceTask = CompilerStep[SourceCodeProvider, Unit]
-  type MultiSourceTask = CompilerStep[List[SourceCodeProvider], Unit]
-
-  def compiler(outputDirectoryPath: Path, optName: Option[String] = None): MultiSourceTask = {
+  def compiler(outputDirectoryPath: Path, optName: Option[String] = None): CompilerStep[List[SourceCodeProvider], List[Path]] = {
     compilerImpl(outputDirectoryPath, Backend.BinaryMode, optName)
   }
 
-  def bytecodeWriter(outputDirectoryPath: Path, optName: Option[String] = None): MultiSourceTask = {
+  def bytecodeWriter(outputDirectoryPath: Path, optName: Option[String] = None): CompilerStep[List[SourceCodeProvider], List[Path]] = {
     compilerImpl(outputDirectoryPath, Backend.AssemblyMode, optName)
   }
 
   def formatter(directoryPath: Path, filename: String,
-                indentGranularity: Int = 2, displayAllParentheses: Boolean = false): SingleSourceTask = {
+                indentGranularity: Int = 2, displayAllParentheses: Boolean = false): CompilerStep[SourceCodeProvider, Unit] = {
     val er = new ErrorReporter(System.err.println)
     frontend(er)
       .andThen(new PrettyPrinter(indentGranularity, displayAllParentheses))
       .andThen(new StringWriter(directoryPath, filename, er))
   }
 
-  val typeChecker: MultiSourceTask = {
+  val typeChecker: CompilerStep[List[SourceCodeProvider], Unit] = {
     val er = new ErrorReporter(System.err.println)
     MultiStep(frontend(er))
       .andThen(new ContextCreator(er))
@@ -44,7 +41,7 @@ object TasksPipelines {
   }
 
   def desugarer(outputDirectoryPath: Path, filename: String,
-                indentGranularity: Int = 2, displayAllParentheses: Boolean = false): SingleSourceTask = {
+                indentGranularity: Int = 2, displayAllParentheses: Boolean = false): CompilerStep[SourceCodeProvider, Unit] = {
     val er = new ErrorReporter(System.err.println)
     frontend(er)
       .andThen(Mapper(src => (List(src), null)))

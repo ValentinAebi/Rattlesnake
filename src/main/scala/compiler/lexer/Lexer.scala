@@ -82,7 +82,7 @@ final class Lexer(errorReporter: ErrorReporter) extends CompilerStep[SourceCodeP
   override def apply(sourceCodeProvider: SourceCodeProvider): (List[PositionedToken], String) = {
     sourceCodeProvider.lines match {
       case Failure(_) => errorReporter.pushFatal(CompilationError(CompilationStep.Lexing,
-        s"could not read source code from source ${sourceCodeProvider.name}", None))
+        s"could not read source code from source '${sourceCodeProvider.name}'", None))
       case Success(lines) => {
         val tokenizedLines = lines.toList.zipWithIndex.map((line, idx) => tokenizeLine(line, idx, sourceCodeProvider))
         val positionedTokens =

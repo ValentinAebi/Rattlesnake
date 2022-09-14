@@ -26,16 +26,16 @@ final class Backend[V <: ClassVisitor](
                                         errorReporter: ErrorReporter,
                                         outputDirBase: Path,
                                         optName: Option[String] = None
-                                      ) extends CompilerStep[(List[Source], AnalysisContext), Unit] {
+                                      ) extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
 
   private val javaVersion = V17
   private val objectTypeStr = "java/lang/Object"
   private val stringTypeStr = "java/lang/String"
 
-  override def apply(input: (List[Source], AnalysisContext)): Unit = {
+  override def apply(input: (List[Source], AnalysisContext)): List[Path] = {
     val (sources, analysisContext) = input
     if (sources.isEmpty) {
-      errorReporter.push(new CompilationError(CodeGeneration, "nothing to write: no sources", None))
+      errorReporter.pushFatal(new CompilationError(CodeGeneration, "nothing to write: no sources", None))
     }
     else {
 
@@ -53,16 +53,20 @@ final class Backend[V <: ClassVisitor](
       val functions = functionsBuilder.result()
       val structs = structsBuilder.result()
 
-      for struct <- structs do {
-        val structFilePath = outputDir.resolve(mode.withExtension(struct.structName))
-        val cv = mode.createVisitor(structFilePath)
-        cv.visit(javaVersion, ACC_PUBLIC, struct.structName, null, objectTypeStr, null)
-        generateStruct(struct, cv)
-        cv.visitEnd()
-        mode.terminate(cv, structFilePath, errorReporter)
+      Files.createDirectories(outputDir)
+
+      val structFilesPaths = {
+        for struct <- structs yield {
+          val structFilePath = outputDir.resolve(mode.withExtension(struct.structName))
+          val cv = mode.createVisitor(structFilePath)
+          cv.visit(javaVersion, ACC_PUBLIC, struct.structName, null, objectTypeStr, null)
+          generateStruct(struct, cv)
+          cv.visitEnd()
+          mode.terminate(cv, structFilePath, errorReporter)
+          structFilePath
+        }
       }
 
-      Files.createDirectories(outputDir)
       val coreFilePath = outputDir.resolve(mode.withExtension(outputName))
       val cv: V = mode.createVisitor(coreFilePath)
       cv.visit(V17, ACC_PUBLIC, outputName, null, objectTypeStr, null)
@@ -72,8 +76,10 @@ final class Backend[V <: ClassVisitor](
       }
       cv.visitEnd()
       mode.terminate(cv, coreFilePath, errorReporter)
+      errorReporter.displayAndTerminateIfErrors()
+      coreFilePath :: structFilesPaths
     }
-    errorReporter.displayAndTerminateIfErrors()
+
   }
 
   private def generateStruct(structDef: StructDef, cv: ClassVisitor): Unit = {
@@ -106,7 +112,6 @@ final class Backend[V <: ClassVisitor](
 
   private def generateCode(ast: Ast, ctx: CodeGenerationContext)(implicit mv: MethodVisitor, outputName: String): Unit = {
     val analysisContext = ctx.analysisContext
-    // TODO
     ast match {
 
       case Block(stats) =>
@@ -201,7 +206,7 @@ final class Backend[V <: ClassVisitor](
         generateCode(operand, ctx)
         operator match {
           case Sharp => mv.visitInsn(Opcodes.ARRAYLENGTH)
-          case _ => shouldNotHappen()
+          case _ => throw new IllegalStateException(s"unexpected $operator in code generation")
         }
 
       case BinaryOp(lhs, operator, rhs) => {
