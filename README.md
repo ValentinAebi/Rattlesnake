@@ -1,8 +1,14 @@
 # Rattlesnake 🐍
 
-Statically typed toy programming language, compiled to the JVM (work in progress)
+Statically typed imperative toy programming language, compiled to the JVM
 
-### References
+```
+fn main(args: arr String){
+    print("Hello world!")
+}
+```
+
+## References
 
 Lexer and parser are inspired from https://github.com/epfl-lara/silex and https://github.com/epfl-lara/scallion, respectively.
 
