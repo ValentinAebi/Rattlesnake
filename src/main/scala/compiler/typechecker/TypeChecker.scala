@@ -234,7 +234,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
             }
           case select: Select =>
             val lhsType = check(select, ctx)
-            if (lhsType != rhsType){
+            if (!rhsType.subtypeOf(lhsType)){
               reportError(s"cannot assign a value of type '$rhsType' to a field of type '$lhsType'", select.getPosition)
             }
           case _ =>
@@ -288,13 +288,17 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
 
       case ternary@Ternary(cond, thenBr, elseBr) =>
         val condType = check(cond, ctx)
-        if (condType != BoolType){
+        if (!condType.subtypeOf(BoolType)){
           reportError(s"condition should be of type '${BoolType.str}', found '$condType'", ternary.getPosition)
         }
         val thenType = check(thenBr, ctx)
         val elseType = check(elseBr, ctx)
-        if (thenType == elseType){
+        val thenIsSupertype = elseType.subtypeOf(thenType)
+        val thenIsSubtype = thenType.subtypeOf(elseType)
+        if (thenIsSupertype){
           thenType
+        } else if (thenIsSubtype) {
+          elseType
         } else {
           reportError(s"type mismatch in ternary operator: first branch has type $thenType, second has type $elseType", ternary.getPosition)
           VoidType
