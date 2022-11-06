@@ -121,6 +121,15 @@ class CompilerTests {
     assertArrayEquals(expRes, actResArray)
   }
 
+  @Test
+  def voidReturnTest(): Unit = {
+    val actRes = compileAndExecOneIter("void_ret", "main")
+    assertTrue(actRes.isInstanceOf[Array[Int]])
+    val actResArray = actRes.asInstanceOf[Array[Int]]
+    val expRes = Array(-10, -20, 42)
+    assertArrayEquals(expRes, actResArray)
+  }
+
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
     compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
   }
