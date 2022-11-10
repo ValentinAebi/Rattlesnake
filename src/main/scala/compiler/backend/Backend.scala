@@ -28,7 +28,7 @@ final class Backend[V <: ClassVisitor](
                                         optName: Option[String] = None
                                       ) extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
 
-  private val javaVersion = V17
+  private val javaVersion = V1_8
   private val objectTypeStr = "java/lang/Object"
   private val stringTypeStr = "java/lang/String"
 
@@ -69,7 +69,7 @@ final class Backend[V <: ClassVisitor](
 
       val coreFilePath = outputDir.resolve(mode.withExtension(outputName))
       val cv: V = mode.createVisitor(coreFilePath)
-      cv.visit(V17, ACC_PUBLIC, outputName, null, objectTypeStr, null)
+      cv.visit(javaVersion, ACC_PUBLIC, outputName, null, objectTypeStr, null)
       for function <- functions do {
         val mv = cv.visitMethod(ACC_PUBLIC | ACC_STATIC, function.funName, descriptorForFunc(function.signature), null, null)
         generateFunction(function, mv, analysisContext, outputName)
