@@ -13,16 +13,18 @@ import compiler.typechecker.TypeChecker
 import java.nio.file.Path
 
 object TestMain {
+  
+  import org.objectweb.asm.Opcodes.V1_8
 
   def main(args: Array[String]): Unit = {
 
-    val compilerTask1 = TasksPipelines.compiler(Path.of("testoutput"))
+    val compilerTask1 = TasksPipelines.compiler(Path.of("testoutput"), javaVersionCode = V1_8)
     compilerTask1.apply(List(SourceFile("examples/sorting.rsn")))
 
-    val compilerTask2 = TasksPipelines.compiler(Path.of("testoutput"))
+    val compilerTask2 = TasksPipelines.compiler(Path.of("testoutput"), javaVersionCode = V1_8)
     compilerTask2.apply(List(SourceFile("examples/geometry.rsn")))
 
-    val compilerTask3 = TasksPipelines.compiler(Path.of("testoutput"))
+    val compilerTask3 = TasksPipelines.compiler(Path.of("testoutput"), javaVersionCode = V1_8)
     compilerTask3.apply(List(SourceFile("examples/hello.rsn")))
 
   }

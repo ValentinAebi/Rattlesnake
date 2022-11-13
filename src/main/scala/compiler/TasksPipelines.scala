@@ -16,12 +16,12 @@ import java.nio.file.Path
 
 object TasksPipelines {
 
-  def compiler(outputDirectoryPath: Path, optName: Option[String] = None): CompilerStep[List[SourceCodeProvider], List[Path]] = {
-    compilerImpl(outputDirectoryPath, Backend.BinaryMode, optName)
+  def compiler(outputDirectoryPath: Path, javaVersionCode: Int, optName: Option[String] = None): CompilerStep[List[SourceCodeProvider], List[Path]] = {
+    compilerImpl(outputDirectoryPath, Backend.BinaryMode, javaVersionCode, optName)
   }
 
-  def bytecodeWriter(outputDirectoryPath: Path, optName: Option[String] = None): CompilerStep[List[SourceCodeProvider], List[Path]] = {
-    compilerImpl(outputDirectoryPath, Backend.AssemblyMode, optName)
+  def bytecodeWriter(outputDirectoryPath: Path, javaVersionCode: Int, optName: Option[String] = None): CompilerStep[List[SourceCodeProvider], List[Path]] = {
+    compilerImpl(outputDirectoryPath, Backend.AssemblyMode, javaVersionCode, optName)
   }
 
   def formatter(directoryPath: Path, filename: String,
@@ -52,13 +52,15 @@ object TasksPipelines {
   }
 
   private def compilerImpl[V <: ClassVisitor](outputDirectoryPath: Path,
-                                              backendMode: Backend.Mode[V], optName: Option[String]) = {
+                                              backendMode: Backend.Mode[V],
+                                              javaVersionCode: Int,
+                                              optName: Option[String]) = {
     val er = new ErrorReporter(System.err.println)
     MultiStep(frontend(er))
       .andThen(new ContextCreator(er))
       .andThen(new TypeChecker(er))
       .andThen(new Desugarer())
-      .andThen(new Backend(backendMode, er, outputDirectoryPath, optName))
+      .andThen(new Backend(backendMode, er, outputDirectoryPath, javaVersionCode, optName))
   }
 
   private def frontend(er: ErrorReporter) = {

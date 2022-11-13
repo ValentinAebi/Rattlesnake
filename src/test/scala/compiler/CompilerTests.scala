@@ -11,9 +11,12 @@ import java.util.spi.ToolProvider
 import scala.reflect.ClassTag
 import scala.util.Using
 
+import org.objectweb.asm.Opcodes.V1_8
+
 class CompilerTests {
 
   private val tmpTestDir = "testtmp"
+  private val javaVersionCode = V1_8
 
   @After
   def deleteTmpDir(): Unit = {
@@ -142,7 +145,7 @@ class CompilerTests {
    */
   private def compileAndExecSeveralIter(srcFileName: String, testedMethodName: String, argsPerIter: List[Array[Any]]): List[Any] = {
     val tmpDir = Path.of(tmpTestDir, srcFileName)
-    val compiler = TasksPipelines.compiler(tmpDir)
+    val compiler = TasksPipelines.compiler(tmpDir, javaVersionCode)
     val testFile = SourceFile(s"src/test/res/$srcFileName.${FileExtensions.rattlesnake}")
     val writtenFilesPaths = compiler.apply(List(testFile))
     val classes = {

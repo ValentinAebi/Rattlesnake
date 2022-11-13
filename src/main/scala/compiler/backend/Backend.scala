@@ -25,10 +25,10 @@ final class Backend[V <: ClassVisitor](
                                         mode: Backend.Mode[V],
                                         errorReporter: ErrorReporter,
                                         outputDirBase: Path,
+                                        javaVersionCode: Int,
                                         optName: Option[String] = None
                                       ) extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
 
-  private val javaVersion = V1_8
   private val objectTypeStr = "java/lang/Object"
   private val stringTypeStr = "java/lang/String"
 
@@ -59,7 +59,7 @@ final class Backend[V <: ClassVisitor](
         for struct <- structs yield {
           val structFilePath = outputDir.resolve(mode.withExtension(struct.structName))
           val cv = mode.createVisitor(structFilePath)
-          cv.visit(javaVersion, ACC_PUBLIC, struct.structName, null, objectTypeStr, null)
+          cv.visit(javaVersionCode, ACC_PUBLIC, struct.structName, null, objectTypeStr, null)
           generateStruct(struct, cv)
           cv.visitEnd()
           mode.terminate(cv, structFilePath, errorReporter)
@@ -69,7 +69,7 @@ final class Backend[V <: ClassVisitor](
 
       val coreFilePath = outputDir.resolve(mode.withExtension(outputName))
       val cv: V = mode.createVisitor(coreFilePath)
-      cv.visit(javaVersion, ACC_PUBLIC, outputName, null, objectTypeStr, null)
+      cv.visit(javaVersionCode, ACC_PUBLIC, outputName, null, objectTypeStr, null)
       for function <- functions do {
         val mv = cv.visitMethod(ACC_PUBLIC | ACC_STATIC, function.funName, descriptorForFunc(function.signature), null, null)
         generateFunction(function, mv, analysisContext, outputName)
