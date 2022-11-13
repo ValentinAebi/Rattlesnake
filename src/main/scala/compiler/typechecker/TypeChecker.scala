@@ -41,9 +41,9 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         val expRetType = optRetType.getOrElse(VoidType)
         val ctxWithParams = ctx.copyWithoutLocals
         for param <- params do {
-          ctxWithParams.addLocal(param.paramName, param.tpe, false, { () =>
+          ctxWithParams.addLocal(param.paramName, param.tpe, false, duplicateVarCallback = { () =>
             reportError(s"identifier '${param.paramName}' is already used by another parameter of function '$funName'", param.getPosition)
-          }, { () =>
+          }, forbiddenTypeCallback = { () =>
             reportError(s"parameter '${param.paramName}' of function '$funName' has type '${param.tpe}', which is forbidden", param.getPosition)
           })
         }
@@ -115,7 +115,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         val argType = check(arg, ctx)
         val argError = !argType.subtypeOf(IntType)
         if (argError) {
-          reportError(s"indexing expression should be an '${IntType.str}'", arg.getPosition)
+          reportError(s"indexing expression should be of type '${IntType.str}', found '$argType'", arg.getPosition)
         }
         if (indexedError) VoidType else indexedType.asInstanceOf[ArrayType].elemType
 
@@ -125,7 +125,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         }
         val sizeType = check(size, ctx)
         if (!sizeType.subtypeOf(IntType)) {
-          reportError(s"array size should be an '${IntType.str}'", size.getPosition)
+          reportError(s"array size should be of type '${IntType.str}', found '$sizeType'", size.getPosition)
         }
         size match {
           case IntLit(value) if value < 0 =>
@@ -151,7 +151,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
           if (operandType.isInstanceOf[ArrayType]) {
             IntType
           } else {
-            reportError("# is only applicable to arrays", unaryOp.getPosition)
+            reportError("operator # can only be applied to arrays", unaryOp.getPosition)
             VoidType
           }
         } else {
@@ -192,7 +192,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
                 VoidType
             }
           case _ =>
-            reportError(s"no '$selected' field found: type is not a struct", select.getPosition)
+            reportError(s"no '$selected' field found: not a struct", select.getPosition)
             VoidType
         }
 
@@ -204,7 +204,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
               case Some((tpe, mut)) if mut =>
                 lhs.setType(tpe)
                 if (!rhsType.subtypeOf(tpe)) {
-                  reportError(s"cannot assign a '$rhsType' to a variable of type $tpe", varAssig.getPosition)
+                  reportError(s"cannot assign a value of type '$rhsType' to a variable of type $tpe", varAssig.getPosition)
                 }
               case Some(_) =>
                 reportError(s"cannot mutate '$name': not a var", varAssig.getPosition)
@@ -214,7 +214,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
           case indexing: Indexing =>
             val lhsType = check(indexing, ctx)
             if (!rhsType.subtypeOf(lhsType)) {
-              reportError(s"type mismatch in assignment", indexing.getPosition)
+              reportError(s"cannot assign a value of type '$rhsType' to an array of element type '$lhsType'", indexing.getPosition)
             }
           case select: Select =>
             val lhsType = check(select, ctx)
@@ -222,7 +222,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
               reportError(s"cannot assign a value of type '$rhsType' to a field of type '$lhsType'", select.getPosition)
             }
           case _ =>
-            reportError("syntax error: only variables and array elements can be assigned", varAssig.getPosition)
+            reportError("syntax error: only variables, struct fields and array elements can be assigned", varAssig.getPosition)
         }
         VoidType
 
@@ -314,7 +314,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       case panicStat@PanicStat(msg) =>
         val msgType = check(msg, ctx)
         if (!msgType.subtypeOf(StringType)) {
-          reportError(s"panic can only be applied to type ${StringType.str}", panicStat.getPosition)
+          reportError(s"panic can only be applied to type '${StringType.str}', found '$msgType'", panicStat.getPosition)
         }
         VoidType
 
@@ -339,16 +339,16 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       val arg = argsIter.next()
       val actType = check(arg, ctx)
       if (!actType.subtypeOf(expType)) {
-        reportError(s"expected $expType, found $actType", arg.getPosition)
+        reportError(s"expected '$expType', found '$actType'", arg.getPosition)
         errorFound = true
       }
     }
     if (expTypesIter.hasNext) {
-      reportError(s"expected ${expTypesIter.next()}, found end of arguments list", callPos)
+      reportError(s"expected argument of type '${expTypesIter.next()}', found end of arguments list", callPos)
     }
     if (argsIter.hasNext) {
       val arg = argsIter.next()
-      reportError(s"expected end of arguments list, found ${check(arg, ctx)}", arg.getPosition)
+      reportError(s"expected end of arguments list, found argument of type '${check(arg, ctx)}'", arg.getPosition)
       for arg <- argsIter do {
         check(arg, ctx)
       }
@@ -423,6 +423,10 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       case _ => EndStatus(Set.empty, false)
 
     }
+  }
+
+  private def reportTypeMismatch(expType: Type, actType: Type, posOpt: Option[Position]): Unit = {
+    reportError(s"type mismatch: expected $expType, found $actType", posOpt)
   }
 
   private def reportError(msg: String, pos: Option[Position], isWarning: Boolean = false): Unit = {
