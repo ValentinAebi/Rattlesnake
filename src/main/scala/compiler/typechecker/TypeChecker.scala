@@ -59,35 +59,19 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         }
         VoidType
 
-      case valDef@ValDef(valName, optType, rhs) =>
+      case localDef@LocalDef(localName, optType, rhs, isReassignable) =>
         val inferredType = check(rhs, ctx)
         optType.foreach { expType =>
           if (!inferredType.subtypeOf(expType)) {
-            reportError(s"val should be of type '$expType', found '$inferredType'", valDef.getPosition)
+            reportError(s"${localDef.keyword} should be of type '$expType', found '$inferredType'", localDef.getPosition)
           }
         }
         val actualType = optType.getOrElse(inferredType)
-        valDef.optType = Some(actualType)
-        ctx.addLocal(valName, actualType, false, { () =>
-          reportError(s"'$valName' is already defined in this scope", valDef.getPosition)
-        }, { () =>
-          reportError(s"val '$valName' has type '$actualType', which is forbidden", valDef.getPosition)
-        })
-        VoidType
-
-      case varDef@VarDef(varName, optType, rhs) =>
-        val inferredType = check(rhs, ctx)
-        optType.foreach { expType =>
-          if (!inferredType.subtypeOf(expType)) {
-            reportError(s"val should be of type '$expType', found '$inferredType'", varDef.getPosition)
-          }
-        }
-        val actualType = optType.getOrElse(inferredType)
-        varDef.optType = Some(actualType)
-        ctx.addLocal(varName, actualType, true, { () =>
-          reportError(s"'$varName' is already defined in this scope", varDef.getPosition)
-        }, { () =>
-          reportError(s"var '$varName' has type '$actualType', which is forbidden", varDef.getPosition)
+        localDef.optType = Some(actualType)
+        ctx.addLocal(localName, actualType, isReassignable, duplicateVarCallback = { () =>
+          reportError(s"'$localName' is already defined in this scope", localDef.getPosition)
+        }, forbiddenTypeCallback = { () =>
+          reportError(s"${localDef.keyword} '$localName' has type '$actualType', which is forbidden", localDef.getPosition)
         })
         VoidType
 

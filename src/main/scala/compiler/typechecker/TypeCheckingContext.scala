@@ -16,13 +16,13 @@ final case class TypeCheckingContext(analysisContext: AnalysisContext, locals: m
     copy(locals = mutable.Map.from(locals))
   }
 
-  def addLocal(name: String, tpe: Type, mutable: Boolean, duplicateVarCallback: () => Unit, forbiddenTypeCallback: () => Unit): Unit = {
+  def addLocal(name: String, tpe: Type, isReassignable: Boolean, duplicateVarCallback: () => Unit, forbiddenTypeCallback: () => Unit): Unit = {
     if (tpe == NothingType || tpe == VoidType) {
       forbiddenTypeCallback()
     } else if (locals.contains(name)) {
       duplicateVarCallback()
     } else {
-      locals.put(name, (tpe, mutable))
+      locals.put(name, (tpe, isReassignable))
     }
   }
 

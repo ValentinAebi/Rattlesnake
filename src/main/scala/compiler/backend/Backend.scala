@@ -120,7 +120,7 @@ final class Backend[V <: ClassVisitor](
           generateCode(stat, newCtx)
         }
 
-      case VarDef(varName, tpeOpt, rhs) =>
+      case LocalDef(varName, tpeOpt, rhs, _) =>
         generateCode(rhs, ctx)
         val opcode = opcodeFor(rhs.getType, Opcodes.ISTORE, Opcodes.ASTORE)
         mv.visitVarInsn(opcode, ctx.currLocalIdx)

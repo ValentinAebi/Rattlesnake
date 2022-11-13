@@ -55,24 +55,11 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           .add(": ")
           .add(tpe.toString)
 
-      case ValDef(valName, optType, rhs) =>
+      case localDef@LocalDef(valName, optType, rhs, isReassignable) =>
         pps
-          .add(Val.str)
+          .add(localDef.keyword.str)
           .addSpace()
           .add(valName)
-        optType.foreach { optT =>
-          pps
-            .add(": ")
-            .add(optT.toString)
-        }
-        pps.add(" = ")
-        addAst(rhs)
-
-      case VarDef(varName, optType, rhs) =>
-        pps
-          .add(Var.str)
-          .addSpace()
-          .add(varName)
         optType.foreach { optT =>
           pps
             .add(": ")

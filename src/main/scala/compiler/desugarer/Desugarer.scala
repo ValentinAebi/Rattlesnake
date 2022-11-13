@@ -9,14 +9,13 @@ import lang.Types.PrimitiveType.{IntType, DoubleType, BoolType}
 
 /**
  * Desugaring replaces:
- *  - `ValDef` -> `VarDef`
- *  - `>`, `>=` -> reversed
- *  - `x <= y` -> `(x < y) || (x == y)`
- *  - `x != y` -> `!(x == y)`
- *  - `VarModif`: `x += y` -> `x = x + y`
- *  - `for` -> `while`
- *  - `-x` -> `0 - x`
- *  - `!x` -> `when x then false else true`
+ *  - `>`, `>=` ---> reversed
+ *  - `x <= y` ---> `(x < y) || (x == y)`
+ *  - `x != y` ---> `!(x == y)`
+ *  - `VarModif`: `x += y` ---> `x = x + y`
+ *  - `for` ---> `while`
+ *  - `-x` ---> `0 - x`
+ *  - `!x` ---> `when x then false else true`
  */
 final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
 
@@ -39,9 +38,8 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
 
   private def desugar(param: Param): Param = param
 
-  private def desugar(valDef: ValDef): VarDef = VarDef(valDef.valName, valDef.optType, desugar(valDef.rhs))
-
-  private def desugar(varDef: VarDef): VarDef = VarDef(varDef.varName, varDef.optType, desugar(varDef.rhs))
+  private def desugar(localDef: LocalDef): LocalDef =
+    LocalDef(localDef.localName, localDef.optType, desugar(localDef.rhs), localDef.isReassignable)
 
   private def desugar(varAssig: VarAssig): VarAssig = VarAssig(desugar(varAssig.lhs), desugar(varAssig.rhs))
 
@@ -112,8 +110,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
     statement match
       case expr: Expr => desugar(expr)
       case block: Block => desugar(block)
-      case valDef: ValDef => desugar(valDef)
-      case varDef: VarDef => desugar(varDef)
+      case localDef: LocalDef => desugar(localDef)
       case varAssig: VarAssig => desugar(varAssig)
       case varModif: VarModif => desugar(varModif)
       case ifThenElse: IfThenElse => desugar(ifThenElse)

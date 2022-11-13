@@ -1,7 +1,7 @@
 package compiler.irs
 
 import compiler.Position
-import lang.{FunctionSignature, Operator}
+import lang.{FunctionSignature, Keyword, Operator}
 import lang.Types.*
 import lang.Types.PrimitiveType.*
 
@@ -66,8 +66,9 @@ object Asts {
   final case class StructDef(structName: String, fields: List[Param]) extends TopLevelDef
   final case class Param(paramName: String, tpe: Type) extends Ast
 
-  final case class ValDef(valName: String, var optType: Option[Type], rhs: Expr) extends Statement
-  final case class VarDef(varName: String, var optType: Option[Type], rhs: Expr) extends Statement
+  final case class LocalDef(localName: String, var optType: Option[Type], rhs: Expr, isReassignable: Boolean) extends Statement {
+    val keyword: Keyword = if isReassignable then Keyword.Var else Keyword.Val
+  }
 
   sealed abstract class Literal extends Expr {
     val value: Any
@@ -109,7 +110,7 @@ object Asts {
   final case class Ternary(cond: Expr, thenBr: Expr, elseBr: Expr) extends Expr
   final case class WhileLoop(cond: Expr, body: Statement) extends Statement
   final case class ForLoop(
-                            initStats: List[ValDef | VarDef | Assignment],
+                            initStats: List[LocalDef | Assignment],
                             cond: Expr,
                             stepStats: List[Assignment],
                             body: Block
@@ -118,58 +119,5 @@ object Asts {
     def getRetType: Option[Type] = value.getTypeOpt
   }
   final case class PanicStat(msg: Expr) extends Statement
-  
-  def collect[T](ast: Ast)(pf: PartialFunction[Ast, T]): List[T] = {
-    
-    def recurse(ast: Ast): List[T] = collect(ast)(pf)
-    
-    val t = pf.lift.apply(ast)
-    val recursive = ast match {
-      case Source(defs) =>
-        defs.flatMap(recurse)
-      case Block(stats) =>
-        stats.flatMap(recurse)
-      case FunDef(_, params, _, body) =>
-        params.flatMap(recurse) ++ recurse(body)
-      case StructDef(_, fields) =>
-        fields.flatMap(recurse)
-      case Param(_, _) => Nil
-      case ValDef(_, _, rhs) =>
-        recurse(rhs)
-      case VarDef(_, _, rhs) =>
-        recurse(rhs)
-      case _: Literal => Nil
-      case VariableRef(_) => Nil
-      case Call(callee, args) =>
-        recurse(callee) ++ args.flatMap(recurse)
-      case Indexing(indexed, arg) =>
-        recurse(indexed) ++ recurse(arg)
-      case ArrayInit(_, size) =>
-        recurse(size)
-      case StructInit(_, args) =>
-        args.flatMap(recurse)
-      case UnaryOp(_, operand) =>
-        recurse(operand)
-      case BinaryOp(lhs, _, rhs) =>
-        recurse(lhs) ++ recurse(rhs)
-      case Select(lhs, _) =>
-        recurse(lhs)
-      case VarAssig(lhs, rhs) =>
-        recurse(lhs) ++ recurse(rhs)
-      case VarModif(lhs, rhs, _) =>
-        recurse(lhs) ++ recurse(rhs)
-      case IfThenElse(cond, thenBr, elseBrOpt) =>
-        recurse(cond) ++ recurse(thenBr) ++ elseBrOpt.map(recurse).getOrElse(Nil)
-      case WhileLoop(cond, body) =>
-        recurse(cond) ++ recurse(body)
-      case ForLoop(initStats, cond, stepStats, body) =>
-        initStats.flatMap(recurse) ++ recurse(cond) ++ stepStats.flatMap(recurse) ++ recurse(body)
-      case ReturnStat(value) =>
-        recurse(value)
-      case PanicStat(msg) =>
-        recurse(msg)
-    }
-    t.toList ++ recursive
-  }
 
 }
