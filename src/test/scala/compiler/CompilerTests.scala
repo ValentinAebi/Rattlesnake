@@ -145,7 +145,8 @@ class CompilerTests {
    */
   private def compileAndExecSeveralIter(srcFileName: String, testedMethodName: String, argsPerIter: List[Array[Any]]): List[Any] = {
     val tmpDir = Path.of(tmpTestDir, srcFileName)
-    val compiler = TasksPipelines.compiler(tmpDir, javaVersionCode)
+    val outputName = srcFileName.withHeadUppercase + "_core"
+    val compiler = TasksPipelines.compiler(tmpDir, javaVersionCode, outputName)
     val testFile = SourceFile(s"src/test/res/$srcFileName.${FileExtensions.rattlesnake}")
     val writtenFilesPaths = compiler.apply(List(testFile))
     val classes = {
@@ -180,6 +181,11 @@ class CompilerTests {
       }
     }
     Files.delete(file.toPath)
+  }
+
+  extension (str: String) private def withHeadUppercase: String = {
+    if str.isEmpty then str
+    else str.head.toUpper +: str.tail
   }
 
 }

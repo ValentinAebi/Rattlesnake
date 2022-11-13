@@ -16,16 +16,16 @@ import java.nio.file.Path
 
 object TasksPipelines {
 
-  def compiler(outputDirectoryPath: Path, javaVersionCode: Int, optName: Option[String] = None): CompilerStep[List[SourceCodeProvider], List[Path]] = {
-    compilerImpl(outputDirectoryPath, Backend.BinaryMode, javaVersionCode, optName)
+  def compiler(outputDirectoryPath: Path, javaVersionCode: Int, outputName: String): CompilerStep[List[SourceCodeProvider], List[Path]] = {
+    compilerImpl(outputDirectoryPath, Backend.BinaryMode, javaVersionCode, outputName)
   }
 
-  def bytecodeWriter(outputDirectoryPath: Path, javaVersionCode: Int, optName: Option[String] = None): CompilerStep[List[SourceCodeProvider], List[Path]] = {
-    compilerImpl(outputDirectoryPath, Backend.AssemblyMode, javaVersionCode, optName)
+  def bytecodeWriter(outputDirectoryPath: Path, javaVersionCode: Int, outputName: String): CompilerStep[List[SourceCodeProvider], List[Path]] = {
+    compilerImpl(outputDirectoryPath, Backend.AssemblyMode, javaVersionCode, outputName)
   }
 
   def formatter(directoryPath: Path, filename: String,
-                indentGranularity: Int = 2, displayAllParentheses: Boolean = false): CompilerStep[SourceCodeProvider, Unit] = {
+                indentGranularity: Int, displayAllParentheses: Boolean = false): CompilerStep[SourceCodeProvider, Unit] = {
     val er = createErrorReporter
     frontend(er)
       .andThen(new PrettyPrinter(indentGranularity, displayAllParentheses))
@@ -44,7 +44,9 @@ object TasksPipelines {
                 indentGranularity: Int = 2, displayAllParentheses: Boolean = false): CompilerStep[SourceCodeProvider, Unit] = {
     val er = createErrorReporter
     frontend(er)
-      .andThen(Mapper(src => (List(src), null)))
+      .andThen(Mapper(List(_)))
+      .andThen(new ContextCreator(er))
+      .andThen(new TypeChecker(er))
       .andThen(new Desugarer())
       .andThen(Mapper(_._1.head))
       .andThen(new PrettyPrinter(indentGranularity, displayAllParentheses))
@@ -54,13 +56,13 @@ object TasksPipelines {
   private def compilerImpl[V <: ClassVisitor](outputDirectoryPath: Path,
                                               backendMode: Backend.Mode[V],
                                               javaVersionCode: Int,
-                                              optName: Option[String]) = {
+                                              outputName: String) = {
     val er = createErrorReporter
     MultiStep(frontend(er))
       .andThen(new ContextCreator(er))
       .andThen(new TypeChecker(er))
       .andThen(new Desugarer())
-      .andThen(new Backend(backendMode, er, outputDirectoryPath, javaVersionCode, optName))
+      .andThen(new Backend(backendMode, er, outputDirectoryPath, javaVersionCode, outputName))
   }
 
   private def frontend(er: ErrorReporter) = {

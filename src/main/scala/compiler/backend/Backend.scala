@@ -26,7 +26,7 @@ final class Backend[V <: ClassVisitor](
                                         errorReporter: ErrorReporter,
                                         outputDirBase: Path,
                                         javaVersionCode: Int,
-                                        optName: Option[String] = None
+                                        outputName: String
                                       ) extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
 
   private val objectTypeStr = "java/lang/Object"
@@ -40,8 +40,6 @@ final class Backend[V <: ClassVisitor](
     else {
 
       val outputDir = outputDirBase.resolve("out")
-      val filename = Path.of(sources.head.getName).getFileName.toString.takeWhile(_ != '.')
-      val outputName = optName.getOrElse(filename).withHeadUppercase + "_core"
 
       val functionsBuilder = List.newBuilder[FunDef]
       val structsBuilder = List.newBuilder[StructDef]
@@ -360,11 +358,6 @@ final class Backend[V <: ClassVisitor](
 
       case other => throw new IllegalStateException(s"unexpected in backend: ${other.getClass}")
     }
-  }
-
-  extension (str: String) private def withHeadUppercase: String = {
-    if str.isEmpty then str
-    else str.head.toUpper +: str.tail
   }
 
   private def shouldNotHappen(): Nothing = assert(false)

@@ -12,7 +12,9 @@ final class StringWriter(directoryPath: Path, filename: String, errorReporter: E
   override def apply(input: String): Unit = {
     Files.createDirectories(directoryPath)
     val path = directoryPath.resolve(filename)
-    Files.createFile(path)
+    if (!path.toFile.exists()){
+      Files.createFile(path)
+    }
     val status = Using(new FileWriter(path.toFile))(_.write(input))
     status match
       case Failure(exception) =>
