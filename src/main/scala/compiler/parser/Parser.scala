@@ -1,6 +1,6 @@
 package compiler.parser
 
-import compiler.Errors.ErrorReporter
+import compiler.Errors.{ErrorReporter, Fatal}
 import compiler.irs.Asts.*
 import compiler.irs.Tokens.*
 import compiler.parser.ParseTree.^:
@@ -243,7 +243,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   override def apply(input: (List[PositionedToken], String)): Source = {
     val (positionedTokens, srcName) = input
     if (positionedTokens.isEmpty) {
-      errorReporter.pushFatal(Errors.CompilationError(CompilationStep.Parsing, "empty source", Some(Position(srcName, 1, 1))))
+      errorReporter.pushFatal(Fatal(CompilationStep.Parsing, "empty source", Some(Position(srcName, 1, 1))))
     } else {
       val iterator = LL1Iterator.from(positionedTokens)
       source.extract(iterator) match {

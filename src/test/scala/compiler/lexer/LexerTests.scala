@@ -34,13 +34,13 @@ class LexerTests {
         col = 1
       }
       else {
-        col += token.strValue.toString.length
+        col += token.strValue.length
       }
       posTok
     }
 
     val errorsCollector = ListBuffer.empty[CompilationError | String]
-    val errorReporter = ErrorReporter(errorsCollector.addOne(_))
+    val errorReporter = ErrorReporter(errorsCollector.addOne)
 
     val expectedTokSeq = List(
       KeywordToken(Fn),

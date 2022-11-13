@@ -1,7 +1,7 @@
 package compiler.parser
 
 import compiler.{CompilationStep, Position}
-import compiler.Errors.{CompilationError, ErrorReporter, fatalErrorExitCode}
+import compiler.Errors.{CompilationError, Err, ErrorReporter, fatalErrorExitCode}
 import compiler.ExprToStringMacro.exprToString
 import compiler.parser.ParseTree.^:
 import compiler.irs.Asts.Ast
@@ -528,7 +528,7 @@ object TreeParsers {
   private def reportMismatch(errorReporter: ErrorReporter, expectedDescr: String,
                              found: String, pos: Position): Unit = {
     val msg = s"expected $expectedDescr, found $found"
-    errorReporter.push(CompilationError(CompilationStep.Parsing, msg, Some(pos)))
+    errorReporter.push(Err(CompilationStep.Parsing, msg, Some(pos)))
   }
 
   private def reportNonLL1Error(ll1Iterator: LL1Iterator,

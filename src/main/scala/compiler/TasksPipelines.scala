@@ -26,14 +26,14 @@ object TasksPipelines {
 
   def formatter(directoryPath: Path, filename: String,
                 indentGranularity: Int = 2, displayAllParentheses: Boolean = false): CompilerStep[SourceCodeProvider, Unit] = {
-    val er = new ErrorReporter(System.err.println)
+    val er = createErrorReporter
     frontend(er)
       .andThen(new PrettyPrinter(indentGranularity, displayAllParentheses))
       .andThen(new StringWriter(directoryPath, filename, er))
   }
 
   val typeChecker: CompilerStep[List[SourceCodeProvider], Unit] = {
-    val er = new ErrorReporter(System.err.println)
+    val er = createErrorReporter
     MultiStep(frontend(er))
       .andThen(new ContextCreator(er))
       .andThen(new TypeChecker(er))
@@ -42,7 +42,7 @@ object TasksPipelines {
 
   def desugarer(outputDirectoryPath: Path, filename: String,
                 indentGranularity: Int = 2, displayAllParentheses: Boolean = false): CompilerStep[SourceCodeProvider, Unit] = {
-    val er = new ErrorReporter(System.err.println)
+    val er = createErrorReporter
     frontend(er)
       .andThen(Mapper(src => (List(src), null)))
       .andThen(new Desugarer())
@@ -55,7 +55,7 @@ object TasksPipelines {
                                               backendMode: Backend.Mode[V],
                                               javaVersionCode: Int,
                                               optName: Option[String]) = {
-    val er = new ErrorReporter(System.err.println)
+    val er = createErrorReporter
     MultiStep(frontend(er))
       .andThen(new ContextCreator(er))
       .andThen(new TypeChecker(er))
@@ -66,5 +66,8 @@ object TasksPipelines {
   private def frontend(er: ErrorReporter) = {
     new Lexer(er).andThen(new Parser(er))
   }
+
+  private def createErrorReporter: ErrorReporter =
+    new ErrorReporter(errorsConsumer = System.err.println)
 
 }

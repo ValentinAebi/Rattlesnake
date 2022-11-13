@@ -1,6 +1,6 @@
 package compiler.io
 
-import compiler.Errors.{CompilationError, ErrorReporter}
+import compiler.Errors.{CompilationError, ErrorReporter, Err}
 import compiler.{CompilationStep, CompilerStep}
 
 import java.io.FileWriter
@@ -16,7 +16,7 @@ final class StringWriter(directoryPath: Path, filename: String, errorReporter: E
     val status = Using(new FileWriter(path.toFile))(_.write(input))
     status match
       case Failure(exception) =>
-        errorReporter.push(new CompilationError(CompilationStep.SourceFileWriting, exception.getMessage, None))
+        errorReporter.push(Err(CompilationStep.SourceFileWriting, exception.getMessage, None))
       case Success(_) => ()
   }
   

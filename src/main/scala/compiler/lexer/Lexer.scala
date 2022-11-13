@@ -1,7 +1,7 @@
 package compiler.lexer
 
 import compiler.lexer.Matchers.*
-import compiler.Errors.{CompilationError, ErrorReporter}
+import compiler.Errors.{CompilationError, Err, ErrorReporter, Fatal}
 import compiler.{CompilerStep, SourceCodeProvider}
 import compiler.irs.Tokens.*
 import lang.Keyword
@@ -63,7 +63,7 @@ final class Lexer(errorReporter: ErrorReporter) extends CompilerStep[SourceCodeP
         matcherRes match {
           case Some((newTok, newRem, len)) => tokenizeRemaining(newRem, (newTok, col) :: tokensReversed, col + len)
           case None => {
-            errorReporter.push(CompilationError(CompilationStep.Lexing,
+            errorReporter.push(Err(CompilationStep.Lexing,
               s"syntax error: '${stringLengthLimited(20, rem)}'", Some(Position(srcCodeProvider, lineIdx, col))))
             val splitIdx = rem.indexOf(' ')
             if (splitIdx >= 0) {
@@ -81,7 +81,7 @@ final class Lexer(errorReporter: ErrorReporter) extends CompilerStep[SourceCodeP
 
   override def apply(sourceCodeProvider: SourceCodeProvider): (List[PositionedToken], String) = {
     sourceCodeProvider.lines match {
-      case Failure(_) => errorReporter.pushFatal(CompilationError(CompilationStep.Lexing,
+      case Failure(_) => errorReporter.pushFatal(Fatal(CompilationStep.Lexing,
         s"could not read source code from source '${sourceCodeProvider.name}'", None))
       case Success(lines) => {
         val tokenizedLines = lines.toList.zipWithIndex.map((line, idx) => tokenizeLine(line, idx, sourceCodeProvider))

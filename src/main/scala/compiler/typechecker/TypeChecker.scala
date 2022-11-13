@@ -1,7 +1,7 @@
 package compiler.typechecker
 
 import compiler.CompilationStep.TypeChecking
-import compiler.Errors.{CompilationError, ErrorReporter}
+import compiler.Errors.{CompilationError, Err, ErrorReporter, Warning}
 import compiler.irs.Asts.*
 import compiler.{AnalysisContext, CompilerStep, Position}
 import lang.Operator.{Equality, Inequality, Sharp}
@@ -396,14 +396,14 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       case whileLoop@WhileLoop(_, body) =>
         val bodyEndStatus = checkReturns(body)
         if (bodyEndStatus.alwaysStopped) {
-          reportError("while should be replaced by if", whileLoop.getPosition)
+          reportError("while should be replaced by if", whileLoop.getPosition, isWarning = true)
         }
         EndStatus(bodyEndStatus.returned, false)
 
       case forLoop@ForLoop(_, _, _, body) =>
         val bodyEndStatus = checkReturns(body)
         if (bodyEndStatus.alwaysStopped) {
-          reportError("for should be replaced by if", forLoop.getPosition)
+          reportError("for should be replaced by if", forLoop.getPosition, isWarning = true)
         }
         EndStatus(bodyEndStatus.returned, false)
 
@@ -425,8 +425,8 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
     }
   }
 
-  private def reportError(msg: String, pos: Option[Position]): Unit = {
-    errorReporter.push(new CompilationError(TypeChecking, msg, pos))
+  private def reportError(msg: String, pos: Option[Position], isWarning: Boolean = false): Unit = {
+    errorReporter.push(if isWarning then Warning(TypeChecking, msg, pos) else Err(TypeChecking, msg, pos))
   }
 
 }

@@ -1,7 +1,7 @@
 package compiler.backend
 
 import compiler.CompilationStep.CodeGeneration
-import compiler.Errors.{CompilationError, ErrorReporter}
+import compiler.Errors.{CompilationError, ErrorReporter, Fatal, Err}
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
 import compiler.backend.TypesConverter.{convertToAsmType, convertToAsmTypeCode, internalNameOf, opcodeFor}
 import compiler.irs.Asts.*
@@ -35,7 +35,7 @@ final class Backend[V <: ClassVisitor](
   override def apply(input: (List[Source], AnalysisContext)): List[Path] = {
     val (sources, analysisContext) = input
     if (sources.isEmpty) {
-      errorReporter.pushFatal(new CompilationError(CodeGeneration, "nothing to write: no sources", None))
+      errorReporter.pushFatal(Fatal(CodeGeneration, "nothing to write: no sources", None))
     }
     else {
 
@@ -401,7 +401,7 @@ object Backend {
       status match
         case Success(_) => ()
         case Failure(exception) =>
-          errorReporter.push(new CompilationError(CodeGeneration, exception.getMessage, None))
+          errorReporter.push(Err(CodeGeneration, exception.getMessage, None))
     }
   }
 
