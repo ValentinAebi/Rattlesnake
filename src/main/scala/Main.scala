@@ -27,8 +27,9 @@ object Main {
   private type MutArgsMap = mutable.Map[String, Option[String]]
 
   def main(args: Array[String]): Unit = {
+    val cmdLine = args.mkString(" ")
     try {
-      val (action, pathStrs) = parseCmdLine(args.toList)
+      val (action, pathStrs) = parseCmdLine(splitAtSpacesExceptBetweenBrackets(cmdLine))
       if (pathStrs.exists(!_.endsWith(FileExtensions.rattlesnake))){
         error(s"all sources must be .${FileExtensions.rattlesnake} files")
       }
@@ -39,6 +40,33 @@ object Main {
     }
   }
 
+  private def splitAtSpacesExceptBetweenBrackets(cmdLine: String): List[String] = {
+
+    val charsAndDepths = cmdLine.foldLeft(List((0.toChar, 0))){ (reversedCharsAndDepths, currChar) =>
+      val currDepth = reversedCharsAndDepths.head._2
+      currChar match {
+        case '[' if currDepth > 0 => error("nested lists are not supported")
+        case '[' => (currChar, currDepth + 1) :: reversedCharsAndDepths
+        case ']' if currDepth == 0 => error("unexpected ']'")
+        case ']' => (currChar, currDepth - 1) :: reversedCharsAndDepths
+        case _ => (currChar, currDepth) :: reversedCharsAndDepths
+      }
+    }.reverse.tail
+
+    @tailrec def split(wordsReversed: List[String], currWordReversed: List[Char], charsAndDepth: List[(Char, Int)]): List[String] = {
+      charsAndDepth match {
+        case Nil =>
+          (currWordReversed.reverse.mkString :: wordsReversed).reverse
+        case (currChar, 0) :: tail if currChar.isWhitespace =>
+          split(currWordReversed.reverse.mkString :: wordsReversed, Nil, tail)
+        case (currChar, _) :: tail =>
+          split(wordsReversed, currChar :: currWordReversed, tail)
+      }
+    }
+
+    split(Nil, Nil, charsAndDepths)
+  }
+
   private def parseCmdLine(cmdLine: List[String]): (Action, List[String]) = {
     cmdLine match {
       case Nil => error("empty command")
@@ -46,7 +74,7 @@ object Main {
         if (cmd == "help"){
           displayHelp()
           System.exit(0)
-          throw new AssertionError() // should never happen
+          throw new AssertionError() // should never happen because exit occurred before
         }
         val (args, files) = tail.span(_.startsWith("-"))
         if (files.isEmpty){
@@ -122,6 +150,13 @@ object Main {
     getUnvalArg("all-parenth", argsMap)
   }
 
+  private def getProgramArgsArg(argsMap: MutArgsMap): Array[String] = {
+    val arrayStr = getValuedArg("args", argsMap, Some("[]"))
+    if (!(arrayStr.startsWith("[") && arrayStr.endsWith("]"))){
+      error("program arguments must be given as a list (surrounded by brackets and separated by whitespaces)")
+    }
+    arrayStr.tail.init.split(' ')
+  }
 
   private trait Action {
     def run(sources: List[SourceCodeProvider]): Unit
@@ -135,6 +170,7 @@ object Main {
         getJavaVersionArg(argsMap),
         outputName
       )
+      val programArgs = getProgramArgsArg(argsMap)
       reportUnknownArgsIfAny(argsMap)
       val writtenFilesPaths = compiler.apply(sources)
       val classes = {
@@ -149,7 +185,7 @@ object Main {
       if (!mainMethod.getParameterTypes.sameElements(Array(classOf[Array[String]]))){
         error("no function with signature 'main(arr String)'")
       }
-      mainMethod.invoke(null, new Array[String](0)/*TODO accept command line arguments*/)
+      mainMethod.invoke(null, programArgs)
     }
   }
 
@@ -245,13 +281,14 @@ object Main {
   private def displayHelp(): Unit = {
     println(
       s"""
-        |<cmd> [<arg>*] <file>*
-        |e.g. run -out-dir=output examples/sorting.rsn
+        |Command: <cmd> [<arg>*] <file>*
+        |   e.g. run -out-dir=output examples/sorting.rsn
         |
         |run: compile and run the program
         | args: -out-dir=...: required, directory where to write the output file
         |       -out-file=...: optional, output file name (by default <input file name>_core
         |       -java-version=...: optional, can be '$java8Tag', '$java11Tag' or '$java17Tag' (default is '$java8Tag')
+        |       -args=[...]: optional, arguments to be passed to the executed program (e.g. -args=[foo bar baz])
         |compile: compile the program
         | args: -out-dir=...: required, directory where to write the output file
         |       -out-file=...: optional, output file name (by default <input file name>_core
