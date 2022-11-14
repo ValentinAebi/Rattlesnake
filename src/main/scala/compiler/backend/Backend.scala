@@ -261,6 +261,9 @@ final class Backend[V <: ClassVisitor](
           mv.visitLabel(trueLabel)
           mv.visitInsn(Opcodes.ICONST_1)
           mv.visitLabel(endLabel)
+        } else if (operator == Plus && tpe == StringType){
+          mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "concat",
+            "(Ljava/lang/String;)Ljava/lang/String;", false)
         } else {
           val intOpcode = operator match {
             case Plus => Opcodes.IADD

@@ -144,6 +144,25 @@ class CompilerTests {
     assertTrue(actResArray(3))
   }
 
+  @Test
+  def stringConcatTest(): Unit = {
+
+    def refImpl(input: Array[String]): String = {
+      input(0) ++ " " ++ input(1)
+    }
+
+    val inputs = List(
+      Array("foo", "bar"),
+      Array("programming", "language"),
+      Array("baz", ""),
+      Array("\\n", "newline")
+    )
+    val actRes = compileAndExecSeveralIter("stringconcat", "testF", inputs)
+    for (exp, act) <- inputs.map(refImpl).zip(actRes) do {
+      assertEquals(exp, act)
+    }
+  }
+
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
     compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
   }
@@ -154,7 +173,7 @@ class CompilerTests {
    * @param argsPerIter a list of arrays, each containing the arguments to be provided to the tested function during an iteration
    * @return the values returnes by each iteration
    */
-  private def compileAndExecSeveralIter(srcFileName: String, testedMethodName: String, argsPerIter: List[Array[Any]]): List[Any] = {
+  private def compileAndExecSeveralIter(srcFileName: String, testedMethodName: String, argsPerIter: List[Array[_]]): List[Any] = {
     val tmpDir = Path.of(tmpTestDir, srcFileName)
     val outputName = srcFileName.withHeadUppercase + "_core"
     val compiler = TasksPipelines.compiler(tmpDir, javaVersionCode, outputName)

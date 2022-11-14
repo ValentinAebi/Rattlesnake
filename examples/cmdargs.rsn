@@ -1,9 +1,6 @@
 
 fn main(args: arr String){
     for var i = 0; i < #args; i += 1 {
-        print(args[i]);
-        if (i < #args-1){
-            print("\n")
-        }
+        print(intToString(i+1) + "." + args[i] + "\n");
     }
 }

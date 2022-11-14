@@ -49,7 +49,9 @@ object Operators {
     DoubleType $ GreaterOrEq $ DoubleType is BoolType,
 
     BoolType $ And $ BoolType is BoolType,
-    BoolType $ Or $ BoolType is BoolType
+    BoolType $ Or $ BoolType is BoolType,
+
+    StringType $ Plus $ StringType is StringType
   )
 
   def binaryOpFor(left: Type, operator: Operator, right: Type): Option[BinaryOpSignature] = {
