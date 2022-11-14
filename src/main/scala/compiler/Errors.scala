@@ -15,7 +15,7 @@ object Errors {
    */
   val fatalErrorExitCode: Int = -21
 
-  sealed trait CompilationError {
+  sealed trait CompilationError extends Ordered[CompilationError] {
     val compilationStep: CompilationStep
     val msg: String
     val posOpt: Option[Position]
@@ -24,6 +24,20 @@ object Errors {
 
     val isWarning: Boolean = isInstanceOf[Warning]
     val isFatal: Boolean = isInstanceOf[Fatal]
+
+    override def compare(that: CompilationError): Int = {
+      val stepComp = this.compilationStep.ordinal.compare(that.compilationStep.ordinal)
+      if (stepComp != 0){
+        stepComp
+      } else {
+        (this.posOpt, that.posOpt) match {
+          case (None, None) => 0
+          case (None, Some(_)) => 1
+          case (Some(_), None) => -1
+          case (Some(thisPos), Some(thatPos)) => thisPos.compare(thatPos)
+        }
+      }
+    }
 
     override def toString: String = {
       val positionDescr = posOpt.map(pos => s"at $pos ").getOrElse("")
@@ -80,7 +94,7 @@ object Errors {
     def getErrors: List[CompilationError] = errors
 
     def displayErrors(): Unit = {
-      for error <- errors.reverse do {
+      for error <- errors.sorted do {
         errorsConsumer(error)
       }
     }
