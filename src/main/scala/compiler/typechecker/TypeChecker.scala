@@ -18,6 +18,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       check(src, TypeCheckingContext(analysisContext))
     }
     errorReporter.displayAndTerminateIfErrors()
+    sources.foreach(_.assertAllTypesAreSet())
     input
   }
 
@@ -91,9 +92,10 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
 
       case call@Call(callee, args) =>
         callee match {
-          case VariableRef(name) =>
+          case varRef@VariableRef(name) =>
             ctx.functions.get(name) match {
               case Some(funSig) =>
+                varRef.setTypeOpt(Some(null)) // useless but o.w. the check that all expressions have a type fails
                 checkCallArgs(funSig.argTypes, args, ctx, call.getPosition)
                 funSig.retType
 
@@ -120,7 +122,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         if (indexedError) VoidType else indexedType.asInstanceOf[ArrayType].elemType
 
       case arrayInit@ArrayInit(elemType, size) =>
-        if (elemType == VoidType || elemType == NothingType){
+        if (elemType == VoidType || elemType == NothingType) {
           reportError(s"array cannot have element type $elemType", arrayInit.getPosition)
         }
         val sizeType = check(size, ctx)
@@ -199,7 +201,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       case varAssig@VarAssig(lhs, rhs) =>
         val rhsType = check(rhs, ctx)
         lhs match {
-          case VariableRef(name) =>
+          case varRef@VariableRef(name) =>
             ctx.locals.get(name) match {
               case Some((tpe, mut)) if mut =>
                 lhs.setType(tpe)
@@ -218,7 +220,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
             }
           case select: Select =>
             val lhsType = check(select, ctx)
-            if (!rhsType.subtypeOf(lhsType)){
+            if (!rhsType.subtypeOf(lhsType)) {
               reportError(s"cannot assign a value of type '$rhsType' to a field of type '$lhsType'", select.getPosition)
             }
           case _ =>
@@ -235,7 +237,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
                 Operators.binaryOpFor(tpe, op, rhsType) match {
                   case Some(opSig) =>
                     lhs.setType(tpe)
-                    if (!opSig.retType.subtypeOf(tpe)){
+                    if (!opSig.retType.subtypeOf(tpe)) {
                       reportError(s"$tpe ${op.str} $rhsType ==> ${opSig.retType}, not ${op.str}", varModif.getPosition)
                     }
                   case None =>
@@ -272,14 +274,14 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
 
       case ternary@Ternary(cond, thenBr, elseBr) =>
         val condType = check(cond, ctx)
-        if (!condType.subtypeOf(BoolType)){
+        if (!condType.subtypeOf(BoolType)) {
           reportError(s"condition should be of type '${BoolType.str}', found '$condType'", ternary.getPosition)
         }
         val thenType = check(thenBr, ctx)
         val elseType = check(elseBr, ctx)
         val thenIsSupertype = elseType.subtypeOf(thenType)
         val thenIsSubtype = thenType.subtypeOf(elseType)
-        if (thenIsSupertype){
+        if (thenIsSupertype) {
           thenType
         } else if (thenIsSubtype) {
           elseType
@@ -423,10 +425,6 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       case _ => EndStatus(Set.empty, false)
 
     }
-  }
-
-  private def reportTypeMismatch(expType: Type, actType: Type, posOpt: Option[Position]): Unit = {
-    reportError(s"type mismatch: expected $expType, found $actType", posOpt)
   }
 
   private def reportError(msg: String, pos: Option[Position], isWarning: Boolean = false): Unit = {

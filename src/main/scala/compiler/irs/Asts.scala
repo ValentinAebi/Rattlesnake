@@ -21,6 +21,19 @@ object Asts {
     }
 
     final def getPosition: Option[Position] = positionOpt
+
+    def children: List[Ast]
+
+    final def collect[T](f: Ast => T): List[T] = {
+      f(this) :: children.flatMap(_.collect(f))
+    }
+
+    final def assertAllTypesAreSet(): Unit = {
+      collect {
+        case expr: Expr => assert(expr.getTypeOpt.isDefined, s"no type set for $expr")
+        case _ => ()
+      }
+    }
   }
 
   sealed abstract class Statement extends Ast
@@ -49,6 +62,8 @@ object Asts {
   final case class Source(defs: List[TopLevelDef]) extends Ast {
     private var name: String = "<missing name>"
 
+    override def children: List[Ast] = defs
+
     def setName(name: String): Source = {
       this.name = name
       this
@@ -57,24 +72,37 @@ object Asts {
     def getName: String = name
   }
 
-  final case class Block(stats: List[Statement]) extends Statement
+  final case class Block(stats: List[Statement]) extends Statement {
+    override def children: List[Ast] = stats
+  }
 
   sealed abstract class TopLevelDef extends Ast
   final case class FunDef(funName: String, params: List[Param], optRetType: Option[Type], body: Block) extends TopLevelDef {
     val signature: FunctionSignature = FunctionSignature(funName, params.map(_.tpe), optRetType.getOrElse(VoidType))
+
+    override def children: List[Ast] = params :+ body
   }
-  final case class StructDef(structName: String, fields: List[Param]) extends TopLevelDef
-  final case class Param(paramName: String, tpe: Type) extends Ast
+  final case class StructDef(structName: String, fields: List[Param]) extends TopLevelDef {
+    override def children: List[Ast] = fields
+  }
+  final case class Param(paramName: String, tpe: Type) extends Ast {
+    override def children: List[Ast] = Nil
+  }
 
   final case class LocalDef(localName: String, var optType: Option[Type], rhs: Expr, isReassignable: Boolean) extends Statement {
     val keyword: Keyword = if isReassignable then Keyword.Var else Keyword.Val
+
+    override def children: List[Ast] = List(rhs)
   }
 
   sealed abstract class Literal extends Expr {
     val value: Any
+
+    final override def children: List[Ast] = Nil
   }
   final case class IntLit(value: Int) extends Literal {
     override def getTypeOpt: Option[Type] = Some(IntType)
+
   }
   final case class DoubleLit(value: Double) extends Literal {
     override def getTypeOpt: Option[Type] = Some(DoubleType)
@@ -89,35 +117,67 @@ object Asts {
     override def getTypeOpt: Option[Type] = Some(StringType)
   }
 
-  final case class VariableRef(name: String) extends Expr
-  final case class Call(callee: Expr, args: List[Expr]) extends Expr
-  final case class Indexing(indexed: Expr, arg: Expr) extends Expr
+  final case class VariableRef(name: String) extends Expr {
+    override def children: List[Ast] = Nil
+  }
+  final case class Call(callee: Expr, args: List[Expr]) extends Expr {
+    override def children: List[Ast] = callee :: args
+  }
+  final case class Indexing(indexed: Expr, arg: Expr) extends Expr {
+    override def children: List[Ast] = List(indexed, arg)
+  }
   
-  final case class ArrayInit(elemType: Type, size: Expr) extends Expr
-  final case class StructInit(structName: String, args: List[Expr]) extends Expr
+  final case class ArrayInit(elemType: Type, size: Expr) extends Expr {
+    override def children: List[Ast] = List(size)
+  }
+  final case class StructInit(structName: String, args: List[Expr]) extends Expr {
+    override def children: List[Ast] = args
+  }
   
-  final case class UnaryOp(operator: Operator, operand: Expr) extends Expr
-  final case class BinaryOp(lhs: Expr, operator: Operator, rhs: Expr) extends Expr
-  final case class Select(lhs: Expr, selected: String) extends Expr
+  final case class UnaryOp(operator: Operator, operand: Expr) extends Expr {
+    override def children: List[Ast] = List(operand)
+  }
+  final case class BinaryOp(lhs: Expr, operator: Operator, rhs: Expr) extends Expr {
+    override def children: List[Ast] = List(lhs, rhs)
+  }
+  final case class Select(lhs: Expr, selected: String) extends Expr {
+    override def children: List[Ast] = List(lhs)
+  }
   
   sealed abstract class Assignment extends Statement
   
-  final case class VarAssig(lhs: Expr, rhs: Expr) extends Assignment
+  final case class VarAssig(lhs: Expr, rhs: Expr) extends Assignment {
+    override def children: List[Ast] = List(lhs, rhs)
+  }
 
-  final case class VarModif(lhs: Expr, rhs: Expr, op: Operator) extends Assignment
+  final case class VarModif(lhs: Expr, rhs: Expr, op: Operator) extends Assignment {
+    override def children: List[Ast] = List(lhs, rhs)
+  }
 
-  final case class IfThenElse(cond: Expr, thenBr: Statement, elseBrOpt: Option[Statement]) extends Statement
-  final case class Ternary(cond: Expr, thenBr: Expr, elseBr: Expr) extends Expr
-  final case class WhileLoop(cond: Expr, body: Statement) extends Statement
+  final case class IfThenElse(cond: Expr, thenBr: Statement, elseBrOpt: Option[Statement]) extends Statement {
+    override def children: List[Ast] = List(cond, thenBr) ++ elseBrOpt
+  }
+  final case class Ternary(cond: Expr, thenBr: Expr, elseBr: Expr) extends Expr {
+    override def children: List[Ast] = List(cond, thenBr, elseBr)
+  }
+  final case class WhileLoop(cond: Expr, body: Statement) extends Statement {
+    override def children: List[Ast] = List(cond, body)
+  }
   final case class ForLoop(
                             initStats: List[LocalDef | Assignment],
                             cond: Expr,
                             stepStats: List[Assignment],
                             body: Block
-                          ) extends Statement
+                          ) extends Statement {
+    override def children: List[Ast] = initStats ++ List(cond) ++ stepStats :+ body
+  }
   final case class ReturnStat(value: Expr) extends Statement {
     def getRetType: Option[Type] = value.getTypeOpt
+
+    override def children: List[Ast] = List(value)
   }
-  final case class PanicStat(msg: Expr) extends Statement
+  final case class PanicStat(msg: Expr) extends Statement {
+    override def children: List[Ast] = List(msg)
+  }
 
 }

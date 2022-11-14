@@ -16,12 +16,16 @@ import lang.Types.PrimitiveType.{IntType, DoubleType, BoolType}
  *  - `for` ---> `while`
  *  - `-x` ---> `0 - x`
  *  - `!x` ---> `when x then false else true`
+ *  - `x && y` ---> `when x then y else false`
+ *  - `x || y` ---> `when x then true else y`
  */
 final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
 
   override def apply(input: (List[Source], AnalysisContext)): (List[Source], AnalysisContext) = {
     val (sources, ctx) = input
-    (sources.map(desugar), ctx)
+    val desugaredSources = sources.map(desugar)
+    desugaredSources.foreach(_.assertAllTypesAreSet())
+    (desugaredSources, ctx)
   }
 
   private def desugar(src: Source): Source = Source(src.defs.map(desugar)).setName(src.getName)
@@ -89,16 +93,22 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
       case binaryOp: BinaryOp => {
         val desugaredLhs = desugar(binaryOp.lhs)
         val desugaredRhs = desugar(binaryOp.rhs)
-        binaryOp.operator match
-          case LessOrEq => BinaryOp(
+        binaryOp.operator match {
+          case LessOrEq => desugar(BinaryOp(
             BinaryOp(desugaredLhs, LessThan, desugaredRhs).setType(BoolType),
             Or,
             BinaryOp(desugaredLhs, Equality, desugaredRhs).setType(BoolType)
-          )
-          case GreaterThan => BinaryOp(desugaredRhs, LessThan, desugaredLhs)
-          case GreaterOrEq => desugar(BinaryOp(desugaredRhs, LessOrEq, desugaredLhs).setType(BoolType))
-          case Inequality => desugar(UnaryOp(ExclamationMark, BinaryOp(desugaredLhs, Equality, desugaredRhs)))
+          ))
+          case GreaterThan => desugar(BinaryOp(desugaredRhs, LessThan, desugaredLhs))
+          case GreaterOrEq => desugar(BinaryOp(desugaredRhs, LessOrEq, desugaredLhs))
+          case Inequality =>
+            desugar(UnaryOp(ExclamationMark,
+              BinaryOp(desugaredLhs, Equality, desugaredRhs).setType(BoolType)
+            ).setType(BoolType))
+          case And => desugar(Ternary(desugaredLhs, desugaredRhs, BoolLit(false)))
+          case Or => desugar(Ternary(desugaredLhs, BoolLit(true), desugaredRhs))
           case _ => BinaryOp(desugaredLhs, binaryOp.operator, desugaredRhs)
+        }
       }
       case select: Select => Select(desugar(select.lhs), select.selected)
       case Ternary(cond, thenBr, elseBr) => Ternary(desugar(cond), desugar(thenBr), desugar(elseBr))

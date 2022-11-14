@@ -1,7 +1,7 @@
 package compiler
 
 import compiler.io.SourceFile
-import org.junit.Assert.{assertArrayEquals, assertEquals, assertTrue}
+import org.junit.Assert.{assertArrayEquals, assertEquals, assertFalse, assertTrue}
 import org.junit.{After, Before, Test}
 
 import java.io.*
@@ -10,7 +10,6 @@ import java.nio.file.{Files, Path}
 import java.util.spi.ToolProvider
 import scala.reflect.ClassTag
 import scala.util.Using
-
 import org.objectweb.asm.Opcodes.V1_8
 
 class CompilerTests {
@@ -131,6 +130,18 @@ class CompilerTests {
     val actResArray = actRes.asInstanceOf[Array[Int]]
     val expRes = Array(-10, -20, 42)
     assertArrayEquals(expRes, actResArray)
+  }
+
+  @Test
+  def lazyValTest(): Unit = {
+    val actRes = compileAndExecOneIter("lazyval", "testFunc")
+    assertTrue(actRes.isInstanceOf[Array[Boolean]])
+    val actResArray = actRes.asInstanceOf[Array[Boolean]]
+    assertEquals(4, actResArray.length)
+    assertTrue(actResArray(0))
+    assertFalse(actResArray(1))
+    assertTrue(actResArray(2))
+    assertTrue(actResArray(3))
   }
 
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {

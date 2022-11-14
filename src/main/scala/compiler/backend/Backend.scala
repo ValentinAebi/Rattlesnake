@@ -200,7 +200,7 @@ final class Backend[V <: ClassVisitor](
         generateCode(operand, ctx)
         operator match {
           case Sharp => mv.visitInsn(Opcodes.ARRAYLENGTH)
-          case _ => throw new IllegalStateException(s"unexpected $operator in code generation")
+          case _ => throw new AssertionError(s"unexpected $operator in code generation")
         }
 
       case BinaryOp(lhs, operator, rhs) => {
@@ -268,8 +268,6 @@ final class Backend[V <: ClassVisitor](
             case Times => Opcodes.IMUL
             case Div => Opcodes.IDIV
             case Modulo => Opcodes.IREM
-            case And => Opcodes.IAND
-            case Or => Opcodes.IOR
             case _ => throw new IllegalStateException(s"unexpected $operator in backend")
           }
           val opcode = opcodeFor(tpe, intOpcode, shouldNotHappen())
