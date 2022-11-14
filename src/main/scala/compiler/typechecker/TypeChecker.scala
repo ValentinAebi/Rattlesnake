@@ -26,7 +26,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
     val tpe = ast match {
 
       case Source(defs) =>
-        for df <- defs if df.isInstanceOf[FunDef] do {
+        for df <- defs do {
           check(df, ctx.copyWithoutLocals)
         }
         VoidType
@@ -38,14 +38,25 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         }
         VoidType
 
+      case StructDef(_, fields) =>
+        for param@Param(_, tpe) <- fields if !ctx.analysisContext.knowsType(tpe) do {
+          reportError(s"unknown type: $tpe", param.getPosition)
+        }
+        VoidType
+
       case funDef@FunDef(funName, params, optRetType, body) =>
         val expRetType = optRetType.getOrElse(VoidType)
         val ctxWithParams = ctx.copyWithoutLocals
         for param <- params do {
-          ctxWithParams.addLocal(param.paramName, param.tpe, false, duplicateVarCallback = { () =>
+          val typeIsKnown = ctx.analysisContext.knowsType(param.tpe)
+          if (!typeIsKnown) {
+            reportError(s"unknown type: ${param.tpe}", param.getPosition)
+          }
+          val paramType = if typeIsKnown then param.tpe else UndefinedType
+          ctxWithParams.addLocal(param.paramName, paramType, false, duplicateVarCallback = { () =>
             reportError(s"identifier '${param.paramName}' is already used by another parameter of function '$funName'", param.getPosition)
           }, forbiddenTypeCallback = { () =>
-            reportError(s"parameter '${param.paramName}' of function '$funName' has type '${param.tpe}', which is forbidden", param.getPosition)
+            reportError(s"parameter '${param.paramName}' of function '$funName' has type '$paramType', which is forbidden", param.getPosition)
           })
         }
         check(body, ctxWithParams)
@@ -63,7 +74,10 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       case localDef@LocalDef(localName, optType, rhs, isReassignable) =>
         val inferredType = check(rhs, ctx)
         optType.foreach { expType =>
-          if (!inferredType.subtypeOf(expType)) {
+          val typeIsKnown = ctx.analysisContext.knowsType(expType)
+          if (!typeIsKnown) {
+            reportError(s"unknown type: $expType", localDef.getPosition)
+          } else if (!inferredType.subtypeOf(expType)) {
             reportError(s"${localDef.keyword} should be of type '$expType', found '$inferredType'", localDef.getPosition)
           }
         }
@@ -304,7 +318,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         }
         NothingType
 
-      case _: (StructDef | Param) => assert(false)
+      case _: Param => assert(false)
     }
     // if expression save type
     ast match {

@@ -2,15 +2,27 @@ package compiler
 
 import compiler.AnalysisContext
 import compiler.CompilationStep.ContextCreation
-import compiler.Errors.{CompilationError, ErrorReporter, errorsExitCode, Err}
+import compiler.Errors.{CompilationError, Err, ErrorReporter, errorsExitCode}
 import compiler.irs.Asts.{FunDef, StructDef}
 import lang.Types.PrimitiveType.{NothingType, VoidType}
 import lang.Types.Type
-import lang.{BuiltInFunctions, FunctionSignature, StructSignature}
+import lang.{BuiltInFunctions, FunctionSignature, StructSignature, Types}
 
+import scala.annotation.tailrec
 import scala.collection.mutable
 
-final case class AnalysisContext(functions: Map[String, FunctionSignature], structs: Map[String, StructSignature])
+final case class AnalysisContext(functions: Map[String, FunctionSignature], structs: Map[String, StructSignature]){
+  
+  @tailrec def knowsType(tpe: Type): Boolean = {
+    tpe match {
+      case _: Types.PrimitiveType => true
+      case Types.StructType(typeName) => structs.contains(typeName)
+      case Types.ArrayType(elemType) => knowsType(elemType)
+      case Types.UndefinedType => true
+    }
+  }
+  
+}
 
 object AnalysisContext {
 
