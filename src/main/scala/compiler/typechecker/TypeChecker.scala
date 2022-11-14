@@ -45,6 +45,11 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         VoidType
 
       case funDef@FunDef(funName, params, optRetType, body) =>
+        optRetType.foreach { retType =>
+          if (!ctx.analysisContext.knowsType(retType)){
+            reportError(s"return type is unknown: '$retType'", funDef.getPosition)
+          }
+        }
         val expRetType = optRetType.getOrElse(VoidType)
         val ctxWithParams = ctx.copyWithoutLocals
         for param <- params do {
