@@ -47,3 +47,4 @@ bin/
 *.class
 
 *.asm
+coverage/
