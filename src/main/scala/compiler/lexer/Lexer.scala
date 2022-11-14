@@ -44,7 +44,9 @@ final class Lexer(errorReporter: ErrorReporter) extends CompilerStep[SourceCodeP
     digitsSeq intoOpt { str => str.toIntOption.map(IntLitToken.apply) },
     digitsSeq ++ char('.') ++ digitsSeq intoOpt { str => str.toDoubleOption.map(DoubleLitToken.apply) },
     char('\'') ++ anyChar ++ char('\'') into { str => CharLitToken(str(1)) },
-    char('"') ++ repeat(anyCharBut('"')) ++ char('"') into { str => StringLitToken(str.drop(1).dropRight(1)) },
+    char('"') ++ repeat(anyCharBut('"')) ++ char('"') into {
+      str => StringLitToken(str.drop(1).dropRight(1).replace("\\n", "\n"))
+    },
     string("//") ++ repeat(anyChar) into { CommentToken(_) },
   )
 
