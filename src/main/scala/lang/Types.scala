@@ -38,5 +38,12 @@ object Types {
   final case class ArrayType(elemType: Type) extends Type {
     override def toString: String = s"arr $elemType"
   }
+
+  /**
+   * Type of a malformed/incorrect expression
+   */
+  case object UndefinedType extends Type {
+    override def toString: String = "[undefined type]"
+  }
   
 }

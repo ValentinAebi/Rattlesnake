@@ -87,7 +87,6 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
           case Some((tpe, _)) => tpe
           case None =>
             reportError(s"not found: '$name'", varRef.getPosition)
-            VoidType
         }
 
       case call@Call(callee, args) =>
@@ -95,17 +94,13 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
           case varRef@VariableRef(name) =>
             ctx.functions.get(name) match {
               case Some(funSig) =>
-                varRef.setTypeOpt(Some(null)) // useless but o.w. the check that all expressions have a type fails
+                varRef.setTypeOpt(Some(UndefinedType)) // useless but o.w. the check that all expressions have a type fails
                 checkCallArgs(funSig.argTypes, args, ctx, call.getPosition)
                 funSig.retType
 
-              case None =>
-                reportError(s"not found: $name", call.getPosition)
-                VoidType
+              case None => reportError(s"not found: $name", call.getPosition)
             }
-          case _ =>
-            reportError("syntax error, only functions can be called", call.getPosition)
-            VoidType
+          case _ => reportError("syntax error, only functions can be called", call.getPosition)
         }
 
       case Indexing(indexed, arg) =>
@@ -119,7 +114,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         if (argError) {
           reportError(s"indexing expression should be of type '${IntType.str}', found '$argType'", arg.getPosition)
         }
-        if (indexedError) VoidType else indexedType.asInstanceOf[ArrayType].elemType
+        if indexedError then UndefinedType else indexedType.asInstanceOf[ArrayType].elemType
 
       case arrayInit@ArrayInit(elemType, size) =>
         if (elemType == VoidType || elemType == NothingType) {
@@ -141,10 +136,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
           case Some(structSig) =>
             checkCallArgs(structSig.fields.values.toList, args, ctx, structInit.getPosition)
             StructType(structName)
-
-          case None =>
-            reportError(s"not found: struct '$structName'", structInit.getPosition)
-            VoidType
+          case None => reportError(s"not found: struct '$structName'", structInit.getPosition)
         }
 
       case unaryOp@UnaryOp(operator, operand) =>
@@ -154,14 +146,12 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
             IntType
           } else {
             reportError("operator # can only be applied to arrays", unaryOp.getPosition)
-            VoidType
           }
         } else {
           Operators.unaryOpFor(operator, operandType) match {
             case Some(sig) => sig.retType
             case None =>
               reportError(s"no definition of operator '$operator' found for operand '$operandType'", unaryOp.getPosition)
-              VoidType
           }
         }
 
@@ -178,7 +168,6 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
             case Some(sig) => sig.retType
             case None =>
               reportError(s"no definition of operator '$operator' found for operands '$lhsType' and '$rhsType'", binOp.getPosition)
-              VoidType
           }
         }
 
@@ -189,19 +178,15 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
             val structSig = ctx.structs.apply(typeName)
             structSig.fields.get(selected) match {
               case Some(fieldType) => fieldType
-              case None =>
-                reportError(s"no '$selected' field found for type '$lhsType'", select.getPosition)
-                VoidType
+              case None => reportError(s"no '$selected' field found for type '$lhsType'", select.getPosition)
             }
-          case _ =>
-            reportError(s"no '$selected' field found: not a struct", select.getPosition)
-            VoidType
+          case _ => reportError(s"no '$selected' field found: not a struct", select.getPosition)
         }
 
       case varAssig@VarAssig(lhs, rhs) =>
         val rhsType = check(rhs, ctx)
         lhs match {
-          case varRef@VariableRef(name) =>
+          case VariableRef(name) =>
             ctx.locals.get(name) match {
               case Some((tpe, mut)) if mut =>
                 lhs.setType(tpe)
@@ -287,7 +272,6 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
           elseType
         } else {
           reportError(s"type mismatch in ternary operator: first branch has type $thenType, second has type $elseType", ternary.getPosition)
-          VoidType
         }
 
       case whileLoop@WhileLoop(cond, body) =>
@@ -318,7 +302,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         if (!msgType.subtypeOf(StringType)) {
           reportError(s"panic can only be applied to type '${StringType.str}', found '$msgType'", panicStat.getPosition)
         }
-        VoidType
+        NothingType
 
       case _: (StructDef | Param) => assert(false)
     }
@@ -427,8 +411,9 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
     }
   }
 
-  private def reportError(msg: String, pos: Option[Position], isWarning: Boolean = false): Unit = {
+  private def reportError(msg: String, pos: Option[Position], isWarning: Boolean = false): Type = {
     errorReporter.push(if isWarning then Warning(TypeChecking, msg, pos) else Err(TypeChecking, msg, pos))
+    UndefinedType
   }
 
 }
