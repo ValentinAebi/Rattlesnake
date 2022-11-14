@@ -12,8 +12,9 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 final case class AnalysisContext(functions: Map[String, FunctionSignature], structs: Map[String, StructSignature]){
-  
-  @tailrec def knowsType(tpe: Type): Boolean = {
+
+  // do not use @tailrec, even though Intellij suggests it: crashes the CI
+  def knowsType(tpe: Type): Boolean = {
     tpe match {
       case _: Types.PrimitiveType => true
       case Types.StructType(typeName) => structs.contains(typeName)
@@ -21,7 +22,7 @@ final case class AnalysisContext(functions: Map[String, FunctionSignature], stru
       case Types.UndefinedType => true
     }
   }
-  
+
 }
 
 object AnalysisContext {
