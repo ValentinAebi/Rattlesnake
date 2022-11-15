@@ -21,6 +21,7 @@ object TypesConverter {
       case PrimitiveType.VoidType => VOID_TYPE.toSome
       case PrimitiveType.NothingType => VOID_TYPE.toSome
       case _: (PrimitiveType.StringType.type | StructType | ArrayType) => None
+      case Types.UndefinedType => assert(false)
   }
 
   def convertToAsmTypeCode(tpe: Types.Type): Option[Int] = {
@@ -43,6 +44,7 @@ object TypesConverter {
       case PrimitiveType.NothingType => "V"
       case Types.StructType(typeName) => s"$typeName"
       case Types.ArrayType(elemType) => s"[${internalNameOf(elemType)}"
+      case Types.UndefinedType => assert(false)
   }
 
   extension[T] (t: T) private def toSome = Some(t)

@@ -16,6 +16,7 @@ object DescriptorsCreator {
       case PrimitiveType.NothingType => "V"
       case Types.StructType(typeName) => s"L$typeName;"
       case Types.ArrayType(elemType) => s"[${descriptorForType(elemType)}"
+      case Types.UndefinedType => assert(false)
   }
 
   def descriptorForFunc(funSig: FunctionSignature): String = {

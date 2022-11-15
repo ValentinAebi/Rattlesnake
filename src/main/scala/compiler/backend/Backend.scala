@@ -175,6 +175,7 @@ final class Backend[V <: ClassVisitor](
           case _: Types.PrimitiveType =>
             val elemTypeCode = convertToAsmTypeCode(elemType).get
             mv.visitIntInsn(Opcodes.NEWARRAY, elemTypeCode)
+          case Types.UndefinedType => shouldNotHappen()
         }
 
       case StructInit(structName, args) =>
