@@ -312,8 +312,8 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         check(body, newCtx)
         VoidType
 
-      case ReturnStat(value) =>
-        check(value, ctx)
+      case ReturnStat(valueOpt) =>
+        valueOpt.foreach(check(_, ctx))
         VoidType
 
       case panicStat@PanicStat(msg) =>

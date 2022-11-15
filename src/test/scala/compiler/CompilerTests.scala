@@ -163,6 +163,14 @@ class CompilerTests {
     }
   }
 
+  @Test
+  def returnVoidTest(): Unit = {
+    val argArray = new Array[Int](2)   // content should be written by the function under test
+    compileAndExecOneIter("voidret", "main", argArray)
+    assertEquals(argArray(0), -15)
+    assertEquals(argArray(1), 20)
+  }
+
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
     compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
   }

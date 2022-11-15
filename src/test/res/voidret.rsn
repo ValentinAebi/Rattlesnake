@@ -1,0 +1,11 @@
+
+fn main(args: arr Int) -> Void {
+    val x = -15;
+    args[0] = x;
+    if x < 10 {
+        args[1] = 20;
+        return
+    };
+    args[1] = 32;
+    print("...")
+}

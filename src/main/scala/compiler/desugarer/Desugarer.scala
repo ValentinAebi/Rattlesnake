@@ -70,7 +70,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
     desugar(Block(stats))
   }
 
-  private def desugar(returnStat: ReturnStat): ReturnStat = ReturnStat(desugar(returnStat.value))
+  private def desugar(returnStat: ReturnStat): ReturnStat = ReturnStat(returnStat.optVal.map(desugar))
 
   private def desugar(panicStat: PanicStat): PanicStat = PanicStat(desugar(panicStat.msg))
 

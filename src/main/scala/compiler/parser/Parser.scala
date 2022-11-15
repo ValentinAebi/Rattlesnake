@@ -232,7 +232,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   }
 
   private lazy val returnStat = {
-    kw(Return).ignored ::: expr map (retVal => ReturnStat(retVal))
+    kw(Return).ignored ::: opt(expr) map (optRetVal => ReturnStat(optRetVal))
   } setName "returnStat"
 
   private lazy val panicStat = {

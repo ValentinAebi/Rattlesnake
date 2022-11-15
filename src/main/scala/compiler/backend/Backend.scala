@@ -344,10 +344,13 @@ final class Backend[V <: ClassVisitor](
         mv.visitJumpInsn(Opcodes.GOTO, loopLabel)
         mv.visitLabel(endLabel)
 
-      case ReturnStat(value) =>
+      case ReturnStat(Some(value)) =>
         generateCode(value, ctx)
         val opcode = opcodeFor(value.getType, Opcodes.IRETURN, Opcodes.ARETURN)
         mv.visitInsn(opcode)
+
+      case ReturnStat(None) =>
+        mv.visitInsn(Opcodes.RETURN)
 
       case PanicStat(msg) =>
         mv.visitTypeInsn(NEW, "java/lang/RuntimeException")

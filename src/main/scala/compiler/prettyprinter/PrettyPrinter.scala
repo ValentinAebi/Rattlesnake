@@ -235,11 +235,12 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         pps.addSpace()
         addAst(body)
 
-      case ReturnStat(value) =>
-        pps
-          .add(Return.str)
-          .addSpace()
-        addAst(value)
+      case ReturnStat(valueOpt) =>
+        pps.add(Return.str)
+        valueOpt.foreach { value =>
+          pps.addSpace()
+          addAst(value)
+        }
 
       case PanicStat(msg) =>
         pps

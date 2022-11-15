@@ -171,10 +171,10 @@ object Asts {
                           ) extends Statement {
     override def children: List[Ast] = initStats ++ List(cond) ++ stepStats :+ body
   }
-  final case class ReturnStat(value: Expr) extends Statement {
-    def getRetType: Option[Type] = value.getTypeOpt
+  final case class ReturnStat(optVal: Option[Expr]) extends Statement {
+    def getRetType: Option[Type] = if optVal.isDefined then optVal.get.getTypeOpt else Some(VoidType)
 
-    override def children: List[Ast] = List(value)
+    override def children: List[Ast] = optVal.toList
   }
   final case class PanicStat(msg: Expr) extends Statement {
     override def children: List[Ast] = List(msg)
