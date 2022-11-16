@@ -112,11 +112,8 @@ final class Backend[V <: ClassVisitor](
     val analysisContext = ctx.analysisContext
     ast match {
 
-      case Block(stats) =>
-        val newCtx = ctx.withNewLocalsFrame
-        for stat <- stats do {
-          generateCode(stat, newCtx)
-        }
+      case Block(stats) => generateSequence(ctx, stats, optFinalExpr = None)
+      case Sequence(stats, expr) => generateSequence(ctx, stats, Some(expr))
 
       case LocalDef(varName, tpeOpt, rhs, _) =>
         generateCode(rhs, ctx)
@@ -262,7 +259,7 @@ final class Backend[V <: ClassVisitor](
           mv.visitLabel(trueLabel)
           mv.visitInsn(Opcodes.ICONST_1)
           mv.visitLabel(endLabel)
-        } else if (operator == Plus && tpe == StringType){
+        } else if (operator == Plus && tpe == StringType) {
           mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "concat",
             "(Ljava/lang/String;)Ljava/lang/String;", false)
         } else {
@@ -315,18 +312,10 @@ final class Backend[V <: ClassVisitor](
          *   <elseBr>
          * endLabel:
          */
-        generateCode(cond, ctx)
-        val falseLabel = new Label()
-        val endLabel = new Label()
-        mv.visitJumpInsn(Opcodes.IFLE, falseLabel)
-        generateCode(thenBr, ctx)
-        mv.visitJumpInsn(Opcodes.GOTO, endLabel)
-        mv.visitLabel(falseLabel)
-        elseBrOpt.foreach(generateCode(_, ctx))
-        mv.visitLabel(endLabel)
+        generateIfThenElse(ctx, cond, thenBr, elseBrOpt)
 
       case Ternary(cond, thenBr, elseBr) =>
-        generateCode(IfThenElse(cond, thenBr, Some(elseBr)), ctx)
+        generateIfThenElse(ctx, cond, thenBr, Some(elseBr))
 
       case WhileLoop(cond, body) =>
         /*
@@ -363,6 +352,35 @@ final class Backend[V <: ClassVisitor](
 
       case other => throw new IllegalStateException(s"unexpected in backend: ${other.getClass}")
     }
+  }
+
+  private def generateSequence(
+                                ctx: CodeGenerationContext, stats: List[Statement], optFinalExpr: Option[Expr]
+                              )(implicit mv: MethodVisitor, outputName: String): Unit = {
+    val newCtx = ctx.withNewLocalsFrame
+    for stat <- stats do {
+      generateCode(stat, newCtx)
+    }
+    optFinalExpr.foreach { finalExpr =>
+      generateCode(finalExpr, newCtx)
+    }
+  }
+
+  private def generateIfThenElse(
+                                  ctx: CodeGenerationContext,
+                                  cond: Expr,
+                                  thenBr: Statement,
+                                  elseBrOpt: Option[Statement]
+                                )(implicit mv: MethodVisitor, outputName: String): Unit = {
+    generateCode(cond, ctx)
+    val falseLabel = new Label()
+    val endLabel = new Label()
+    mv.visitJumpInsn(Opcodes.IFLE, falseLabel)
+    generateCode(thenBr, ctx)
+    mv.visitJumpInsn(Opcodes.GOTO, endLabel)
+    mv.visitLabel(falseLabel)
+    elseBrOpt.foreach(generateCode(_, ctx))
+    mv.visitLabel(endLabel)
   }
 
   private def shouldNotHappen(): Nothing = assert(false)

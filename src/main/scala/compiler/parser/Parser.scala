@@ -163,7 +163,8 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val varRef = lowName map VariableRef.apply setName "varDef"
 
   private lazy val selectOrCallChain = recursive {
-    (varRef OR literalValue OR arrayInit OR structInit OR parenthesizedExpr OR ternary) ::: repeat((dot ::: lowName) OR callArgs OR indexing) map {
+    (varRef OR literalValue OR arrayInit OR filledArrayInit OR structInit OR parenthesizedExpr OR ternary
+      ) ::: repeat((dot ::: lowName) OR callArgs OR indexing) map {
       case callee ^: ls =>
         ls.foldLeft[Expr](callee) { (acc, curr) =>
           curr match {
@@ -184,6 +185,10 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
       case elemType ^: size => ArrayInit(elemType, size)
     }
   } setName "arrayInit"
+
+  private lazy val filledArrayInit = recursive {
+    openingBracket ::: repeatWithSep(expr, comma) ::: closingBracket map (arrElems => FilledArrayInit(arrElems))
+  } setName "filledArrayInit"
 
   private lazy val structInit = recursive {
     kw(New).ignored ::: highName ::: openBrace ::: repeatWithSep(expr, comma) ::: closeBrace map {
@@ -224,7 +229,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
       case cond ^: thenBr ^: optElse => IfThenElse(cond, thenBr, optElse)
     }
   } setName "ifThenElse"
-  
+
   private lazy val ternary = recursive {
     kw(When).ignored ::: expr ::: kw(Then).ignored ::: expr ::: kw(Else).ignored ::: expr map {
       case cond ^: thenBr ^: elseBr => Ternary(cond, thenBr, elseBr)

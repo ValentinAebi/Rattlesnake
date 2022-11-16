@@ -5,7 +5,8 @@ import compiler.{AnalysisContext, CompilerStep}
 import compiler.irs.Asts.*
 import lang.Operator.*
 import lang.Operators
-import lang.Types.PrimitiveType.{IntType, DoubleType, BoolType}
+import lang.Types.{ArrayType, UndefinedType}
+import lang.Types.PrimitiveType.{BoolType, DoubleType, IntType}
 
 /**
  * Desugaring replaces:
@@ -20,6 +21,7 @@ import lang.Types.PrimitiveType.{IntType, DoubleType, BoolType}
  *  - `x || y` ---> `when x then true else y`
  */
 final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
+  private val uniqueIdGenerator = new UniqueIdGenerator()
 
   override def apply(input: (List[Source], AnalysisContext)): (List[Source], AnalysisContext) = {
     val (sources, ctx) = input
@@ -82,6 +84,17 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
       case indexing: Indexing => Indexing(desugar(indexing.indexed), desugar(indexing.arg))
       case arrayInit: ArrayInit => ArrayInit(arrayInit.elemType, desugar(arrayInit.size))
       case structInit: StructInit => StructInit(structInit.structName, structInit.args.map(desugar))
+      case filledArrayInit@FilledArrayInit(arrayElems) =>
+        val arrayType = filledArrayInit.getType.asInstanceOf[ArrayType]
+        val elemType = arrayType.elemType
+        val arrValId = uniqueIdGenerator.next()
+        val arrValRef = VariableRef(arrValId).setType(arrayType)
+        val arrInit = ArrayInit(elemType, IntLit(arrayElems.size)).setType(filledArrayInit.getType)
+        val arrayValDefinition = LocalDef(arrValId, Some(arrayType), arrInit, isReassignable = false)
+        val arrElemAssigStats = arrayElems.map(desugar).zipWithIndex.map {
+          (elem, idx) => VarAssig(Indexing(arrValRef, IntLit(idx)).setType(UndefinedType), elem)
+        }
+        Sequence(arrayValDefinition :: arrElemAssigStats, arrValRef)
       case UnaryOp(operator, operand) =>
         val desugaredOperand = desugar(operand)
         operator match {
@@ -112,6 +125,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
       }
       case select: Select => Select(desugar(select.lhs), select.selected)
       case Ternary(cond, thenBr, elseBr) => Ternary(desugar(cond), desugar(thenBr), desugar(elseBr))
+      case Sequence(stats, expr) => Sequence(stats.map(desugar), desugar(expr))
     }
     desugared.setTypeOpt(expr.getTypeOpt)
   }

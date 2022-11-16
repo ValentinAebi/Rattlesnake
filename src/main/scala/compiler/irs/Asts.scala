@@ -102,7 +102,6 @@ object Asts {
   }
   final case class IntLit(value: Int) extends Literal {
     override def getTypeOpt: Option[Type] = Some(IntType)
-
   }
   final case class DoubleLit(value: Double) extends Literal {
     override def getTypeOpt: Option[Type] = Some(DoubleType)
@@ -129,6 +128,10 @@ object Asts {
   
   final case class ArrayInit(elemType: Type, size: Expr) extends Expr {
     override def children: List[Ast] = List(size)
+  }
+
+  final case class FilledArrayInit(arrayElems: List[Expr]) extends Expr {
+    override def children: List[Ast] = arrayElems
   }
   final case class StructInit(structName: String, args: List[Expr]) extends Expr {
     override def children: List[Ast] = args
@@ -178,6 +181,12 @@ object Asts {
   }
   final case class PanicStat(msg: Expr) extends Statement {
     override def children: List[Ast] = List(msg)
+  }
+  
+  final case class Sequence(stats: List[Statement], expr: Expr) extends Expr {
+    override def children: List[Ast] = stats :+ expr
+
+    override def getTypeOpt: Option[Type] = expr.getTypeOpt
   }
 
 }

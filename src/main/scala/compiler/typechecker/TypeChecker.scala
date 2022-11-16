@@ -150,6 +150,13 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         }
         ArrayType(elemType)
 
+      case filledArrayInit@FilledArrayInit(arrayElems) =>
+        val types = arrayElems.map(check(_, ctx))
+        types.find(tpe => types.forall(_.subtypeOf(tpe))) match {
+          case Some(inferredElemType) => ArrayType(inferredElemType)
+          case None => reportError("cannot infer array type", filledArrayInit.getPosition)
+        }
+
       case structInit@StructInit(structName, args) =>
         ctx.structs.get(structName) match {
           case Some(structSig) =>

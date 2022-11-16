@@ -171,6 +171,16 @@ class CompilerTests {
     assertEquals(argArray(1), 20)
   }
 
+  @Test
+  def arrayLitTest(): Unit = {
+    val res = compileAndExecOneIter("arraylit", "createArray")
+    assertTrue(res.isInstanceOf[Array[Double]])
+    val resArray = res.asInstanceOf[Array[Double]]
+    val exp = Array(361.0, 14.31, -2.1, 11+9.4, -5.0*28, 94.35*32.21)
+    val tol = 1e-8
+    assertArrayEquals(exp, resArray, tol)
+  }
+
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
     compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
   }

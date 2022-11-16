@@ -27,6 +27,9 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
       case Block(stats) =>
         addBracesList(stats, ";", onMultipleLines = true)
 
+      case Sequence(stats, expr) =>
+        addBracesList(stats :+ expr, ";", onMultipleLines = true)
+
       case FunDef(funName, args, optRetType, body) =>
         pps
           .add(Fn.str)
@@ -110,6 +113,9 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           .add("[")
         addAst(size)
         pps.add("]")
+
+      case FilledArrayInit(arrayElems) =>
+        addParenthList(arrayElems, parenth = ("[", "]"))
 
       case StructInit(structName, args) =>
         pps
@@ -295,16 +301,16 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
     }
   }
 
-  private def addParenthList(ls: List[Ast])(implicit pps: PrettyPrintString): Unit = {
+  private def addParenthList(ls: List[Ast], parenth: (String, String) = ("(", ")"))(implicit pps: PrettyPrintString): Unit = {
     val iter = ls.iterator
-    pps.add("(")
+    pps.add(parenth._1)
     while (iter.hasNext) {
       addAst(iter.next())
       if (iter.hasNext) {
         pps.add(", ")
       }
     }
-    pps.add(")")
+    pps.add(parenth._2)
   }
 
 }
