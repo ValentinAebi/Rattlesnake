@@ -360,6 +360,10 @@ final class Backend[V <: ClassVisitor](
     val newCtx = ctx.withNewLocalsFrame
     for stat <- stats do {
       generateCode(stat, newCtx)
+      stat match {
+        case expr: Expr if expr.getType != VoidType => mv.visitInsn(Opcodes.POP)
+        case _ => ()
+      }
     }
     optFinalExpr.foreach { finalExpr =>
       generateCode(finalExpr, newCtx)
