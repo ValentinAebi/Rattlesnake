@@ -37,11 +37,12 @@ object TasksPipelines {
    * Pipeline for formatting (src file -> formatted text file)
    */
   def formatter(directoryPath: Path, filename: String,
-                indentGranularity: Int, displayAllParentheses: Boolean = false): CompilerStep[SourceCodeProvider, Unit] = {
+                indentGranularity: Int, overwriteFileCallback: String => Boolean,
+                displayAllParentheses: Boolean = false): CompilerStep[SourceCodeProvider, Unit] = {
     val er = createErrorReporter
     frontend(er)
       .andThen(new PrettyPrinter(indentGranularity, displayAllParentheses))
-      .andThen(new StringWriter(directoryPath, filename, er))
+      .andThen(new StringWriter(directoryPath, filename, er, overwriteFileCallback))
   }
 
   /**
@@ -59,7 +60,8 @@ object TasksPipelines {
    * Pipeline for desugaring (src file -> desugared src file)
    */
   def desugarer(outputDirectoryPath: Path, filename: String,
-                indentGranularity: Int = 2, displayAllParentheses: Boolean = false): CompilerStep[SourceCodeProvider, Unit] = {
+                indentGranularity: Int = 2, overwriteFileCallback: String => Boolean,
+                displayAllParentheses: Boolean = false): CompilerStep[SourceCodeProvider, Unit] = {
     val er = createErrorReporter
     frontend(er)
       .andThen(Mapper(List(_)))
@@ -68,7 +70,7 @@ object TasksPipelines {
       .andThen(new Desugarer())
       .andThen(Mapper(_._1.head))
       .andThen(new PrettyPrinter(indentGranularity, displayAllParentheses))
-      .andThen(new StringWriter(outputDirectoryPath, filename, er))
+      .andThen(new StringWriter(outputDirectoryPath, filename, er, overwriteFileCallback))
   }
 
   private def compilerImpl[V <: ClassVisitor](outputDirectoryPath: Path,

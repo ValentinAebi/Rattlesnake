@@ -136,7 +136,7 @@ object Main {
   }
 
   private def getOutDirArg(argsMap: MutArgsMap): Path = {
-    Paths.get(getValuedArg("out-dir", argsMap, None))
+    Paths.get(getValuedArg("out-dir", argsMap, Some(".")))
   }
 
   private def getJavaVersionArg(argsMap: MutArgsMap): Int = {
@@ -244,6 +244,7 @@ object Main {
         getOutDirArg(argsMap),
         getOutputNameArg(sources, argsMap, Path.of(sources.head.name).getFileName.toString),
         getIndentGranularityArg(argsMap),
+        quest => yesNoQuestion(quest),
         getPrintAllParenthesesArg(argsMap)
       )
       reportUnknownArgsIfAny(argsMap)
@@ -275,6 +276,7 @@ object Main {
         getOutDirArg(argsMap),
         getOutputNameArg(sources, argsMap, Path.of(sources.head.name).getFileName.toString),
         getIndentGranularityArg(argsMap),
+        quest => yesNoQuestion(quest),
         getPrintAllParenthesesArg(argsMap)
       )
       reportUnknownArgsIfAny(argsMap)
@@ -349,6 +351,20 @@ object Main {
   private object Loader extends ClassLoader(Thread.currentThread().getContextClassLoader) {
     def load(name: String, bytes: Array[Byte]): Class[_] = {
       super.defineClass(name, bytes, 0, bytes.length)
+    }
+  }
+
+  @tailrec private def yesNoQuestion(prompt: String): Boolean = {
+    println(prompt)
+    val input = scala.io.StdIn.readLine()
+    val lowerCaseInput = input.toLowerCase
+    if (Set("y", "yes").contains(lowerCaseInput)) {
+      true
+    } else if (Set("n", "no").contains(lowerCaseInput)){
+      false
+    } else {
+      println("expected 'yes' or 'no'")
+      yesNoQuestion(prompt)
     }
   }
 
