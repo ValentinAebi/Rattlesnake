@@ -3,7 +3,7 @@
 Statically typed imperative toy programming language, compiled to the JVM
 
 ```
-fn joinWords(words: arr String, endSymbol: String) -> String {
+fn joinWords(words: arr String, endSymbol: Char) -> String {
     var joined = "";
     for var i = 0; i < #words; i += 1 {
         joined += words[i];
@@ -11,14 +11,15 @@ fn joinWords(words: arr String, endSymbol: String) -> String {
             joined += " ";
         }
     };
-    return joined + endSymbol
+    return joined + charToString(endSymbol)
 }
 
 fn main(args: arr String){
     val msgWords = ["Hello", "world"];
-    val msg = joinWords(msgWords, "!");
+    val msg = joinWords(msgWords, '!');
     print(msg)   // displays "Hello world!"
 }
+
 ```
 
 ## References
