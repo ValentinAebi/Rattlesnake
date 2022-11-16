@@ -1,4 +1,16 @@
+fn joinWords(words: arr String, endSymbol: String) -> String {
+    var joined = "";
+    for var i = 0; i < #words; i += 1 {
+        joined += words[i];
+        if i < #words-1 {
+            joined += " ";
+        }
+    };
+    return joined + endSymbol
+}
 
 fn main(args: arr String){
-    print("Hello world!")
+    val msgWords = ["Hello", "world"];
+    val msg = joinWords(msgWords, "!");
+    print(msg)   // displays "Hello world!"
 }
