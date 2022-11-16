@@ -15,6 +15,11 @@ object Errors {
    */
   val fatalErrorExitCode: Int = -21
 
+  /**
+   * Compilation error or warning
+   * 
+   * Ordered according to their position in the program
+   */
   sealed trait CompilationError extends Ordered[CompilationError] {
     val compilationStep: CompilationStep
     val msg: String
@@ -45,8 +50,14 @@ object Errors {
     }
   }
 
+  /**
+   * Non fatal error or warning
+   */
   sealed trait NonFatal extends CompilationError
 
+  /**
+   * Fatal error, should terminate the compiler immediately
+   */
   final case class Fatal(compilationStep: CompilationStep, msg: String, posOpt: Option[Position]) extends CompilationError {
     override val errorLevelDescr: String = "FATAL"
   }
@@ -56,6 +67,9 @@ object Errors {
       new Fatal(compilationStep, msg, Some(pos))
   }
 
+  /**
+   * Non fatal error, should terminate the compiler at the end of the current compilation step
+   */
   final case class Err(compilationStep: CompilationStep, msg: String, posOpt: Option[Position]) extends NonFatal {
     override val errorLevelDescr: String = "error"
   }
@@ -65,6 +79,9 @@ object Errors {
       new Err(compilationStep, msg, Some(pos))
   }
 
+  /**
+   * Warning: should be reported to the user, but not terminate the compiler
+   */
   final case class Warning(compilationStep: CompilationStep, msg: String, posOpt: Option[Position]) extends NonFatal {
     override val errorLevelDescr: String = "warning"
   }

@@ -14,6 +14,9 @@ trait CompilerStep[In, Out] {
 
 }
 
+/**
+ * Runs `threadPipeline` on multiple inputs
+ */
 final case class MultiStep[In, Out](threadPipeline: CompilerStep[In, Out]) extends CompilerStep[List[In], List[Out]] {
 
   override def apply(input: List[In]): List[Out] = {
@@ -21,6 +24,9 @@ final case class MultiStep[In, Out](threadPipeline: CompilerStep[In, Out]) exten
   }
 }
 
+/**
+ * Compiler step that performs a transformation using `f`
+ */
 final case class Mapper[In, Out](f: In => Out) extends CompilerStep[In, Out] {
   override def apply(input: In): Out = f(input)
 }

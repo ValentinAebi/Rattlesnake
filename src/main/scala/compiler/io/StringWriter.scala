@@ -1,6 +1,6 @@
 package compiler.io
 
-import compiler.Errors.{CompilationError, ErrorReporter, Err}
+import compiler.Errors.{CompilationError, Err, ErrorReporter}
 import compiler.{CompilationStep, CompilerStep}
 
 import java.io.FileWriter

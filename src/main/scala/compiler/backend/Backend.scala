@@ -1,12 +1,12 @@
 package compiler.backend
 
 import compiler.CompilationStep.CodeGeneration
-import compiler.Errors.{CompilationError, ErrorReporter, Fatal, Err}
+import compiler.Errors.{CompilationError, Err, ErrorReporter, Fatal}
+import compiler.backend.BuiltinFunctionsImpl.*
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
 import compiler.backend.TypesConverter.{convertToAsmType, convertToAsmTypeCode, internalNameOf, opcodeFor}
 import compiler.irs.Asts.*
 import compiler.{AnalysisContext, CompilerStep, FileExtensions}
-import BuiltinFunctionsImpl.*
 import lang.Operator.*
 import lang.Types.PrimitiveType.*
 import lang.Types.{ArrayType, PrimitiveType, StructType}
@@ -21,6 +21,13 @@ import java.nio.file.{Files, Path}
 import scala.collection.immutable.Nil
 import scala.util.{Failure, Success, Try, Using}
 
+/**
+ * Generates the output files: 1 core file, containing the program, and 1 file per struct
+ * @param mode cf nested class [[Backend.Mode]]
+ * @param outputDirBase output directory path (will be extended with `/out`)
+ * @param outputName name of the output file
+ * @tparam V depends on the mode
+ */
 final class Backend[V <: ClassVisitor](
                                         mode: Backend.Mode[V],
                                         errorReporter: ErrorReporter,
@@ -39,7 +46,7 @@ final class Backend[V <: ClassVisitor](
     }
     else {
 
-      val outputDir = outputDirBase.resolve("out")
+      // Create lists of all the functions and structs in the program
 
       val functionsBuilder = List.newBuilder[FunDef]
       val structsBuilder = List.newBuilder[StructDef]
@@ -51,8 +58,11 @@ final class Backend[V <: ClassVisitor](
       val functions = functionsBuilder.result()
       val structs = structsBuilder.result()
 
+      // create output directory if it does not already exist
+      val outputDir = outputDirBase.resolve("out")
       Files.createDirectories(outputDir)
 
+      // paths to the output files containing the structs
       val structFilesPaths = {
         for struct <- structs yield {
           val structFilePath = outputDir.resolve(mode.withExtension(struct.structName))
@@ -65,7 +75,10 @@ final class Backend[V <: ClassVisitor](
         }
       }
 
+      // path to the core file
       val coreFilePath = outputDir.resolve(mode.withExtension(outputName))
+
+      // traverse the program
       val cv: V = mode.createVisitor(coreFilePath)
       cv.visit(javaVersionCode, ACC_PUBLIC, outputName, null, objectTypeStr, null)
       for function <- functions do {
@@ -135,6 +148,7 @@ final class Backend[V <: ClassVisitor](
       // typechecker ensures that callee is a VariableRef
       case Call(VariableRef(name), args) => {
 
+        // will be used as a callback when generating built-in functions
         val generateArgs: () => Unit = { () =>
           for arg <- args do {
             generateCode(arg, ctx)
@@ -284,22 +298,29 @@ final class Backend[V <: ClassVisitor](
 
       case VarAssig(lhs, rhs) =>
         lhs match {
+
+          // x = ...
           case VariableRef(name) =>
             generateCode(rhs, ctx)
             val (varType, varIdx) = ctx.getLocal(name)
             val opcode = opcodeFor(varType, Opcodes.ISTORE, Opcodes.ASTORE)
             mv.visitVarInsn(opcode, varIdx)
+
+          // x[y] = ...
           case Indexing(indexed, arg) =>
             generateCode(indexed, ctx)
             generateCode(arg, ctx)
             generateCode(rhs, ctx)
             val elemType = indexed.getType.asInstanceOf[ArrayType].elemType
             mv.visitInsn(opcodeFor(elemType, Opcodes.IASTORE, Opcodes.AASTORE))
+
+          // x.y = ...
           case Select(ownerStruct, fieldName) =>
             generateCode(ownerStruct, ctx)
             generateCode(rhs, ctx)
             val ownerName = ownerStruct.getType.asInstanceOf[StructType].typeName
             mv.visitFieldInsn(Opcodes.PUTFIELD, ownerName, fieldName, descriptorForType(rhs.getType))
+
           case _ => shouldNotHappen()
         }
 
@@ -343,6 +364,7 @@ final class Backend[V <: ClassVisitor](
         mv.visitInsn(Opcodes.RETURN)
 
       case PanicStat(msg) =>
+        // throw an exception
         mv.visitTypeInsn(NEW, "java/lang/RuntimeException")
         mv.visitInsn(DUP)
         generateCode(msg, ctx)
@@ -360,6 +382,7 @@ final class Backend[V <: ClassVisitor](
     val newCtx = ctx.withNewLocalsFrame
     for stat <- stats do {
       generateCode(stat, newCtx)
+      // if unused value put on the stack then drop it
       stat match {
         case expr: Expr if expr.getType != VoidType => mv.visitInsn(Opcodes.POP)
         case _ => ()
@@ -367,6 +390,7 @@ final class Backend[V <: ClassVisitor](
     }
     optFinalExpr.foreach { finalExpr =>
       generateCode(finalExpr, newCtx)
+      // do not drop that value since it is the resulting value of the sequence
     }
   }
 
@@ -376,6 +400,14 @@ final class Backend[V <: ClassVisitor](
                                   thenBr: Statement,
                                   elseBrOpt: Option[Statement]
                                 )(implicit mv: MethodVisitor, outputName: String): Unit = {
+    /*
+    * if !cond then goto falseLabel
+    *    <then branch>
+    *    goto endLabel
+    * falseLabel:
+    *    <elseBranch>
+    * endLabel:
+    */
     generateCode(cond, ctx)
     val falseLabel = new Label()
     val endLabel = new Label()
@@ -393,6 +425,9 @@ final class Backend[V <: ClassVisitor](
 
 object Backend {
 
+  /**
+   * Each mode injects specific behavior into the Backend where it differs between binary generation and textual bytecode generation
+   */
   sealed trait Mode[V <: ClassVisitor] {
     val extension: String
 
@@ -403,6 +438,9 @@ object Backend {
     final def withExtension(filename: String): String = s"$filename.$extension"
   }
 
+  /**
+   * Use this mode to generate JVM binaries (.class)
+   */
   case object BinaryMode extends Mode[ClassWriter] {
 
     override val extension: String = FileExtensions.binary
@@ -425,6 +463,9 @@ object Backend {
     }
   }
 
+  /**
+   * Use this mode to generate textual JVM bytecode files
+   */
   case object AssemblyMode extends Mode[TraceClassVisitor] {
 
     override val extension: String = FileExtensions.assembly

@@ -2,13 +2,24 @@ package lang
 
 import lang.Types.PrimitiveType.NothingType
 
+/**
+ * Subtyping rules: all types are independant (none is a supertype/subtype or another one), except that 
+ * Nothing is a subtype of any type
+ */
 object Types {
 
   sealed trait Type {
+
+    /**
+     * @return `true` iff `this` is a subtype of `that`
+     */
     def subtypeOf(that: Type): Boolean = {
       this == that || this == NothingType
     }
-    
+
+    /**
+     * @return `true` iff one of `this` and `that` is a subtype of the other
+     */
     def subtypeOrSupertype(that: Type): Boolean = {
       this.subtypeOf(that) || that.subtypeOf(this)
     }
@@ -30,11 +41,18 @@ object Types {
   def primTypeFor(str: String): Option[PrimitiveType] = {
     PrimitiveType.values.find(_.str == str)
   }
-  
+
+  /**
+   * Type of a structure instance
+   */
   final case class StructType(typeName: String) extends Type {
     override def toString: String = typeName
   }
-  
+
+  /**
+   * Type of an array
+   * @param elemType type of array elements
+   */
   final case class ArrayType(elemType: Type) extends Type {
     override def toString: String = s"arr $elemType"
   }

@@ -1,9 +1,12 @@
 package compiler.ctxcreator
 
-import compiler.{AnalysisContext, CompilerStep}
 import compiler.Errors.ErrorReporter
 import compiler.irs.Asts.{FunDef, Source, StructDef}
+import compiler.{AnalysisContext, CompilerStep}
 
+/**
+ * Compiler pass to generate an [[AnalysisContext]]
+ */
 final class ContextCreator(errorReporter: ErrorReporter) extends CompilerStep[List[Source], (List[Source], AnalysisContext)] {
 
   override def apply(sources: List[Source]): (List[Source], AnalysisContext) = {

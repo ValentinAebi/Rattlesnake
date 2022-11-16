@@ -8,18 +8,24 @@ import scala.annotation.targetName
 
 object Operators {
 
+  /**
+   * Signature of an unary operator
+   */
   final case class UnaryOpSignature(op: Operator, operandType: Type, retType: Type)
 
+  /**
+   * Signature of a binary operator
+   */
   final case class BinaryOpSignature(leftOperandType: Type, op: Operator, rightOperandType: Type, retType: Type)
 
-  // len is treated separately
+  // # is treated separately
   val unaryOperators: List[UnaryOpSignature] = List(
     UnaryOpSignature(Minus, IntType, IntType),
     UnaryOpSignature(Minus, DoubleType, DoubleType),
     UnaryOpSignature(ExclamationMark, BoolType, BoolType)
   )
   
-  def unaryOpFor(operator: Operator, operand: Type): Option[UnaryOpSignature] = {
+  def unaryOperatorSignatureFor(operator: Operator, operand: Type): Option[UnaryOpSignature] = {
     unaryOperators.find {
       case UnaryOpSignature(op, operandType, _) =>
         operator == op && operand.subtypeOf(operandType)
@@ -54,7 +60,7 @@ object Operators {
     StringType $ Plus $ StringType is StringType
   )
 
-  def binaryOpFor(left: Type, operator: Operator, right: Type): Option[BinaryOpSignature] = {
+  def binaryOperatorSigFor(left: Type, operator: Operator, right: Type): Option[BinaryOpSignature] = {
     binaryOperators.find {
       case BinaryOpSignature(leftOperandType, op, rightOperandType, _) =>
         left.subtypeOf(leftOperandType) && op == operator && right.subtypeOf(rightOperandType)
@@ -68,6 +74,9 @@ object Operators {
     DivEq -> Div,
     ModuloEq -> Modulo
   )
+  
+  
+  // Binop signature DSL implementation --------------------------------------------
 
   private case class PartialBinop1(leftOperandType: Type, op: Operator) {
     @targetName("andThen") def $(rightOperandType: Type): PartialBinop2 = {

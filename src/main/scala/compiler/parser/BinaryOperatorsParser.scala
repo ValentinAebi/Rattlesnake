@@ -1,10 +1,10 @@
 package compiler.parser
 
 import compiler.Errors.ErrorReporter
-import compiler.parser.ParseTree.^:
-import compiler.parser.TreeParsers.*
 import compiler.irs.Asts.{BinaryOp, Expr}
 import compiler.irs.Tokens.OperatorToken
+import compiler.parser.ParseTree.^:
+import compiler.parser.TreeParsers.*
 import lang.Operator
 
 import scala.annotation.tailrec
@@ -13,11 +13,15 @@ object BinaryOperatorsParser {
 
   private def op(operators: List[Operator])(implicit errorReporter: ErrorReporter): FinalTreeParser[Operator] = {
     val descr = s"operator(s) ${operators.mkString(",")}"
-    treeParser(descr){
+    treeParser(descr) {
       case OperatorToken(operator) if operators.contains(operator) => operator
     } setName descr
   }
 
+  /**
+   * Builds a parser for expressions using the given operators, respecting their precedence
+   * @param operand parser accepting the operands of the expressions that the resulting parser should admit
+   */
   def buildFrom(operatorsByDecreasingPrecedence: List[List[Operator]], operand: AnyTreeParser[Expr])
                (implicit errorReporter: ErrorReporter): AnyTreeParser[Expr] = {
 
@@ -31,13 +35,13 @@ object BinaryOperatorsParser {
             currOperand ::: repeat(op(headOps) ::: currOperand) map {
               case leftOperand ^: Nil => leftOperand
               case leftOperand ^: opSeq =>
-                opSeq.foldLeft(leftOperand){
+                opSeq.foldLeft(leftOperand) {
                   (left, opAndRight) => BinaryOp(left, opAndRight.left, opAndRight.right)
                 }
             }
           }
           newParser.setName(s"priority $priorityLevel expression")
-          recurse(newParser, tailOps, priorityLevel-1)
+          recurse(newParser, tailOps, priorityLevel - 1)
       }
     }
 

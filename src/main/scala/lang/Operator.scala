@@ -1,5 +1,8 @@
 package lang
 
+/**
+ * Operator or separator
+ */
 enum Operator(val str: String) {
 
   case Assig extends Operator("=")

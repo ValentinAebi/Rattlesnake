@@ -13,7 +13,10 @@ import scala.collection.mutable
 
 final case class AnalysisContext(functions: Map[String, FunctionSignature], structs: Map[String, StructSignature]){
 
-  // do not use @tailrec, even though Intellij suggests it: crashes the CI
+  /**
+   * Returns `true` iff `tpe` is known (primitive type, known struct or array of a known type)
+   */
+  // do not use @tailrec, even though Intellij suggests it: fails the CI
   def knowsType(tpe: Type): Boolean = {
     tpe match {
       case _: Types.PrimitiveType => true

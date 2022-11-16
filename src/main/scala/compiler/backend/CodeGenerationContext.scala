@@ -2,18 +2,24 @@ package compiler.backend
 
 import compiler.AnalysisContext
 import compiler.backend.CodeGenerationContext.from
-import lang.Types.{PrimitiveType, Type}
 import lang.Types.PrimitiveType.*
+import lang.Types.{PrimitiveType, Type}
 
 import scala.annotation.tailrec
 import scala.collection.mutable
 
 final class CodeGenerationContext(val analysisContext: AnalysisContext, locals: List[mutable.Map[String, (Type, Int)]], var currLocalIdx: Int) {
 
+  /**
+   * @return a copy of this with a new empty local frame added on top of it
+   */
   def withNewLocalsFrame: CodeGenerationContext = {
     new CodeGenerationContext(analysisContext, mutable.Map.empty[String, (Type, Int)] :: locals, currLocalIdx)
   }
 
+  /**
+   * Register a new local
+   */
   def addLocal(name: String, tpe: Type): Unit = {
     locals.head.put(name, (tpe, currLocalIdx))
     currLocalIdx += numSlotsFor(tpe)

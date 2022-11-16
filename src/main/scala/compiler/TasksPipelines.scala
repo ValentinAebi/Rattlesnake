@@ -1,29 +1,41 @@
 package compiler
 
 import compiler.Errors.ErrorReporter
+import compiler.backend.Backend
 import compiler.ctxcreator.ContextCreator
 import compiler.desugarer.Desugarer
-import compiler.lexer.Lexer
-import compiler.parser.Parser
-import compiler.typechecker.TypeChecker
-import compiler.backend.Backend
 import compiler.io.StringWriter
 import compiler.irs.Asts
+import compiler.lexer.Lexer
+import compiler.parser.Parser
 import compiler.prettyprinter.PrettyPrinter
+import compiler.typechecker.TypeChecker
 import org.objectweb.asm.ClassVisitor
 
 import java.nio.file.Path
 
+/**
+ * Contains methods producing pipelines for different tasks, indicated by their name
+ */
 object TasksPipelines {
 
+  /**
+   * Pipeline for compilation (src file -> .class file)
+   */
   def compiler(outputDirectoryPath: Path, javaVersionCode: Int, outputName: String): CompilerStep[List[SourceCodeProvider], List[Path]] = {
     compilerImpl(outputDirectoryPath, Backend.BinaryMode, javaVersionCode, outputName)
   }
 
+  /**
+   * Pipeline for bytecode writing (src file -> asm text file)
+   */
   def bytecodeWriter(outputDirectoryPath: Path, javaVersionCode: Int, outputName: String): CompilerStep[List[SourceCodeProvider], List[Path]] = {
     compilerImpl(outputDirectoryPath, Backend.AssemblyMode, javaVersionCode, outputName)
   }
 
+  /**
+   * Pipeline for formatting (src file -> formatted text file)
+   */
   def formatter(directoryPath: Path, filename: String,
                 indentGranularity: Int, displayAllParentheses: Boolean = false): CompilerStep[SourceCodeProvider, Unit] = {
     val er = createErrorReporter
@@ -32,6 +44,9 @@ object TasksPipelines {
       .andThen(new StringWriter(directoryPath, filename, er))
   }
 
+  /**
+   * Pipeline for typechecker (src file -> side effects of error reporting)
+   */
   val typeChecker: CompilerStep[List[SourceCodeProvider], Unit] = {
     val er = createErrorReporter
     MultiStep(frontend(er))
@@ -40,6 +55,9 @@ object TasksPipelines {
       .andThen(Mapper(_ => println("no error found")))
   }
 
+  /**
+   * Pipeline for desugaring (src file -> desugared src file)
+   */
   def desugarer(outputDirectoryPath: Path, filename: String,
                 indentGranularity: Int = 2, displayAllParentheses: Boolean = false): CompilerStep[SourceCodeProvider, Unit] = {
     val er = createErrorReporter

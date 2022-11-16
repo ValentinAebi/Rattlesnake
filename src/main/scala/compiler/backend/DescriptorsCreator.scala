@@ -1,10 +1,13 @@
 package compiler.backend
 
-import lang.{FunctionSignature, Types}
 import lang.Types.{PrimitiveType, Type}
+import lang.{FunctionSignature, Types}
 
 object DescriptorsCreator {
 
+  /**
+   * @return JVM descriptor for [[tpe]]
+   */
   def descriptorForType(tpe: Type): String = {
     tpe match
       case PrimitiveType.IntType => "I"
@@ -19,6 +22,9 @@ object DescriptorsCreator {
       case Types.UndefinedType => assert(false)
   }
 
+  /**
+   * @return JVM descriptor for [[funSig]]
+   */
   def descriptorForFunc(funSig: FunctionSignature): String = {
     val FunctionSignature(_, argTypes, retType) = funSig
     argTypes.map(descriptorForType).mkString("(", "", ")") ++ descriptorForType(retType)

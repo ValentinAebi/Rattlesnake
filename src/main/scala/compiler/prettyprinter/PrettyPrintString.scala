@@ -2,10 +2,16 @@ package compiler.prettyprinter
 
 import scala.collection.mutable
 
+/**
+ * Offers methods for pretty printing, especially for indentation
+ */
 final class PrettyPrintString(indentGranularity: Int) {
   require(indentGranularity > 0)
   
+  // currIndentLevel*indentGranularity spaces will be added before each line
   private var currIndentLevel: Int = 0
+  
+  // buffer containing the lines, added one by one
   private val lines = new mutable.ListBuffer[String]()
 
   def incrementIndent(): PrettyPrintString = {

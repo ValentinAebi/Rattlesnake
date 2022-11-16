@@ -3,13 +3,12 @@ import compiler.io.SourceFile
 import compiler.parser.LL1Iterator
 import compiler.{FileExtensions, SourceCodeProvider, TasksPipelines}
 import lang.Types.ArrayType
+import lang.Types.PrimitiveType.StringType
 import org.objectweb.asm.Opcodes.{V11, V17, V1_8}
 
 import java.nio.file.{Files, InvalidPathException, Path, Paths}
 import scala.annotation.tailrec
 import scala.collection.mutable
-
-import lang.Types.PrimitiveType.StringType
 
 object Main {
 
@@ -94,6 +93,12 @@ object Main {
     }
   }
 
+  /**
+   * Parse the arguments of a command
+   * @param alrParsed already parsed
+   * @param rem remaining words to parse
+   * @return a map arg -> value
+   */
   @tailrec private def parseArgs(alrParsed: List[(String, Option[String])], rem: List[String]): MutArgsMap = {
     rem match {
       case Nil => mutable.Map.from(alrParsed)
@@ -159,10 +164,15 @@ object Main {
     arrayStr.tail.init.split(' ')
   }
 
+  // Actions, i.e. description of commands to the cmdline program -----------------------------------------------
+
   private trait Action {
     def run(sources: List[SourceCodeProvider]): Unit
   }
 
+  /**
+   * Run command (compile and run)
+   */
   private case class Run(argsMap: MutArgsMap) extends Action {
     override def run(sources: List[SourceCodeProvider]): Unit = {
       val outputName = getOutputNameArg(sources, argsMap, createDefaultBytecodeOutputName(sources))
@@ -190,6 +200,9 @@ object Main {
     }
   }
 
+  /**
+   * Compile command
+   */
   private case class Compile(argsMap: MutArgsMap) extends Action {
     override def run(sources: List[SourceCodeProvider]): Unit = {
       val compiler = TasksPipelines.compiler(
@@ -203,6 +216,9 @@ object Main {
     }
   }
 
+  /**
+   * ASM command (generate JVM bytecode as a text file)
+   */
   private case class Asm(argsMap: MutArgsMap) extends Action {
     override def run(sources: List[SourceCodeProvider]): Unit = {
       val bytecodeWriter = TasksPipelines.bytecodeWriter(
@@ -216,6 +232,9 @@ object Main {
     }
   }
 
+  /**
+   * Format command (format a file)
+   */
   private case class Format(argsMap: MutArgsMap) extends Action {
     override def run(sources: List[SourceCodeProvider]): Unit = {
       if (sources.size != 1) {
@@ -233,6 +252,9 @@ object Main {
     }
   }
 
+  /**
+   * Typecheck command (typecheck a file)
+   */
   private case class TypeCheck(argsMap: MutArgsMap) extends Action {
     override def run(sources: List[SourceCodeProvider]): Unit = {
       reportUnknownArgsIfAny(argsMap)
@@ -241,6 +263,9 @@ object Main {
     }
   }
 
+  /**
+   * Desugar command (show the file after desugaring)
+   */
   private case class Desugar(argsMap: MutArgsMap) extends Action {
     override def run(sources: List[SourceCodeProvider]): Unit = {
       if (sources.size != 1) {
@@ -320,6 +345,7 @@ object Main {
     else str.head.toUpper +: str.tail
   }
 
+  /** Class loader to load generated .class files when executing the `run` command */
   private object Loader extends ClassLoader(Thread.currentThread().getContextClassLoader) {
     def load(name: String, bytes: Array[Byte]): Class[_] = {
       super.defineClass(name, bytes, 0, bytes.length)

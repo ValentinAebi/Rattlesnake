@@ -2,6 +2,8 @@ package compiler
 
 /**
  * Position in a source (typically a source file)
+ *
+ * Ordered according to lexicographic ordering of srcCodeProviderName, then line, and finally column
  */
 final case class Position(srcCodeProviderName: String, line: Int, col: Int) extends Ordered[Position] {
   require(srcCodeProviderName != null)
@@ -13,8 +15,8 @@ final case class Position(srcCodeProviderName: String, line: Int, col: Int) exte
 
   override def compare(that: Position): Int = {
     val fileNamesComp = this.srcCodeProviderName.compareTo(that.srcCodeProviderName)
-    lazy val lineComp = this.line.compareTo(that.line)
-    lazy val colComp = this.col.compareTo(that.col)
+    val lineComp = this.line.compareTo(that.line)
+    val colComp = this.col.compareTo(that.col)
     if fileNamesComp != 0 then fileNamesComp
     else if lineComp != 0 then lineComp
     else colComp

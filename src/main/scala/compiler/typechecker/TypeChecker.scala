@@ -113,7 +113,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
           case varRef@VariableRef(name) =>
             ctx.functions.get(name) match {
               case Some(funSig) =>
-                varRef.setTypeOpt(Some(UndefinedType)) // useless but o.w. the check that all expressions have a type fails
+                varRef.setType(UndefinedType) // useless but o.w. the check that all expressions have a type fails
                 checkCallArgs(funSig.argTypes, args, ctx, call.getPosition)
                 funSig.retType
 
@@ -174,7 +174,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
             reportError("operator # can only be applied to arrays", unaryOp.getPosition)
           }
         } else {
-          Operators.unaryOpFor(operator, operandType) match {
+          Operators.unaryOperatorSignatureFor(operator, operandType) match {
             case Some(sig) => sig.retType
             case None =>
               reportError(s"no definition of operator '$operator' found for operand '$operandType'", unaryOp.getPosition)
@@ -190,7 +190,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
           }
           BoolType
         } else {
-          Operators.binaryOpFor(lhsType, operator, rhsType) match {
+          Operators.binaryOperatorSigFor(lhsType, operator, rhsType) match {
             case Some(sig) => sig.retType
             case None =>
               reportError(s"no definition of operator '$operator' found for operands '$lhsType' and '$rhsType'", binOp.getPosition)
@@ -245,7 +245,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
           case VariableRef(name) =>
             ctx.locals.get(name) match {
               case Some((tpe, mut)) if mut =>
-                Operators.binaryOpFor(tpe, op, rhsType) match {
+                Operators.binaryOperatorSigFor(tpe, op, rhsType) match {
                   case Some(opSig) =>
                     lhs.setType(tpe)
                     if (!opSig.retType.subtypeOf(tpe)) {
@@ -261,7 +261,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
             }
           case indexingOrSelect: (Indexing | Select) =>
             val lhsType = check(indexingOrSelect, ctx)
-            Operators.binaryOpFor(lhsType, op, rhsType) match {
+            Operators.binaryOperatorSigFor(lhsType, op, rhsType) match {
               case Some(opSig) =>
                 if (!opSig.retType.subtypeOf(lhsType)) {
                   reportError(s"$lhsType ${op.str} $rhsType ==> ${opSig.retType}, not ${op.str}", varModif.getPosition)
@@ -340,8 +340,6 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
     tpe
   }
 
-  private case class EndStatus(returned: Set[Type], alwaysStopped: Boolean)
-
   private def checkCallArgs(expTypes: List[Type], args: List[Expr], ctx: TypeCheckingContext, callPos: Option[Position]): Unit = {
     val expTypesIter = expTypes.iterator
     val argsIter = args.iterator
@@ -367,6 +365,16 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
     }
   }
 
+  /**
+   * @param returned types of all the expressions found after a `return`
+   * @param alwaysStopped indicates whether the control-flow can reach the end of the considered construct without
+   *                      encountering an instruction that terminates the function (`return` or `panic`)
+   */
+  private case class EndStatus(returned: Set[Type], alwaysStopped: Boolean)
+
+  /**
+   * Traverses the program, looking for instructions that end the function they are in (`return` and `panic`)
+   */
   private def checkReturns(ast: Ast): EndStatus = {
     ast match {
 
@@ -437,7 +445,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
     }
   }
 
-  private def reportError(msg: String, pos: Option[Position], isWarning: Boolean = false): Type = {
+  private def reportError(msg: String, pos: Option[Position], isWarning: Boolean = false): UndefinedType.type = {
     errorReporter.push(if isWarning then Warning(TypeChecking, msg, pos) else Err(TypeChecking, msg, pos))
     UndefinedType
   }
