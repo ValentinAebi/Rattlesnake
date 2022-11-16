@@ -88,6 +88,7 @@ object Main {
           case "format" => (Format(argsMap), files)
           case "typecheck" => (TypeCheck(argsMap), files)
           case "desugar" => (Desugar(argsMap), files)
+          case _ => error(s"unknown command: $cmd")
         }
       }
     }
