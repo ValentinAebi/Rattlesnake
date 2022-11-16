@@ -1,7 +1,4 @@
 
 TODO support for constants
-TODO end of line character and `++` for string concatenation
-TODO cmdline program
 TODO language description in README
 TODO more tests (especially on `TypeChecker`)
-TODO comment code
