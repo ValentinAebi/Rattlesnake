@@ -216,6 +216,21 @@ class CompilerTests {
     assertEquals("a b19512.8912", res)
   }
 
+  @Test
+  def doubleComparisonTest(): Unit = {
+
+    def refImpl(xs: Array[Double]) = {
+      require(xs.length == 2)
+      xs(0) >= xs(1)
+    }
+
+    val inputs = List(Array(14.71, -9.48), Array(11.11, 72.21), Array(-8.9, 0.5), Array(7.7, 7.7))
+    val res = compileAndExecSeveralIter("doublecomp", "isGreaterOrEqual", inputs.map(Array(_)))
+    inputs.map(refImpl).zip(res).foreach { (exp, act) =>
+      assertEquals(exp, act)
+    }
+  }
+
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
     compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
   }
