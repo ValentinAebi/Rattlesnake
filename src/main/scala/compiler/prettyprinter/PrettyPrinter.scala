@@ -248,6 +248,13 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           addAst(value)
         }
 
+      case Cast(expr, tpe) =>
+        addAst(expr)
+        pps
+          .add(As.str)
+          .addSpace()
+          .add(tpe.toString)
+
       case PanicStat(msg) =>
         pps
           .add(Panic.str)

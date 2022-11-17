@@ -5,7 +5,7 @@ import compiler.Errors.{CompilationError, Err, ErrorReporter, Warning}
 import compiler.irs.Asts.*
 import compiler.{AnalysisContext, CompilerStep, Position}
 import lang.Operator.{Equality, Inequality, Sharp}
-import lang.Operators
+import lang.{Operators, TypeConversion}
 import lang.Types.*
 import lang.Types.PrimitiveType.*
 
@@ -322,6 +322,13 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       case ReturnStat(valueOpt) =>
         valueOpt.foreach(check(_, ctx))
         VoidType
+
+      case cast@Cast(expr, tpe) =>
+        if (TypeConversion.conversionFor(check(expr, ctx), tpe).isDefined){
+          tpe
+        } else {
+          reportError(s"cannot cast ${expr.getType} to $tpe", cast.getPosition)
+        }
 
       case panicStat@PanicStat(msg) =>
         val msgType = check(msg, ctx)

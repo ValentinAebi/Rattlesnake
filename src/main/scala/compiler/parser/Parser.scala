@@ -142,7 +142,10 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "assignmentStat"
 
   private lazy val expr: P[Expr] = recursive {
-    BinaryOperatorsParser.buildFrom(Operator.operatorsByPriorityDecreasing, noBinopExpr)
+    BinaryOperatorsParser.buildFrom(Operator.operatorsByPriorityDecreasing, noBinopExpr) ::: opt(kw(As).ignored ::: tpe) map {
+      case expression ^: None => expression
+      case expression ^: Some(tp) => Cast(expression, tp)
+    }
   } setName "expr"
 
   private lazy val noBinopExpr = recursive {

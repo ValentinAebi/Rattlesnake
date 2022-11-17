@@ -210,6 +210,12 @@ class CompilerTests {
     }
   }
 
+  @Test
+  def castTest(): Unit = {
+    val res = compileAndExecOneIter("typecasts", "testFunc")
+    assertEquals("a b19512.8912", res)
+  }
+
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
     compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
   }

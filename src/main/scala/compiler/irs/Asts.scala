@@ -330,6 +330,13 @@ object Asts {
   }
 
   /**
+   * Cast, e.g. `x as Int`
+   */
+  final case class Cast(expr: Expr, tpe: Type) extends Expr {
+    override def children: List[Ast] = List(expr)
+  }
+
+  /**
    * `panic` statement
    */
   final case class PanicStat(msg: Expr) extends Statement {

@@ -10,7 +10,7 @@ import compiler.{AnalysisContext, CompilerStep, FileExtensions}
 import lang.Operator.*
 import lang.Types.PrimitiveType.*
 import lang.Types.{ArrayType, PrimitiveType, StructType}
-import lang.{BuiltInFunctions, Types}
+import lang.{BuiltInFunctions, TypeConversion, Types}
 import org.objectweb.asm
 import org.objectweb.asm.*
 import org.objectweb.asm.Opcodes.*
@@ -385,6 +385,16 @@ final class Backend[V <: ClassVisitor](
 
       case ReturnStat(None) =>
         mv.visitInsn(Opcodes.RETURN)
+
+      case Cast(expr, tpe) => {
+        generateCode(expr, ctx)
+        // typechecker checked that it is defined, so .get without check
+        TypeConversion.conversionFor(expr.getType, tpe).get match
+          case TypeConversion.Int2Double => mv.visitInsn(Opcodes.I2D)
+          case TypeConversion.Double2Int => mv.visitInsn(Opcodes.D2I)
+          case TypeConversion.IntToChar => mv.visitInsn(Opcodes.I2C)
+          case TypeConversion.CharToInt => ()
+      }
 
       case PanicStat(msg) =>
         // throw an exception

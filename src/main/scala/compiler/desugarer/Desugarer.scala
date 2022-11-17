@@ -158,6 +158,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
       }
       case select: Select => Select(desugar(select.lhs), select.selected)
       case Ternary(cond, thenBr, elseBr) => Ternary(desugar(cond), desugar(thenBr), desugar(elseBr))
+      case Cast(expr, tpe) => Cast(desugar(expr), tpe)
       case Sequence(stats, expr) => Sequence(stats.map(desugar), desugar(expr))
     }
     desugared.setTypeOpt(expr.getTypeOpt)
