@@ -1,0 +1,14 @@
+
+fn stringEq(s1: String, s2: String) -> Bool {
+   if #s1 != #s2 {
+      return false
+   };
+   val arr1 = toCharArray(s1);
+   val arr2 = toCharArray(s2);
+   for var i = 0; i < #s1; i += 1 {
+      if arr1[i] != arr2[i] {
+         return false
+      }
+   };
+   return true
+}

@@ -33,7 +33,8 @@ final class Backend[V <: ClassVisitor](
                                         errorReporter: ErrorReporter,
                                         outputDirBase: Path,
                                         javaVersionCode: Int,
-                                        outputName: String
+                                        outputName: String,
+                                        functionsToInject: List[FunDef]
                                       ) extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
 
   private val objectTypeStr = "java/lang/Object"
@@ -81,7 +82,7 @@ final class Backend[V <: ClassVisitor](
       // traverse the program
       val cv: V = mode.createVisitor(coreFilePath)
       cv.visit(javaVersionCode, ACC_PUBLIC, outputName, null, objectTypeStr, null)
-      for function <- functions do {
+      for function <- (functions ++ functionsToInject) do {
         val mv = cv.visitMethod(ACC_PUBLIC | ACC_STATIC, function.funName, descriptorForFunc(function.signature), null, null)
         generateFunction(function, mv, analysisContext, outputName)
       }
@@ -212,7 +213,10 @@ final class Backend[V <: ClassVisitor](
       case UnaryOp(operator, operand) =>
         generateCode(operand, ctx)
         operator match {
-          case Sharp => mv.visitInsn(Opcodes.ARRAYLENGTH)
+          case Sharp if operand.getType.isInstanceOf[ArrayType] =>
+            mv.visitInsn(Opcodes.ARRAYLENGTH)
+          case Sharp if operand.getType == StringType =>
+            mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, stringTypeStr, "length", "()I", false)
           case _ => throw new AssertionError(s"unexpected $operator in code generation")
         }
 
@@ -220,7 +224,25 @@ final class Backend[V <: ClassVisitor](
         generateCode(lhs, ctx)
         generateCode(rhs, ctx)
         val tpe = lhs.getType
-        if (operator == Equality) {
+        if (operator == Equality && tpe == DoubleType) {
+          /*
+           *   if (lhs compare rhs) == 0 goto trueLabel:
+           *   push false
+           *   goto endLabel
+           * trueLabel:
+           *   push true
+           * endLabel:
+           */
+          val trueLabel = new Label()
+          val endLabel = new Label()
+          mv.visitInsn(Opcodes.DCMPL)
+          mv.visitJumpInsn(Opcodes.IFEQ, trueLabel)
+          mv.visitInsn(Opcodes.ICONST_0)
+          mv.visitJumpInsn(Opcodes.GOTO, endLabel)
+          mv.visitLabel(trueLabel)
+          mv.visitInsn(Opcodes.ICONST_1)
+          mv.visitLabel(endLabel)
+        } else if (operator == Equality) {
           /*
            *   if lhs == rhs goto trueLabel:
            *   push false
@@ -229,9 +251,9 @@ final class Backend[V <: ClassVisitor](
            *   push true
            * endLabel:
            */
-          val opcode = opcodeFor(tpe, Opcodes.IF_ICMPEQ, Opcodes.IF_ACMPEQ)
           val trueLabel = new Label()
           val endLabel = new Label()
+          val opcode = if tpe.isInstanceOf[StructType] then Opcodes.IF_ACMPEQ else Opcodes.IF_ICMPEQ
           mv.visitJumpInsn(opcode, trueLabel)
           mv.visitInsn(Opcodes.ICONST_0)
           mv.visitJumpInsn(Opcodes.GOTO, endLabel)

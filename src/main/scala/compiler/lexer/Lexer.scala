@@ -129,6 +129,7 @@ final class Lexer(errorReporter: ErrorReporter) extends CompilerStep[SourceCodeP
       case Success(lines) => {
         val indexedLines = lines.toList.zipWithIndex
         val tokenizedLines = indexedLines.map((line, idx) => tokenizeLine(line, idx, sourceCodeProvider))
+        errorReporter.displayAndTerminateIfErrors()
         val positionedTokens =
           for (line, lineIdx) <- tokenizedLines.zipWithIndex; (token, colIdx) <- line yield {
             PositionedToken(token, Position(sourceCodeProvider, line = lineIdx + 1, col = colIdx + 1))

@@ -168,10 +168,10 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       case unaryOp@UnaryOp(operator, operand) =>
         val operandType = check(operand, ctx)
         if (operator == Sharp) {
-          if (operandType.isInstanceOf[ArrayType]) {
+          if (operandType.isInstanceOf[ArrayType] || operandType == StringType) {
             IntType
           } else {
-            reportError("operator # can only be applied to arrays", unaryOp.getPosition)
+            reportError("operator # can only be applied to arrays and strings", unaryOp.getPosition)
           }
         } else {
           Operators.unaryOperatorSignatureFor(operator, operandType) match {

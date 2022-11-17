@@ -1,10 +1,10 @@
 package compiler.desugarer
 
 import compiler.irs.Asts.*
-import compiler.{AnalysisContext, CompilerStep}
+import compiler.{AnalysisContext, CompilerStep, FunctionsToInject}
 import lang.Operator.*
 import lang.Operators
-import lang.Types.PrimitiveType.{BoolType, DoubleType, IntType}
+import lang.Types.PrimitiveType.{BoolType, DoubleType, IntType, StringType}
 import lang.Types.{ArrayType, UndefinedType}
 
 /**
@@ -114,6 +114,15 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
           case ExclamationMark => Ternary(desugaredOperand, BoolLit(false), BoolLit(true))
           case _ => UnaryOp(operator, desugaredOperand)
         }
+
+      case BinaryOp(lhs, Equality, rhs) if lhs.getType == StringType => {
+        val desugaredLhs = desugar(lhs)
+        val desugaredRhs = desugar(rhs)
+        Call(
+          VariableRef(FunctionsToInject.stringEqualityMethodName).setType(UndefinedType),
+          List(desugaredLhs, desugaredRhs)
+        ).setType(BoolType)
+      }
         
       case binaryOp: BinaryOp => {
         val desugaredLhs = desugar(binaryOp.lhs)

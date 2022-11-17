@@ -51,7 +51,7 @@ object TasksPipelines {
   val typeChecker: CompilerStep[List[SourceCodeProvider], Unit] = {
     val er = createErrorReporter
     MultiStep(frontend(er))
-      .andThen(new ContextCreator(er))
+      .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
       .andThen(new TypeChecker(er))
       .andThen(Mapper(_ => println("no error found")))
   }
@@ -65,7 +65,7 @@ object TasksPipelines {
     val er = createErrorReporter
     frontend(er)
       .andThen(Mapper(List(_)))
-      .andThen(new ContextCreator(er))
+      .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
       .andThen(new TypeChecker(er))
       .andThen(new Desugarer())
       .andThen(Mapper(_._1.head))
@@ -79,10 +79,10 @@ object TasksPipelines {
                                               outputName: String) = {
     val er = createErrorReporter
     MultiStep(frontend(er))
-      .andThen(new ContextCreator(er))
+      .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
       .andThen(new TypeChecker(er))
       .andThen(new Desugarer())
-      .andThen(new Backend(backendMode, er, outputDirectoryPath, javaVersionCode, outputName))
+      .andThen(new Backend(backendMode, er, outputDirectoryPath, javaVersionCode, outputName, FunctionsToInject.functionsToInject))
   }
 
   private def frontend(er: ErrorReporter) = {

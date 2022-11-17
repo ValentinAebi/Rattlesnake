@@ -1,0 +1,17 @@
+
+struct Foo { x: Int }
+
+fn testFunc() -> arr Bool {
+    val str = "Hello!";
+    val test0 = "" == "";                         // exp: true
+    val test1 = "a" + "b" + "c" == "abc";         // exp: true
+    val test2 = new Foo { 0 } == new Foo { 0 };   // exp: false
+    val test3 = 10.42 == 10.42;                   // exp: true
+    val test4 = str == str;                       // exp: true
+    val test5 = "ab" == "abc";                    // exp: false
+    val test6 = true == true;                     // exp: true
+    val test7 = false == true;                    // exp: false
+    val test8 = 'c' == 'd';                       // exp: false
+    val test9 = 'a' == 'a';                       // exp: true
+    return [test0, test1, test2, test3, test4, test5, test6, test7, test8, test9]
+}

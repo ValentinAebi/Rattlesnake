@@ -192,6 +192,24 @@ class CompilerTests {
     }
   }
 
+  @Test
+  def equalityTest(): Unit = {
+    val res = compileAndExecOneIter("equality", "testFunc")
+    assertTrue(res.isInstanceOf[Array[Boolean]])
+    val exp = Array(true, true, false, true, true, false, true, false, false, true)
+    def convert(b: Boolean) = if b then 1 else 0
+    assertArrayEquals(exp.map(convert), res.asInstanceOf[Array[Boolean]].map(convert))
+  }
+
+  @Test
+  def strLenTest(): Unit = {
+    val inputs = List("programming language", "foo", "", "compilation")
+    val results = compileAndExecSeveralIter("stringlen", "testFunc", inputs.map(Array(_)))
+    for (exp, act) <- inputs.map(_.length).zip(results) do {
+      assertEquals(exp, act)
+    }
+  }
+
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
     compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
   }

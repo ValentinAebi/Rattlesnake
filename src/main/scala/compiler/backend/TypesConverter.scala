@@ -3,13 +3,20 @@ package compiler.backend
 import lang.Types
 import lang.Types.{ArrayType, PrimitiveType, StructType}
 import org.objectweb.asm
-import org.objectweb.asm.Opcodes
+import org.objectweb.asm.{Opcodes, Type}
 import org.objectweb.asm.Type.*
+import Opcodes.*
 
 object TypesConverter {
 
+  private def safeGetOpcode(tpe: Type, intOpcode: Int): Int = {
+    val allowedOpcodes = Set(ILOAD, ISTORE, IALOAD, IASTORE, IADD, ISUB, IMUL, IDIV, IREM, INEG, ISHL, ISHR, IUSHR, IAND, IOR, IXOR, IRETURN)
+    require(allowedOpcodes.contains(intOpcode), s"unexpected opcode: $intOpcode")
+    tpe.getOpcode(intOpcode)
+  }
+
   def opcodeFor(tpe: Types.Type, intOpcode: Int, refOpcode: => Int): Int = {
-    convertToAsmType(tpe).map(_.getOpcode(intOpcode)).getOrElse(refOpcode)
+    convertToAsmType(tpe).map(safeGetOpcode(_, intOpcode)).getOrElse(refOpcode)
   }
 
   def convertToAsmType(tpe: Types.Type): Option[asm.Type] = {
