@@ -23,6 +23,8 @@ fn main(args: arr String){
 
 ```
 
+[Compiler documentation here](CompilerDoc.md)
+
 ## Language description
 
 The language does not support modules. All functions and data structures are top-level and identified by their textual name across the whole program. Functions and types can be referred to from inside the file that defines them or from another file in the exact same way.
