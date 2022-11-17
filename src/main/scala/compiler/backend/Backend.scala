@@ -162,6 +162,7 @@ final class Backend[V <: ClassVisitor](
             case BuiltInFunctions.doubleToString => generateDoubleToString(generateArgs)
             case BuiltInFunctions.boolToString => generateBoolToString(generateArgs)
             case BuiltInFunctions.charToString => generateCharToString(generateArgs)
+            case BuiltInFunctions.toCharArray => generateStringToCharArray(generateArgs)
             case _ => shouldNotHappen()
           }
         } else {

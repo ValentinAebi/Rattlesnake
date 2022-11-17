@@ -1,0 +1,4 @@
+
+fn testFunc(str: String) -> arr Char {
+    return toCharArray(str)
+}

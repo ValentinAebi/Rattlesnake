@@ -181,6 +181,17 @@ class CompilerTests {
     assertArrayEquals(exp, resArray, tol)
   }
 
+  @Test
+  def toCharArrayTest(): Unit = {
+    val inputs = List("abcde", "Programming language", "Rattle-snake")
+    val res = compileAndExecSeveralIter("strtochars", "testFunc", inputs.map(Array(_)))
+    assertEquals(inputs.length, res.length)
+    assertTrue(res.forall(_.isInstanceOf[Array[Char]]))
+    for (exp, act) <- inputs.zip(res) do {
+      assertArrayEquals(exp.toCharArray, act.asInstanceOf[Array[Char]])
+    }
+  }
+
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
     compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
   }

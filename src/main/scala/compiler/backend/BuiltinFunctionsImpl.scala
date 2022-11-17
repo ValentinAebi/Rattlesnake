@@ -1,8 +1,9 @@
 package compiler.backend
 
-import compiler.backend.DescriptorsCreator.descriptorForType
+import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
 import compiler.irs.Asts.Expr
 import lang.Types.PrimitiveType.*
+import lang.BuiltInFunctions
 import org.objectweb.asm.{MethodVisitor, Opcodes}
 
 object BuiltinFunctionsImpl {
@@ -27,6 +28,12 @@ object BuiltinFunctionsImpl {
 
   def generateBoolToString(generateArg: () => Unit)(implicit mv: MethodVisitor): Unit = {
     generateToStringFor("Boolean", descriptorForType(BoolType), mv, generateArg)
+  }
+
+  def generateStringToCharArray(generateArg: () => Unit)(implicit mv: MethodVisitor): Unit = {
+    generateArg()
+    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "toCharArray",
+      "()[C", false)
   }
   
   private def generateToStringFor(javaType: String, typeDescriptor: String, mv: MethodVisitor, generateArg: () => Unit): Unit = {
