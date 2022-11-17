@@ -109,7 +109,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "noParenthType"
 
   private lazy val tpe: P[Type] = recursive {
-    noParenthType OR (openParenth ::: noParenthType ::: closeParenth)
+    noParenthType OR (openParenth ::: tpe ::: closeParenth)
   } setName "tpe"
 
   private lazy val atomicType = {
@@ -163,7 +163,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     openingBracket ::: expr ::: closingBracket
   } setName "indexing"
 
-  private lazy val varRef = lowName map VariableRef.apply setName "varDef"
+  private lazy val varRef = lowName map VariableRef.apply setName "varRef"
 
   private lazy val selectOrCallChain = recursive {
     (varRef OR literalValue OR arrayInit OR filledArrayInit OR structInit OR parenthesizedExpr OR ternary
