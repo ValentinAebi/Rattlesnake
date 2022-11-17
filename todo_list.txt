@@ -1,4 +1,3 @@
 
 TODO support for constants
-TODO language description in README
 TODO more tests (especially on `TypeChecker`)
