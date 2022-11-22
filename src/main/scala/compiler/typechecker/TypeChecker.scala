@@ -324,7 +324,11 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         VoidType
 
       case cast@Cast(expr, tpe) =>
-        if (TypeConversion.conversionFor(check(expr, ctx), tpe).isDefined){
+        val exprTpe = check(expr, ctx)
+        if (exprTpe.subtypeOf(tpe)) {
+          reportError(s"useless conversion: '$exprTpe' --> '$tpe'", cast.getPosition, isWarning = true)
+          tpe
+        } else if (TypeConversion.conversionFor(exprTpe, tpe).isDefined){
           tpe
         } else {
           reportError(s"cannot cast ${expr.getType} to $tpe", cast.getPosition)

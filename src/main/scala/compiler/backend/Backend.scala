@@ -388,12 +388,14 @@ final class Backend[V <: ClassVisitor](
 
       case Cast(expr, tpe) => {
         generateCode(expr, ctx)
-        // typechecker checked that it is defined, so .get without check
-        TypeConversion.conversionFor(expr.getType, tpe).get match
-          case TypeConversion.Int2Double => mv.visitInsn(Opcodes.I2D)
-          case TypeConversion.Double2Int => mv.visitInsn(Opcodes.D2I)
-          case TypeConversion.IntToChar => mv.visitInsn(Opcodes.I2C)
-          case TypeConversion.CharToInt => ()
+        if (!expr.getType.subtypeOf(tpe)){
+          // typechecker checked that it is defined, so .get without check
+          TypeConversion.conversionFor(expr.getType, tpe).get match
+            case TypeConversion.Int2Double => mv.visitInsn(Opcodes.I2D)
+            case TypeConversion.Double2Int => mv.visitInsn(Opcodes.D2I)
+            case TypeConversion.IntToChar => mv.visitInsn(Opcodes.I2C)
+            case TypeConversion.CharToInt => ()
+        }
       }
 
       case PanicStat(msg) =>
