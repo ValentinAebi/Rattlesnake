@@ -150,6 +150,9 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         }
         ArrayType(elemType)
 
+      case filledArrayInit@FilledArrayInit(Nil) =>
+        reportError("cannot infer type of empty array, use 'arr <type>[<size>]' instead", filledArrayInit.getPosition)
+
       case filledArrayInit@FilledArrayInit(arrayElems) =>
         val types = arrayElems.map(check(_, ctx))
         types.find(tpe => types.forall(_.subtypeOf(tpe))) match {
@@ -341,7 +344,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         }
         NothingType
 
-      case _: Param => assert(false)
+      case _: (Param | Sequence) => assert(false)
     }
     // if expression save type
     ast match {
