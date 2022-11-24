@@ -157,11 +157,12 @@ object Main {
   }
 
   private def getProgramArgsArg(argsMap: MutArgsMap): Array[String] = {
-    val arrayStr = getValuedArg("args", argsMap, Some("[]"))
+    val emptyArrStr = "[]"
+    val arrayStr = getValuedArg("args", argsMap, Some(emptyArrStr))
     if (!(arrayStr.startsWith("[") && arrayStr.endsWith("]"))){
       error("program arguments must be given as a list (surrounded by brackets and separated by whitespaces)")
     }
-    arrayStr.tail.init.split(' ')
+    if arrayStr == emptyArrStr then Array.empty else arrayStr.tail.init.split(' ')
   }
 
   // Actions, i.e. description of commands to the cmdline program -----------------------------------------------
