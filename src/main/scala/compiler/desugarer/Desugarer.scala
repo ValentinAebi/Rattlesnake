@@ -4,7 +4,7 @@ import compiler.irs.Asts.*
 import compiler.{AnalysisContext, CompilerStep, FunctionsToInject}
 import lang.Operator.*
 import lang.Operators
-import lang.Types.PrimitiveType.{BoolType, DoubleType, IntType, StringType}
+import lang.Types.PrimitiveType.*
 import lang.Types.{ArrayType, UndefinedType}
 
 /**
@@ -157,6 +157,18 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
         }
       }
       case select: Select => Select(desugar(select.lhs), select.selected)
+
+      // need to treat separately the case where one of the branches does not return (o.w. Java ASM crashes)
+      case Ternary(cond, thenBr, elseBr) if thenBr.getType == NothingType || elseBr.getType == NothingType => {
+        val valName = uniqueIdGenerator.next()
+        if (thenBr.getType == NothingType){
+          val ifStat = IfThenElse(cond, thenBr, None)
+          desugar(Sequence(List(ifStat), elseBr))
+        } else {
+          val ifStat = IfThenElse(UnaryOp(ExclamationMark, cond).setType(BoolType), elseBr, None)
+          desugar(Sequence(List(ifStat), thenBr))
+        }
+      }
       case Ternary(cond, thenBr, elseBr) => Ternary(desugar(cond), desugar(thenBr), desugar(elseBr))
       case Cast(expr, tpe) => Cast(desugar(expr), tpe)
       case Sequence(stats, expr) => Sequence(stats.map(desugar), desugar(expr))

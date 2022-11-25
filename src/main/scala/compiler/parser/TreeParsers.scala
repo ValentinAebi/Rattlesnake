@@ -535,7 +535,7 @@ object TreeParsers {
                                       opt1: Any, opt2: Any, name1: String,
                                       name2: String, situationDescr: String): Nothing = {
     val nKeep = 10
-    val remaining = ll1Iterator.remaining
+    val remaining = ll1Iterator.current :: ll1Iterator.remaining
     throw new Error(s"grammar is not LL1: conflict found: $situationDescr at ${
       remaining.take(nKeep)
     }${if remaining.size > nKeep then "..." else ""}\n" +

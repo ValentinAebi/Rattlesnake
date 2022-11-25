@@ -231,6 +231,16 @@ class CompilerTests {
     }
   }
 
+  @Test
+  def ternaryOperatorTest(): Unit = {
+    val arr1 = Array(12.7, 9.47, 11.2, 15.8, 19.8)
+    val arr2 = Array(74.82, -71.68, -11.45, 15.21, 9.999, -9.999)
+    val inputs = List(Array(arr1, "min"), Array(arr1, "max"), Array(arr2, "max"), Array(arr2, "min"))
+    val actualRes = compileAndExecSeveralIter("maxmin", "testFunc", inputs)
+    val expectedRes = List(arr1.min, arr1.max, arr2.max, arr2.min)
+    assertEquals(expectedRes, actualRes)
+  }
+
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
     compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
   }

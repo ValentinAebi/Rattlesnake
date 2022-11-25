@@ -104,7 +104,7 @@ final class Backend[V <: ClassVisitor](
     constructorVisitor.visitVarInsn(Opcodes.ALOAD, 0)
     constructorVisitor.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false)
     constructorVisitor.visitInsn(Opcodes.RETURN)
-    constructorVisitor.visitMaxs(0, 0)
+    constructorVisitor.visitMaxs(0, 0)  // parameters are ignored because mode is COMPUTE_FRAMES
     constructorVisitor.visitEnd()
   }
 
@@ -118,7 +118,7 @@ final class Backend[V <: ClassVisitor](
     if (ctx.analysisContext.functions.apply(funDef.funName).retType == VoidType) {
       mv.visitInsn(Opcodes.RETURN)
     }
-    mv.visitMaxs(0, 0)
+    mv.visitMaxs(0, 0)  // parameters are ignored because mode is COMPUTE_FRAMES
     mv.visitEnd()
   }
 

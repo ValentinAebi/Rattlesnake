@@ -142,7 +142,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "assignmentStat"
 
   private lazy val expr: P[Expr] = recursive {
-    BinaryOperatorsParser.buildFrom(Operator.operatorsByPriorityDecreasing, noBinopExpr) ::: opt(kw(As).ignored ::: tpe) map {
+    BinaryOperatorsParser.buildFrom(Operator.operatorsByPriorityDecreasing, binopArg) ::: opt(kw(As).ignored ::: tpe) map {
       case expression ^: None => expression
       case expression ^: Some(tp) => Cast(expression, tp)
     }
@@ -155,6 +155,10 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     }
   } setName "noBinopExpr"
 
+  private lazy val binopArg = recursive {
+    noBinopExpr OR ternary OR arrayInit OR structInit
+  } setName "binopArg"
+
   private lazy val callArgs = recursive {
     openParenth ::: repeatWithSep(expr, comma) ::: closeParenth
   } setName "callArgs"
@@ -165,9 +169,12 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   private lazy val varRef = lowName map VariableRef.apply setName "varRef"
 
+  private lazy val atomicExpr = {
+    varRef OR literalValue OR filledArrayInit OR parenthesizedExpr
+  } setName "atomicExpr"
+
   private lazy val selectOrCallChain = recursive {
-    (varRef OR literalValue OR arrayInit OR filledArrayInit OR structInit OR parenthesizedExpr OR ternary
-      ) ::: repeat((dot ::: lowName) OR callArgs OR indexing) map {
+    atomicExpr ::: repeat((dot ::: lowName) OR callArgs OR indexing) map {
       case callee ^: ls =>
         ls.foldLeft[Expr](callee) { (acc, curr) =>
           curr match {
@@ -237,7 +244,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     kw(When).ignored ::: expr ::: kw(Then).ignored ::: expr ::: kw(Else).ignored ::: expr map {
       case cond ^: thenBr ^: elseBr => Ternary(cond, thenBr, elseBr)
     }
-  }
+  } setName "ternary"
 
   private lazy val returnStat = {
     kw(Return).ignored ::: opt(expr) map (optRetVal => ReturnStat(optRetVal))
