@@ -182,7 +182,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         pps
           .add(If.str)
           .addSpace()
-        addAst(cond)
+        addCond(cond)
         pps.addSpace()
         addAst(thenBr)
         elseBrOpt.foreach { elseBr =>
@@ -197,7 +197,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         pps
           .add(When.str)
           .addSpace()
-        addAst(cond)
+        addCond(cond)
         pps
           .addSpace()
           .add(Then.str)
@@ -213,7 +213,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         pps
           .add(While.str)
           .addSpace()
-        addAst(cond)
+        addCond(cond)
         pps.addSpace()
         addAst(body)
 
@@ -261,6 +261,16 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           .addSpace()
         addAst(msg)
 
+    }
+  }
+
+  private def addCond(cond: Expr)(implicit pps: PrettyPrintString): Unit = {
+    if (displayAllParentheses) {
+      pps.add("(")
+    }
+    addAst(cond)
+    if (displayAllParentheses) {
+      pps.add(")")
     }
   }
 
