@@ -9,6 +9,8 @@ import compiler.lexer.Lexer
 import compiler.parser.Parser
 import compiler.typechecker.TypeChecker
 
+import scala.util.{Success, Try}
+
 /**
  * Handles the functions that should be added to any program
  *
@@ -17,6 +19,26 @@ import compiler.typechecker.TypeChecker
 object FunctionsToInject {
 
   val stringEqualityMethodName = "$stringEq"
+
+  private val stringEqualityCodeProvider = new SourceCodeProvider {
+    override def lines: Try[Seq[String]] = Success(
+      """fn stringEq(s1: String, s2: String) -> Bool {
+        |   if #s1 != #s2 {
+        |      return false
+        |   };
+        |   val arr1 = toCharArray(s1);
+        |   val arr2 = toCharArray(s2);
+        |   for var i = 0; i < #s1; i += 1 {
+        |      if arr1[i] != arr2[i] {
+        |         return false
+        |      }
+        |   };
+        |   return true
+        |}""".stripMargin.lines().toArray().toList.map(_.asInstanceOf[String])
+    )
+
+    override def name: String = stringEqualityMethodName
+  }
 
   private val stringEqualityFunction: FunDef = {
 
@@ -32,9 +54,9 @@ object FunctionsToInject {
         .andThen(new Desugarer())
 
     // load code of the function, desugar it and replace its name
-    val resFile = SourceFile("res/streq.rsn")
+    val resFile = stringEqualityCodeProvider
     val result = pipeline.apply(resFile)
-    val (List(Source(List(funDef: FunDef@unchecked))), _) = result
+    val (List(Source(List(funDef: FunDef @unchecked))), _) = result
     assert(funDef.funName == stringEqualityMethodName.tail)
     funDef.copy(funName = stringEqualityMethodName)
   }
