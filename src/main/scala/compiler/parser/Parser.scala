@@ -4,7 +4,8 @@ import compiler.Errors.{ErrorReporter, Fatal}
 import compiler.irs.Asts.*
 import compiler.irs.Tokens.*
 import compiler.parser.ParseTree.^:
-import compiler.parser.TreeParsers.{AnyTreeParser, FinalTreeParser, opt, recursive, repeat, repeatNonZero, repeatWithEnd, repeatWithSep, treeParser}
+import compiler.parser.TreeParsers.*
+import compiler.prettyprinter.PrettyPrinter
 import compiler.{CompilationStep, CompilerStep, Errors, Position}
 import lang.Keyword.*
 import lang.Operator.*
@@ -121,7 +122,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "arrayType"
 
   private lazy val block = recursive {
-    openBrace ::: opt(endl).ignored ::: repeatWithEnd(stat, semicolon) ::: closeBrace map {
+    openBrace ::: repeatWithEnd(stat, semicolon) ::: closeBrace map {
       stats => Block(stats)
     }
   } setName "block"
@@ -142,21 +143,25 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "assignmentStat"
 
   private lazy val expr: P[Expr] = recursive {
+    noTernaryExpr OR ternary
+  } setName "expr"
+
+  private lazy val noTernaryExpr: P[Expr] = recursive {
     BinaryOperatorsParser.buildFrom(Operator.operatorsByPriorityDecreasing, binopArg) ::: opt(kw(As).ignored ::: tpe) map {
       case expression ^: None => expression
       case expression ^: Some(tp) => Cast(expression, tp)
     }
-  } setName "expr"
+  } setName "noTernaryExpr"
 
   private lazy val noBinopExpr = recursive {
-    opt(unaryOperator) ::: selectOrCallChain map {
+    opt(unaryOperator) ::: selectOrIndexingChain map {
       case Some(unOp) ^: operand => UnaryOp(unOp, operand)
       case None ^: simpleExpr => simpleExpr
     }
   } setName "noBinopExpr"
 
   private lazy val binopArg = recursive {
-    noBinopExpr OR ternary OR arrayInit OR structInit
+    noBinopExpr OR arrayInit OR structInit
   } setName "binopArg"
 
   private lazy val callArgs = recursive {
@@ -167,24 +172,35 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     openingBracket ::: expr ::: closingBracket
   } setName "indexing"
 
-  private lazy val varRef = lowName map VariableRef.apply setName "varRef"
+  private lazy val varRefOrFunCall = recursive {
+    lowName ::: opt(callArgs) map {
+      case name ^: Some(args) =>
+        Call(VariableRef(name), args)
+      case name ^: None =>
+        VariableRef(name)
+    }
+  } setName "varRefOrCallArgs"
+
+  private lazy val funCall = recursive {
+    lowName ::: callArgs map {
+      case calleeName ^: args => Call(VariableRef(calleeName), args)
+    }
+  } setName "funCall"
 
   private lazy val atomicExpr = {
-    varRef OR literalValue OR filledArrayInit OR parenthesizedExpr
+    varRefOrFunCall OR literalValue OR filledArrayInit OR parenthesizedExpr
   } setName "atomicExpr"
 
-  private lazy val selectOrCallChain = recursive {
-    atomicExpr ::: repeat((dot ::: lowName) OR callArgs OR indexing) map {
-      case callee ^: ls =>
-        ls.foldLeft[Expr](callee) { (acc, curr) =>
-          curr match {
+  private lazy val selectOrIndexingChain = recursive {
+    atomicExpr ::: repeat((dot ::: lowName) OR indexing) map {
+      case atExpr ^: selOrInds =>
+        selOrInds.foldLeft(atExpr){ (acc, curr) =>
+          curr match
             case field: String => Select(acc, field)
-            case args: List[Expr] => Call(acc, args)
-            case index: Expr => Indexing(acc, index)
-          }
+            case idx: Expr => Indexing(acc, idx)
         }
     }
-  } setName "selectOrCallChain"
+  } setName "selectOrIndexingChain"
 
   private lazy val parenthesizedExpr = recursive {
     openParenth ::: expr ::: closeParenth
@@ -229,7 +245,8 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "whileLoop"
 
   private lazy val forLoop = recursive {
-    kw(For).ignored ::: repeatWithSep(valDef OR varDef OR assignmentStat, comma) ::: semicolon ::: expr ::: semicolon ::: repeatWithSep(assignmentStat, comma) ::: block map {
+    kw(For).ignored ::: repeatWithSep(valDef OR varDef OR assignmentStat, comma) ::: semicolon
+      ::: expr ::: semicolon ::: repeatWithSep(assignmentStat, comma) ::: block map {
       case initStats ^: cond ^: stepStats ^: body => ForLoop(initStats, cond, stepStats, body)
     }
   } setName "forLoop"
