@@ -6,6 +6,7 @@ import org.objectweb.asm
 import org.objectweb.asm.{Opcodes, Type}
 import org.objectweb.asm.Type.*
 import Opcodes.*
+import DescriptorsCreator.descriptorForType
 
 object TypesConverter {
 
@@ -50,7 +51,7 @@ object TypesConverter {
       case PrimitiveType.VoidType => "V"
       case PrimitiveType.NothingType => "V"
       case Types.StructType(typeName) => s"$typeName"
-      case Types.ArrayType(elemType) => s"[${internalNameOf(elemType)}"
+      case Types.ArrayType(elemType) => s"[${descriptorForType(elemType)}"
       case Types.UndefinedType => assert(false)
   }
 

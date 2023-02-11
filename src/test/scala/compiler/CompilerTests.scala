@@ -241,6 +241,15 @@ class CompilerTests {
     assertEquals(expectedRes, actualRes)
   }
 
+  @Test
+  def multiDimArrayTest(): Unit = {
+    val res = compileAndExecOneIter("muldimarray", "testF")
+    assertTrue(res.isInstanceOf[Array[Array[_]]])
+    val resArray = res.asInstanceOf[Array[Array[_]]]
+    assertEquals(1, resArray.length)
+    assertEquals(1, resArray(0).length)
+  }
+
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
     compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
   }
