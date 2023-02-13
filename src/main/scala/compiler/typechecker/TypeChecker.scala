@@ -74,6 +74,9 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
           val faultyTypeStr = faultyTypes.map("'" + _ + "'").mkString(", ")
           reportError(s"function '$funName' should return '$expRetType', found $faultyTypeStr", funDef.getPosition)
         }
+        if (expRetType == NothingType && !endStatus.alwaysStopped) {
+          reportError(s"cannot prove that function '$funName' with return type '$NothingType' cannot return", funDef.getPosition)
+        }
         VoidType
 
       case TestDef(_, body) =>
