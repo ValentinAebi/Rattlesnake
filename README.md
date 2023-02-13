@@ -165,6 +165,18 @@ The compiler replaces calls to these functions with special instructions.
 - `?ToString(...)` with `?` one of `int`, `double`, `char`, `bool`, and the corresponding parameter type: conversion to a string
 - `toCharArray(s: String)`: converts a string into an array of all its characters
 
+## Tests
+
+Tests are defined similarly to functions, but `fn` is replaced by `test` and there is no parameters list. Failures are reported using `panic`:
+```
+test exampleTest {
+    val i = 1 + 1;
+    if i != 2 {
+        panic "We have a problem!"
+    }
+}
+```
+
 ## References
 
 Lexer and parser are inspired from https://github.com/epfl-lara/silex and https://github.com/epfl-lara/scallion, respectively.
