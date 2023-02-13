@@ -22,15 +22,15 @@ object TasksPipelines {
   /**
    * Pipeline for compilation (src file -> .class file)
    */
-  def compiler(outputDirectoryPath: Path, javaVersionCode: Int, outputName: String): CompilerStep[List[SourceCodeProvider], List[Path]] = {
-    compilerImpl(outputDirectoryPath, Backend.BinaryMode, javaVersionCode, outputName)
+  def compiler(outputDirectoryPath: Path, javaVersionCode: Int, outputName: String, generateTests: Boolean): CompilerStep[List[SourceCodeProvider], List[Path]] = {
+    compilerImpl(outputDirectoryPath, Backend.BinaryMode, javaVersionCode, outputName, generateTests)
   }
 
   /**
    * Pipeline for bytecode writing (src file -> asm text file)
    */
   def bytecodeWriter(outputDirectoryPath: Path, javaVersionCode: Int, outputName: String): CompilerStep[List[SourceCodeProvider], List[Path]] = {
-    compilerImpl(outputDirectoryPath, Backend.AssemblyMode, javaVersionCode, outputName)
+    compilerImpl(outputDirectoryPath, Backend.AssemblyMode, javaVersionCode, outputName, true)
   }
 
   /**
@@ -76,13 +76,14 @@ object TasksPipelines {
   private def compilerImpl[V <: ClassVisitor](outputDirectoryPath: Path,
                                               backendMode: Backend.Mode[V],
                                               javaVersionCode: Int,
-                                              outputName: String) = {
+                                              outputName: String,
+                                              generateTests: Boolean) = {
     val er = createErrorReporter
     MultiStep(frontend(er))
       .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
       .andThen(new TypeChecker(er))
       .andThen(new Desugarer())
-      .andThen(new Backend(backendMode, er, outputDirectoryPath, javaVersionCode, outputName, FunctionsToInject.functionsToInject))
+      .andThen(new Backend(backendMode, er, outputDirectoryPath, javaVersionCode, outputName, FunctionsToInject.functionsToInject, generateTests))
   }
 
   private def frontend(er: ErrorReporter) = {

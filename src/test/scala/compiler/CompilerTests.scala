@@ -262,8 +262,8 @@ class CompilerTests {
    */
   private def compileAndExecSeveralIter(srcFileName: String, testedMethodName: String, argsPerIter: List[Array[_]]): List[Any] = {
     val tmpDir = Path.of(tmpTestDir, srcFileName)
-    val outputName = srcFileName.withHeadUppercase + "_core"
-    val compiler = TasksPipelines.compiler(tmpDir, javaVersionCode, outputName)
+    val outputName = srcFileName.withHeadUppercase + GenFilesNames.coreFilePostfix
+    val compiler = TasksPipelines.compiler(tmpDir, javaVersionCode, outputName, true)
     val testFile = SourceFile(s"src/test/res/$srcFileName.${FileExtensions.rattlesnake}")
     val writtenFilesPaths = compiler.apply(List(testFile))
     val classes = {
@@ -273,7 +273,7 @@ class CompilerTests {
         Loader.load(className, bytes)
       }
     }
-    val coreClass = classes.find(_.getName.endsWith("_core")).get
+    val coreClass = classes.find(_.getName.endsWith(GenFilesNames.coreFilePostfix)).get
     val method = coreClass.getDeclaredMethods.find(_.getName == testedMethodName).get
     for args <- argsPerIter yield {
       method.invoke(null, args: _*)

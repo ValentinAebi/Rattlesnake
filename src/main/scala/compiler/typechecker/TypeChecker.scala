@@ -76,6 +76,9 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         }
         VoidType
 
+      case TestDef(_, body) =>
+        check(body, ctx)
+
       case localDef@LocalDef(localName, optType, rhs, isReassignable) =>
         val inferredType = check(rhs, ctx)
         optType.foreach { expType =>

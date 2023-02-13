@@ -126,6 +126,13 @@ object Asts {
   }
 
   /**
+   * Test definition
+   */
+  final case class TestDef(testName: String, body: Block) extends TopLevelDef {
+    override def children: List[Ast] = List(body)
+  }
+
+  /**
    * Parameter of a function
    */
   final case class Param(paramName: String, tpe: Type) extends Ast {

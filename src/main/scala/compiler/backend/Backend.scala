@@ -6,7 +6,7 @@ import compiler.backend.BuiltinFunctionsImpl.*
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
 import compiler.backend.TypesConverter.{convertToAsmType, convertToAsmTypeCode, internalNameOf, opcodeFor}
 import compiler.irs.Asts.*
-import compiler.{AnalysisContext, CompilerStep, FileExtensions}
+import compiler.{AnalysisContext, CompilerStep, FileExtensions, GenFilesNames}
 import lang.Operator.*
 import lang.Types.PrimitiveType.*
 import lang.Types.{ArrayType, PrimitiveType, StructType}
@@ -18,7 +18,7 @@ import org.objectweb.asm.util.{Textifier, TraceClassVisitor}
 
 import java.io.{File, FileOutputStream, FileWriter, PrintWriter}
 import java.nio.file.{Files, Path}
-import scala.collection.immutable.Nil
+import scala.collection.immutable.{Nil, StringOps}
 import scala.util.{Failure, Success, Try, Using}
 
 /**
@@ -34,7 +34,8 @@ final class Backend[V <: ClassVisitor](
                                         outputDirBase: Path,
                                         javaVersionCode: Int,
                                         outputName: String,
-                                        functionsToInject: List[FunDef]
+                                        functionsToInject: List[FunDef],
+                                        generateTests: Boolean
                                       ) extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
 
   private val objectTypeStr = "java/lang/Object"
@@ -51,13 +52,16 @@ final class Backend[V <: ClassVisitor](
 
       val functionsBuilder = List.newBuilder[FunDef]
       val structsBuilder = List.newBuilder[StructDef]
+      val testsBuilder = List.newBuilder[TestDef]
       for src <- sources; df <- src.defs do {
         df match
           case funDef: FunDef => functionsBuilder.addOne(funDef)
           case structDef: StructDef => structsBuilder.addOne(structDef)
+          case testDef: TestDef => testsBuilder.addOne(testDef)
       }
       val functions = functionsBuilder.result()
       val structs = structsBuilder.result()
+      val tests = testsBuilder.result()
 
       // create output directory if it does not already exist
       val outputDir = outputDirBase.resolve("out")
@@ -88,8 +92,22 @@ final class Backend[V <: ClassVisitor](
       }
       cv.visitEnd()
       mode.terminate(cv, coreFilePath, errorReporter)
+
+      val testFilePath = outputDir.resolve(mode.withExtension(GenFilesNames.testFileName))
+      if (generateTests){
+        // traverse the tests
+        val tv: V = mode.createVisitor(testFilePath)
+        tv.visit(javaVersionCode, ACC_PUBLIC, GenFilesNames.testFileName, null, objectTypeStr, null)
+        for test <- tests do {
+          val mv = tv.visitMethod(ACC_PUBLIC | ACC_STATIC, GenFilesNames.testMethodPrefix ++ test.testName, "()Z", null, null)
+          generateTest(test, mv, analysisContext, outputName)
+        }
+        tv.visitEnd()
+        mode.terminate(tv, testFilePath, errorReporter)
+      }
+
       errorReporter.displayAndTerminateIfErrors()
-      coreFilePath :: structFilesPaths
+      (if generateTests then List(testFilePath) else Nil) ++ (coreFilePath :: structFilesPaths)
     }
 
   }
@@ -120,6 +138,38 @@ final class Backend[V <: ClassVisitor](
     }
     mv.visitMaxs(0, 0)  // parameters are ignored because mode is COMPUTE_FRAMES
     mv.visitEnd()
+  }
+
+  private def generateTest(testDef: TestDef, mv: MethodVisitor, analysisContext: AnalysisContext, outputName: String): Unit = {
+    val ctx = CodeGenerationContext.from(analysisContext)
+    val start = new Label()
+    val end = new Label()
+    val handler = new Label()
+    mv.visitCode()
+    mv.visitTryCatchBlock(start, end, handler, null)
+    mv.visitLabel(start)
+    generateCode(testDef.body, ctx)(mv, outputName)
+    generateCode(printCallFor(StringLit(s"    Test ${testDef.testName} PASSED\n")), ctx)(mv, outputName)
+    mv.visitLdcInsn(true)
+    mv.visitInsn(Opcodes.IRETURN)
+    mv.visitLabel(end)
+    mv.visitLabel(handler)
+    mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Throwable", "getMessage", "()Ljava/lang/String;", false)
+    mv.visitVarInsn(Opcodes.ASTORE, ctx.currLocalIdx)
+    val msgVarName = "$msg"
+    ctx.addLocal(msgVarName, StringType)
+    generateCode(
+      printCallFor(StringLit("/!\\ Test "), StringLit(testDef.testName), StringLit(" FAILED: "), VariableRef(msgVarName), StringLit("\n")),
+      ctx
+    )(mv, outputName)
+    mv.visitLdcInsn(false)
+    mv.visitInsn(Opcodes.IRETURN)
+    mv.visitMaxs(0, 0) // parameters are ignored because mode is COMPUTE_FRAMES
+    mv.visitEnd()
+  }
+
+  private def printCallFor(msgParts: Expr*): Call = {
+    Call(VariableRef(BuiltInFunctions.print), List(msgParts.reduceLeft(BinaryOp(_, Plus, _).setType(StringType))))
   }
 
   private def generateCode(ast: Ast, ctx: CodeGenerationContext)(implicit mv: MethodVisitor, outputName: String): Unit = {

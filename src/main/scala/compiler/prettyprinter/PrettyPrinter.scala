@@ -52,6 +52,14 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           .addSpace()
         addBracesList(fields, ",", onMultipleLines = true)
 
+      case TestDef(testName, body) =>
+        pps
+          .add(Test.str)
+          .addSpace()
+          .add(testName)
+        addAst(body)
+        
+
       case Param(paramName, tpe) =>
         pps
           .add(paramName)

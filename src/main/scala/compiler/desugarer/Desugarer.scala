@@ -49,6 +49,10 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
   private def desugar(structDef: StructDef): StructDef = {
     StructDef(structDef.structName, structDef.fields.map(desugar))
   }
+  
+  private def desugar(testDef: TestDef): TestDef = {
+    TestDef(testDef.testName, desugar(testDef.body))
+  }
 
   private def desugar(param: Param): Param = param
 
@@ -195,6 +199,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
     topLevelDef match
       case funDef: FunDef => desugar(funDef)
       case structDef: StructDef => desugar(structDef)
+      case testDef: TestDef => desugar(testDef)
   }
 
 }

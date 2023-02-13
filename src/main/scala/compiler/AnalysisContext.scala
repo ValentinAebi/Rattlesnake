@@ -3,7 +3,7 @@ package compiler
 import compiler.AnalysisContext
 import compiler.CompilationStep.ContextCreation
 import compiler.Errors.{CompilationError, Err, ErrorReporter, errorsExitCode}
-import compiler.irs.Asts.{FunDef, StructDef}
+import compiler.irs.Asts.{FunDef, StructDef, TestDef}
 import lang.Types.PrimitiveType.{NothingType, VoidType}
 import lang.Types.Type
 import lang.{BuiltInFunctions, FunctionSignature, StructSignature, Types}
@@ -11,7 +11,11 @@ import lang.{BuiltInFunctions, FunctionSignature, StructSignature, Types}
 import scala.annotation.tailrec
 import scala.collection.mutable
 
-final case class AnalysisContext(functions: Map[String, FunctionSignature], structs: Map[String, StructSignature]){
+final case class AnalysisContext(
+                                  functions: Map[String, FunctionSignature],
+                                  structs: Map[String, StructSignature],
+                                  tests: Set[String]
+                                ){
 
   /**
    * Returns `true` iff `tpe` is known (primitive type, known struct or array of a known type)
@@ -33,6 +37,7 @@ object AnalysisContext {
   final class Builder(errorReporter: ErrorReporter) {
     private val functions: mutable.Map[String, FunctionSignature] = mutable.Map.empty
     private val structs: mutable.Map[String, StructSignature] = mutable.Map.empty
+    private val tests: mutable.Set[String] = mutable.Set.empty
 
     def addFunction(funDef: FunDef): Unit = {
       val name = funDef.funName
@@ -64,10 +69,19 @@ object AnalysisContext {
         structs.put(name, sig)
       }
     }
+    
+    def addTest(testDef: TestDef): Unit = {
+      import testDef.testName
+      if (tests.contains(testName)){
+        errorReporter.push(Err(ContextCreation, s"redefinition of test $testName", testDef.getPosition))
+      } else {
+        tests.addOne(testName)
+      }
+    }
 
     def build(): AnalysisContext = {
       functions.addAll(BuiltInFunctions.builtInFunctions)
-      new AnalysisContext(functions.toMap, structs.toMap)
+      new AnalysisContext(functions.toMap, structs.toMap, tests.toSet)
     }
 
   }

@@ -1,7 +1,7 @@
 import compiler.Errors.{ErrorReporter, errorsExitCode}
 import compiler.io.SourceFile
 import compiler.parser.LL1Iterator
-import compiler.{FileExtensions, SourceCodeProvider, TasksPipelines}
+import compiler.{FileExtensions, SourceCodeProvider, TasksPipelines, GenFilesNames}
 import lang.Types.ArrayType
 import lang.Types.PrimitiveType.StringType
 import org.objectweb.asm.Opcodes.{V11, V17, V1_8}
@@ -87,6 +87,7 @@ object Main {
           case "format" => (Format(argsMap), files)
           case "typecheck" => (TypeCheck(argsMap), files)
           case "desugar" => (Desugar(argsMap), files)
+          case "test" => (Test(argsMap), files)
           case _ => error(s"unknown command: $cmd")
         }
       }
@@ -112,7 +113,7 @@ object Main {
   }
 
   private def createDefaultBytecodeOutputName(sources: List[SourceCodeProvider]): String = {
-    Path.of(sources.head.name).getFileName.toString.takeWhile(_ != '.').withHeadUppercase + "_core"
+    Path.of(sources.head.name).getFileName.toString.takeWhile(_ != '.').withHeadUppercase + GenFilesNames.coreFilePostfix
   }
 
   private def parseJavaVersion(str: String): Int = {
@@ -180,18 +181,13 @@ object Main {
       val compiler = TasksPipelines.compiler(
         getOutDirArg(argsMap),
         getJavaVersionArg(argsMap),
-        outputName
+        outputName,
+        false
       )
       val programArgs = getProgramArgsArg(argsMap)
       reportUnknownArgsIfAny(argsMap)
       val writtenFilesPaths = compiler.apply(sources)
-      val classes = {
-        for path <- writtenFilesPaths yield {
-          val bytes = Files.readAllBytes(path)
-          val className = path.getFileName.toString.takeWhile(_ != '.')
-          Loader.load(className, bytes)
-        }
-      }
+      val classes = getClasses(writtenFilesPaths)
       val coreClass = classes.find(_.getName == outputName).get
       val mainMethod = coreClass.getDeclaredMethods.find(_.getName == "main").getOrElse(error("no main function"))
       if (!mainMethod.getParameterTypes.sameElements(Array(classOf[Array[String]]))){
@@ -209,7 +205,8 @@ object Main {
       val compiler = TasksPipelines.compiler(
         getOutDirArg(argsMap),
         getJavaVersionArg(argsMap),
-        getOutputNameArg(sources, argsMap, createDefaultBytecodeOutputName(sources))
+        getOutputNameArg(sources, argsMap, createDefaultBytecodeOutputName(sources)),
+        false
       )
       reportUnknownArgsIfAny(argsMap)
       val cnt = compiler.apply(sources).size
@@ -286,6 +283,35 @@ object Main {
     }
   }
 
+  private case class Test(argsMap: MutArgsMap) extends Action {
+    override def run(sources: List[SourceCodeProvider]): Unit = {
+      val compiler = TasksPipelines.compiler(
+        getOutDirArg(argsMap),
+        getJavaVersionArg(argsMap),
+        getOutputNameArg(sources, argsMap, createDefaultBytecodeOutputName(sources)),
+        true
+      )
+      reportUnknownArgsIfAny(argsMap)
+      val writtenFilesPaths = compiler.apply(sources)
+      val classes = getClasses(writtenFilesPaths)
+      val testClass = classes.find(_.getName == GenFilesNames.testFileName).get
+      val testMethods = testClass.getDeclaredMethods.filter(_.getName.startsWith(GenFilesNames.testMethodPrefix))
+      println(">> Running tests\n")
+      var successCnt = 0
+      for (testMethod, idx) <- testMethods.zipWithIndex do {
+        print((idx+1).toString ++ " - ")
+        val ret = testMethod.invoke(null)
+        successCnt += (if ret.asInstanceOf[Boolean] then 1 else 0)
+      }
+      val testsCnt = testMethods.length
+      val failuresCnt = testsCnt - successCnt
+      println("\n-------------------------------------")
+      println(s"Passed: $successCnt | Failed: $failuresCnt")
+      println(s"$successCnt/$testsCnt : " ++ (if failuresCnt == 0 then "All tests passed" else "There were errors"))
+      println("-------------------------------------")
+    }
+  }
+
   private def error(msg: String): Nothing = {
     System.err.println(msg)
     System.exit(cmdLineExitCode)
@@ -353,6 +379,17 @@ object Main {
     def load(name: String, bytes: Array[Byte]): Class[_] = {
       super.defineClass(name, bytes, 0, bytes.length)
     }
+  }
+
+  private def getClasses(writtenFilesPaths: List[Path]) = {
+    val classes = {
+      for path <- writtenFilesPaths yield {
+        val bytes = Files.readAllBytes(path)
+        val className = path.getFileName.toString.takeWhile(_ != '.')
+        Loader.load(className, bytes)
+      }
+    }
+    classes
   }
 
   @tailrec private def yesNoQuestion(prompt: String): Boolean = {
