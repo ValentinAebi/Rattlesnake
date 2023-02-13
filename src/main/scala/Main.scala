@@ -365,6 +365,10 @@ object Main {
         |       -indent=...: optional, indent granularity (2 by default)
         |       -all-parenth: flag indicating that all parentheses should be displayed in expressions,
         |                     regardless of the priority of operations (takes no value)
+        |test: runs all the tests found in the given programs
+        | args: -out-dir=...: required, directory where to write the output file
+        |       -out-file=...: optional, output file name (by default <input file name>_core
+        |       -java-version=...: optional, can be '$java8Tag', '$java11Tag' or '$java17Tag' (default is '$java8Tag')
         |help: displays help (this)
         |""".stripMargin)
   }
