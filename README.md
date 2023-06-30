@@ -23,6 +23,8 @@ fn main(args: arr String){
 
 ```
 
+Example project: https://github.com/ValentinAebi/Rattlesnake-sudoku-solver
+
 [Compiler documentation here](CompilerDoc.md)
 
 ## Command-line program
