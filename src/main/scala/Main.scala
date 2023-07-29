@@ -1,11 +1,12 @@
 import compiler.Errors.{ErrorReporter, errorsExitCode}
 import compiler.io.SourceFile
 import compiler.parser.LL1Iterator
-import compiler.{FileExtensions, SourceCodeProvider, TasksPipelines, GenFilesNames}
+import compiler.{FileExtensions, GenFilesNames, SourceCodeProvider, TasksPipelines}
 import lang.Types.ArrayType
 import lang.Types.PrimitiveType.StringType
 import org.objectweb.asm.Opcodes.{V11, V17, V1_8}
 
+import java.lang.reflect.InvocationTargetException
 import java.nio.file.{Files, InvalidPathException, Path, Paths}
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -193,7 +194,13 @@ object Main {
       if (!mainMethod.getParameterTypes.sameElements(Array(classOf[Array[String]]))){
         error("no function with signature 'main(arr String)'")
       }
-      mainMethod.invoke(null, programArgs)
+      try {
+        mainMethod.invoke(null, programArgs)
+      } catch {
+        case e: InvocationTargetException =>
+          System.err.println("EXECUTION FAILED")
+          e.getCause.printStackTrace()
+      }
     }
   }
 
