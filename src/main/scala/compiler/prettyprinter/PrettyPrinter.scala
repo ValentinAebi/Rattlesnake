@@ -58,7 +58,19 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           .addSpace()
           .add(testName)
         addAst(body)
-        
+
+      case ConstDef(constName, tpeOpt, value) =>
+        pps
+          .add(Const.str)
+          .addSpace()
+          .add(constName)
+        tpeOpt.foreach { tpe =>
+          pps
+            .add(": ")
+            .add(tpe.toString)
+        }
+        pps.add(" = ")
+        addAst(value)
 
       case Param(paramName, tpe) =>
         pps

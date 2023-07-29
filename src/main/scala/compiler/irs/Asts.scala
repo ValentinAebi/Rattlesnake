@@ -134,9 +134,16 @@ object Asts {
   }
 
   /**
-   * Parameter of a function
+   * Parameter of a function or field of a struct
    */
   final case class Param(paramName: FunOrVarId, tpe: Type) extends Ast {
+    override def children: List[Ast] = Nil
+  }
+
+  /**
+   * Constant definition
+   */
+  final case class ConstDef(constName: FunOrVarId, tpeOpt: Option[Type], value: Literal) extends TopLevelDef {
     override def children: List[Ast] = Nil
   }
 
@@ -157,6 +164,8 @@ object Asts {
     val value: Any
 
     final override def children: List[Ast] = Nil
+
+    override def getTypeOpt: Option[Type]
   }
 
   /**

@@ -1,7 +1,7 @@
 package compiler.backend
 
 import compiler.CompilationStep.CodeGeneration
-import compiler.Errors.{CompilationError, Err, ErrorReporter, Fatal}
+import compiler.Errors.{CompilationError, Err, ErrorReporter, Fatal, errorsExitCode}
 import compiler.backend.BuiltinFunctionsImpl.*
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
 import compiler.backend.TypesConverter.{convertToAsmType, convertToAsmTypeCode, internalNameOf, opcodeFor}
@@ -49,68 +49,102 @@ final class Backend[V <: ClassVisitor](
     }
     else {
 
-      // Create lists of all the functions and structs in the program
-
       val functionsBuilder = List.newBuilder[FunDef]
       val structsBuilder = List.newBuilder[StructDef]
       val testsBuilder = List.newBuilder[TestDef]
+      val constsBuilder = List.newBuilder[ConstDef]
       for src <- sources; df <- src.defs do {
         df match
           case funDef: FunDef => functionsBuilder.addOne(funDef)
           case structDef: StructDef => structsBuilder.addOne(structDef)
           case testDef: TestDef => testsBuilder.addOne(testDef)
+          case constDef: ConstDef => constsBuilder.addOne(constDef)
       }
       val functions = functionsBuilder.result()
       val structs = structsBuilder.result()
       val tests = testsBuilder.result()
+      val consts = constsBuilder.result()
 
       // create output directory if it does not already exist
       val outputDir = outputDirBase.resolve("out")
       Files.createDirectories(outputDir)
 
-      // paths to the output files containing the structs
-      val structFilesPaths = {
-        for struct <- structs yield {
-          val structFilePath = outputDir.resolve(mode.withExtension(struct.structName.stringId))
-          val cv = mode.createVisitor(structFilePath)
-          cv.visit(javaVersionCode, ACC_PUBLIC, struct.structName.stringId, null, objectTypeStr, null)
-          generateStruct(struct, cv)
-          cv.visitEnd()
-          mode.terminate(cv, structFilePath, errorReporter)
-          structFilePath
-        }
-      }
+      val structFilesPaths = generateStructs(structs, outputDir)
 
-      // path to the core file
       val coreFilePath = outputDir.resolve(mode.withExtension(outputName))
+      generateCoreFile(analysisContext, functions, coreFilePath)
 
-      // traverse the program
-      val cv: V = mode.createVisitor(coreFilePath)
-      cv.visit(javaVersionCode, ACC_PUBLIC, outputName, null, objectTypeStr, null)
-      for function <- (functions ++ functionsToInject) do {
-        val mv = cv.visitMethod(ACC_PUBLIC | ACC_STATIC, function.funName.stringId, descriptorForFunc(function.signature), null, null)
-        generateFunction(function, mv, analysisContext, outputName)
-      }
-      cv.visitEnd()
-      mode.terminate(cv, coreFilePath, errorReporter)
+      val constantsFilePath = outputDir.resolve(mode.withExtension(GenFilesNames.constantsFileName))
+      generateConstantsFile(consts, constantsFilePath)
 
       val testFilePath = outputDir.resolve(mode.withExtension(GenFilesNames.testFileName))
       if (generateTests){
-        // traverse the tests
-        val tv: V = mode.createVisitor(testFilePath)
-        tv.visit(javaVersionCode, ACC_PUBLIC, GenFilesNames.testFileName, null, objectTypeStr, null)
-        for test <- tests do {
-          val mv = tv.visitMethod(ACC_PUBLIC | ACC_STATIC, GenFilesNames.testMethodPrefix ++ test.testName.stringId, "()Z", null, null)
-          generateTest(test, mv, analysisContext, outputName)
-        }
-        tv.visitEnd()
-        mode.terminate(tv, testFilePath, errorReporter)
+        generateTestsFile(analysisContext, tests, testFilePath)
       }
 
       errorReporter.displayAndTerminateIfErrors()
-      (if generateTests then List(testFilePath) else Nil) ++ (coreFilePath :: structFilesPaths)
+      (if generateTests then List(testFilePath) else Nil) ++ (coreFilePath :: constantsFilePath :: structFilesPaths)
     }
 
+  }
+
+  private def generateTestsFile(analysisContext: AnalysisContext, tests: List[TestDef], testFilePath: Path): Unit = {
+    val tv: V = mode.createVisitor(testFilePath)
+    tv.visit(javaVersionCode, ACC_PUBLIC, GenFilesNames.testFileName, null, objectTypeStr, null)
+    for test <- tests do {
+      val mv = tv.visitMethod(
+        ACC_PUBLIC | ACC_STATIC,
+        GenFilesNames.testMethodPrefix ++ test.testName.stringId,
+        "()Z",
+        null,
+        null
+      )
+      generateTest(test, mv, analysisContext, outputName)
+    }
+    tv.visitEnd()
+    mode.terminate(tv, testFilePath, errorReporter)
+  }
+
+  private def generateConstantsFile(consts: List[ConstDef], constantsFilePath: Path): Unit = {
+    val ccv: V = mode.createVisitor(constantsFilePath)
+    ccv.visit(javaVersionCode, ACC_PUBLIC, GenFilesNames.constantsFileName, null, objectTypeStr, null)
+    for const <- consts do {
+      ccv.visitField(
+        ACC_PUBLIC | ACC_STATIC,
+        const.constName.stringId,
+        descriptorForType(const.value.getType),
+        null,
+        const.value.value
+      )
+    }
+    ccv.visitEnd()
+    mode.terminate(ccv, constantsFilePath, errorReporter)
+  }
+
+  private def generateCoreFile(analysisContext: AnalysisContext, functions: List[FunDef], coreFilePath: Path): Unit = {
+    val cv: V = mode.createVisitor(coreFilePath)
+    cv.visit(javaVersionCode, ACC_PUBLIC, outputName, null, objectTypeStr, null)
+    for function <- (functions ++ functionsToInject) do {
+      val mv = cv.visitMethod(ACC_PUBLIC | ACC_STATIC, function.funName.stringId, descriptorForFunc(function.signature), null, null)
+      generateFunction(function, mv, analysisContext, outputName)
+    }
+    cv.visitEnd()
+    mode.terminate(cv, coreFilePath, errorReporter)
+  }
+
+  private def generateStructs(structs: List[StructDef], outputDir: Path) = {
+    val structFilesPaths = {
+      for struct <- structs yield {
+        val structFilePath = outputDir.resolve(mode.withExtension(struct.structName.stringId))
+        val cv = mode.createVisitor(structFilePath)
+        cv.visit(javaVersionCode, ACC_PUBLIC, struct.structName.stringId, null, objectTypeStr, null)
+        generateStruct(struct, cv)
+        cv.visitEnd()
+        mode.terminate(cv, structFilePath, errorReporter)
+        structFilePath
+      }
+    }
+    structFilesPaths
   }
 
   private def generateStruct(structDef: StructDef, cv: ClassVisitor): Unit = {
@@ -192,10 +226,14 @@ final class Backend[V <: ClassVisitor](
       case BoolLit(value) => mv.visitLdcInsn(if value then 1 else 0)
       case StringLit(value) => mv.visitLdcInsn(value)
 
-      case VariableRef(name) =>
-        val (tpe, localIdx) = ctx.getLocal(name)
-        val opCode = opcodeFor(tpe, Opcodes.ILOAD, Opcodes.ALOAD)
-        mv.visitVarInsn(opCode, localIdx)
+      case varRef@VariableRef(name) => {
+        ctx.getLocal(name) match
+          case Some((tpe, localIdx)) =>
+            val opCode = opcodeFor(tpe, Opcodes.ILOAD, Opcodes.ALOAD)
+            mv.visitVarInsn(opCode, localIdx)
+          case None =>
+            mv.visitFieldInsn(Opcodes.GETSTATIC, GenFilesNames.constantsFileName, name.stringId, descriptorForType(varRef.getType))
+      }
 
       // typechecker ensures that callee is a VariableRef
       case Call(VariableRef(name), args) => {
@@ -376,7 +414,7 @@ final class Backend[V <: ClassVisitor](
           // x = ...
           case VariableRef(name) =>
             generateCode(rhs, ctx)
-            val (varType, varIdx) = ctx.getLocal(name)
+            val (varType, varIdx) = ctx.getLocal(name).get  // cannot be a constant since it is an assignment
             val opcode = opcodeFor(varType, Opcodes.ISTORE, Opcodes.ASTORE)
             mv.visitVarInsn(opcode, varIdx)
 

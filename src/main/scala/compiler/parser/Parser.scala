@@ -84,7 +84,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     }
   } setName "source"
 
-  private lazy val topLevelDef: P[TopLevelDef] = funDef OR structDef OR testDef
+  private lazy val topLevelDef: P[TopLevelDef] = funDef OR structDef OR testDef OR constDef
 
   private lazy val funDef = {
     kw(Fn).ignored ::: lowName ::: openParenth ::: repeatWithSep(param, comma) ::: closeParenth ::: opt(-> ::: tpe) ::: block map {
@@ -110,7 +110,13 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     kw(Test).ignored ::: lowName ::: block map {
       case name ^: body => TestDef(NormalFunOrVarId(name), body)
     }
-  }
+  } setName "testDef"
+
+  private lazy val constDef = {
+    kw(Const).ignored ::: lowName ::: opt(colon ::: tpe) ::: assig ::: literalValue map {
+      case name ^: tpeOpt ^: value => ConstDef(NormalFunOrVarId(name), tpeOpt, value)
+    }
+  } setName "constDef"
 
   private lazy val noParenthType = recursive {
     atomicType OR arrayType

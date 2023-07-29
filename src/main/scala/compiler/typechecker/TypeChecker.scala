@@ -39,21 +39,21 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         VoidType
 
       case StructDef(_, fields) =>
-        for param@Param(_, tpe) <- fields if !ctx.analysisContext.knowsType(tpe) do {
+        for param@Param(_, tpe) <- fields if !ctx.knowsType(tpe) do {
           reportError(s"unknown type: $tpe", param.getPosition)
         }
         VoidType
 
       case funDef@FunDef(funName, params, optRetType, body) =>
         optRetType.foreach { retType =>
-          if (!ctx.analysisContext.knowsType(retType)){
+          if (!ctx.knowsType(retType)){
             reportError(s"return type is unknown: '$retType'", funDef.getPosition)
           }
         }
         val expRetType = optRetType.getOrElse(VoidType)
         val ctxWithParams = ctx.copyWithoutLocals
         for param <- params do {
-          val typeIsKnown = ctx.analysisContext.knowsType(param.tpe)
+          val typeIsKnown = ctx.knowsType(param.tpe)
           if (!typeIsKnown) {
             reportError(s"unknown type: ${param.tpe}", param.getPosition)
           }
@@ -81,11 +81,21 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
 
       case TestDef(_, body) =>
         check(body, ctx)
+        VoidType
+
+      case constDef@ConstDef(constName, tpeOpt, value) =>
+        val inferredType = check(value, ctx)
+        tpeOpt.foreach { tpe =>
+          if (!inferredType.subtypeOf(tpe)){
+            reportError(s"constant is declared with type '$tpe' but defined as '$inferredType'", constDef.getPosition)
+          }
+        }
+        VoidType
 
       case localDef@LocalDef(localName, optType, rhs, isReassignable) =>
         val inferredType = check(rhs, ctx)
         optType.foreach { expType =>
-          val typeIsKnown = ctx.analysisContext.knowsType(expType)
+          val typeIsKnown = ctx.knowsType(expType)
           if (!typeIsKnown) {
             reportError(s"unknown type: $expType", localDef.getPosition)
           } else if (!inferredType.subtypeOf(expType)) {
@@ -108,7 +118,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       case _: StringLit => StringType
 
       case varRef@VariableRef(name) =>
-        ctx.locals.get(name) match {
+        ctx.get(name) match {
           case Some((tpe, _)) => tpe
           case None =>
             reportError(s"not found: '$name'", varRef.getPosition)
@@ -222,7 +232,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         val rhsType = check(rhs, ctx)
         lhs match {
           case VariableRef(name) =>
-            ctx.locals.get(name) match {
+            ctx.get(name) match {
               case Some((tpe, mut)) if mut =>
                 lhs.setType(tpe)
                 if (!rhsType.subtypeOf(tpe)) {
@@ -252,7 +262,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         val rhsType = check(rhs, ctx)
         lhs match {
           case VariableRef(name) =>
-            ctx.locals.get(name) match {
+            ctx.get(name) match {
               case Some((tpe, mut)) if mut =>
                 Operators.binaryOperatorSigFor(tpe, op, rhsType) match {
                   case Some(opSig) =>

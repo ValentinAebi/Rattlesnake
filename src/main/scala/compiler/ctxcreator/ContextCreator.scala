@@ -1,7 +1,7 @@
 package compiler.ctxcreator
 
 import compiler.Errors.ErrorReporter
-import compiler.irs.Asts.{FunDef, Source, StructDef, TestDef}
+import compiler.irs.Asts.{ConstDef, FunDef, Source, StructDef, TestDef}
 import compiler.{AnalysisContext, CompilerStep, FunctionsToInject}
 
 /**
@@ -26,6 +26,8 @@ final class ContextCreator(errorReporter: ErrorReporter, functionsToInject: List
             ctxBuilder.addStruct(structDef)
           case testDef: TestDef =>
             ctxBuilder.addTest(testDef)
+          case constDef: ConstDef =>
+            ctxBuilder.addConstant(constDef)
       }
     }
     for df <- functionsToInject do {

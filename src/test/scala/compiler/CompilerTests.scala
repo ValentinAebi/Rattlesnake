@@ -250,6 +250,19 @@ class CompilerTests {
     assertEquals(1, resArray(0).length)
   }
 
+  @Test def constantsTest(): Unit = {
+    val inputs = List(32, 798, 544, 543)
+    val rawActualRes = compileAndExecSeveralIter("constants", "testFunc",
+      inputs.map(i => Array(Array(i)))
+    )
+    assertTrue(rawActualRes.forall(_.isInstanceOf[String]))
+    val actualRes = rawActualRes.map(_.asInstanceOf[String])
+    val success = "OK"
+    val failure = "K.O."
+    val expectedRes = List(success, failure, failure, success)
+    assertEquals(expectedRes, actualRes)
+  }
+
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
     compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
   }

@@ -1,0 +1,14 @@
+
+const success = "OK"
+const failure: String = "K.O."
+
+fn testFunc(xarr: arr Int) -> String {
+    val x = xarr[0];
+    if x < ref {
+        return success;
+    } else {
+        return failure;
+    }
+}
+
+const ref = 544

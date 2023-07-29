@@ -3,6 +3,7 @@ package lang
 enum Keyword(val str: String) {
   case Arr extends Keyword("arr")
   case As extends Keyword("as")
+  case Const extends Keyword("const")
   case Else extends Keyword("else")
   case Fn extends Keyword("fn")
   case For extends Keyword("for")

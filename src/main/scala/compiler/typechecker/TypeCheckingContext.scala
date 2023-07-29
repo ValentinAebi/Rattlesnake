@@ -11,8 +11,8 @@ import scala.collection.mutable
  * Mutabble context for type checking
  */
 final case class TypeCheckingContext(
-                                      analysisContext: AnalysisContext,
-                                      locals: mutable.Map[FunOrVarId, (Type, Boolean)] = mutable.Map.empty
+                                      private val analysisContext: AnalysisContext,
+                                      private val locals: mutable.Map[FunOrVarId, (Type, Boolean)] = mutable.Map.empty
                                     ) {
 
   /**
@@ -37,7 +37,13 @@ final case class TypeCheckingContext(
    * @param duplicateVarCallback to be called if the name is already used by another local
    * @param forbiddenTypeCallback to be called if the local has a type that is not acceptable for a local
    */
-  def addLocal(name: FunOrVarId, tpe: Type, isReassignable: Boolean, duplicateVarCallback: () => Unit, forbiddenTypeCallback: () => Unit): Unit = {
+  def addLocal(
+                name: FunOrVarId,
+                tpe: Type,
+                isReassignable: Boolean,
+                duplicateVarCallback: () => Unit,
+                forbiddenTypeCallback: () => Unit
+              ): Unit = {
     if (tpe == NothingType || tpe == VoidType) {
       forbiddenTypeCallback()
     } else if (locals.contains(name)) {
@@ -45,6 +51,10 @@ final case class TypeCheckingContext(
     } else {
       locals.put(name, (tpe, isReassignable))
     }
+  }
+
+  def get(name: FunOrVarId): Option[(Type, Boolean)] = {
+    locals.get(name).orElse(analysisContext.constants.get(name).map(_ -> false))
   }
 
   export analysisContext.*

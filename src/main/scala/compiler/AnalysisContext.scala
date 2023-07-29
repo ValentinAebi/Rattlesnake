@@ -3,8 +3,8 @@ package compiler
 import compiler.AnalysisContext
 import compiler.CompilationStep.ContextCreation
 import compiler.Errors.{CompilationError, Err, ErrorReporter, errorsExitCode}
-import compiler.irs.Asts.{FunDef, StructDef, TestDef}
-import identifiers.{StructIdentifier, FunOrVarId}
+import compiler.irs.Asts.{ConstDef, FunDef, StructDef, TestDef}
+import identifiers.{FunOrVarId, StructIdentifier}
 import lang.Types.PrimitiveType.{NothingType, VoidType}
 import lang.Types.Type
 import lang.{BuiltInFunctions, FunctionSignature, StructSignature, Types}
@@ -15,7 +15,8 @@ import scala.collection.mutable
 final case class AnalysisContext(
                                   functions: Map[FunOrVarId, FunctionSignature],
                                   structs: Map[StructIdentifier, StructSignature],
-                                  tests: Set[FunOrVarId]
+                                  tests: Set[FunOrVarId],
+                                  constants: Map[FunOrVarId, Type]
                                 ){
 
   /**
@@ -39,6 +40,7 @@ object AnalysisContext {
     private val functions: mutable.Map[FunOrVarId, FunctionSignature] = mutable.Map.empty
     private val structs: mutable.Map[StructIdentifier, StructSignature] = mutable.Map.empty
     private val tests: mutable.Set[FunOrVarId] = mutable.Set.empty
+    private val constants: mutable.Map[FunOrVarId, Type] = mutable.Map.empty
 
     def addFunction(funDef: FunDef): Unit = {
       val name = funDef.funName
@@ -79,10 +81,20 @@ object AnalysisContext {
         tests.addOne(testName)
       }
     }
+    
+    def addConstant(constDef: ConstDef): Unit = {
+      import constDef.constName
+      if (constants.contains(constName)){
+        errorReporter.push(Err(ContextCreation, s"redefinition of constant $constName", constDef.getPosition))
+      } else {
+        // type is already known since value is a Literal
+        constants(constName) = constDef.value.getType
+      }
+    }
 
     def build(): AnalysisContext = {
       functions.addAll(BuiltInFunctions.builtInFunctions)
-      new AnalysisContext(functions.toMap, structs.toMap, tests.toSet)
+      new AnalysisContext(functions.toMap, structs.toMap, tests.toSet, constants.toMap)
     }
 
   }

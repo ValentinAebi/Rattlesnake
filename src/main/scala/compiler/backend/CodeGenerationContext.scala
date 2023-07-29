@@ -30,15 +30,15 @@ final class CodeGenerationContext(
     currLocalIdx += numSlotsFor(tpe)
   }
 
-  def getLocal(name: FunOrVarId): (Type, Int) = {
+  def getLocal(name: FunOrVarId): Option[(Type, Int)] = {
 
-    @tailrec def searchLocal(remFrames: List[mutable.Map[FunOrVarId, (Type, Int)]]): (Type, Int) = {
+    @tailrec def searchLocal(remFrames: List[mutable.Map[FunOrVarId, (Type, Int)]]): Option[(Type, Int)] = {
       remFrames match {
-        case Nil => throw new NoSuchElementException(s"should not happen: local '$name' not found")
+        case Nil => None
         case head :: tail =>
           head.get(name) match {
-            case Some(value) => value
             case None => searchLocal(tail)
+            case some => some
           }
       }
     }
