@@ -22,7 +22,7 @@ case object StringEqualityFunId extends FunOrVarId {
   override val stringId: String = "streq$" ++ rawName
 }
 
-final case class DesugarerGeneratedVarId(private val rawName: String) extends FunOrVarId {
+final case class LowererGeneratedVarId(private val rawName: String) extends FunOrVarId {
   override def stringId: String = "des$" ++ rawName
 }
 

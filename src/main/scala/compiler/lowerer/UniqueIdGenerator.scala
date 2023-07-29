@@ -1,15 +1,15 @@
-package compiler.desugarer
+package compiler.lowerer
 
-import identifiers.DesugarerGeneratedVarId
+import identifiers.LowererGeneratedVarId
 
 import java.util.concurrent.atomic.AtomicLong
 
 final class UniqueIdGenerator {
   private val counter = new AtomicLong(0)
   
-  def next(): DesugarerGeneratedVarId = {
+  def next(): LowererGeneratedVarId = {
     val idx = counter.getAndIncrement()
-    DesugarerGeneratedVarId("$" + idx)
+    LowererGeneratedVarId("$" + idx)
   }
 
 }

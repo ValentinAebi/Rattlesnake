@@ -87,7 +87,7 @@ object Main {
           case "asm" => (Asm(argsMap), files)
           case "format" => (Format(argsMap), files)
           case "typecheck" => (TypeCheck(argsMap), files)
-          case "desugar" => (Desugar(argsMap), files)
+          case "lower" => (Lower(argsMap), files)
           case "test" => (Test(argsMap), files)
           case _ => error(s"unknown command: $cmd")
         }
@@ -270,14 +270,14 @@ object Main {
   }
 
   /**
-   * Desugar command (show the file after desugaring)
+   * Lower command (show the file after lowering)
    */
-  private case class Desugar(argsMap: MutArgsMap) extends Action {
+  private case class Lower(argsMap: MutArgsMap) extends Action {
     override def run(sources: List[SourceCodeProvider]): Unit = {
       if (sources.size != 1) {
-        error("desugar command requires exactly 1 input file")
+        error("lower command requires exactly 1 input file")
       }
-      val desugarer = TasksPipelines.desugarer(
+      val lowerer = TasksPipelines.lowerer(
         getOutDirArg(argsMap),
         getOutputNameArg(sources, argsMap, Path.of(sources.head.name).getFileName.toString),
         getIndentGranularityArg(argsMap),
@@ -285,7 +285,7 @@ object Main {
         getPrintAllParenthesesArg(argsMap)
       )
       reportUnknownArgsIfAny(argsMap)
-      desugarer.apply(sources.head)
+      lowerer.apply(sources.head)
       succeed()
     }
   }
@@ -366,7 +366,7 @@ object Main {
         |       -all-parenth: flag indicating that all parentheses should be displayed in expressions,
         |                     regardless of the priority of operations (takes no value)
         |typecheck: parse and typecheck the program
-        |desugar: show the file after desugaring
+        |lower: show the file after lowering
         | args: -out-dir=...: required, directory where to write the output file
         |       -out-file=...: optional, output file name (by default same as input)
         |       -indent=...: optional, indent granularity (2 by default)

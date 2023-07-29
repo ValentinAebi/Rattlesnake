@@ -3,7 +3,7 @@ package compiler
 import compiler.Errors.ErrorReporter
 import compiler.backend.Backend
 import compiler.ctxcreator.ContextCreator
-import compiler.desugarer.Desugarer
+import compiler.lowerer.Lowerer
 import compiler.io.StringWriter
 import compiler.irs.Asts
 import compiler.lexer.Lexer
@@ -57,17 +57,17 @@ object TasksPipelines {
   }
 
   /**
-   * Pipeline for desugaring (src file -> desugared src file)
+   * Pipeline for lowering (src file -> lowered src file)
    */
-  def desugarer(outputDirectoryPath: Path, filename: String,
-                indentGranularity: Int = 2, overwriteFileCallback: String => Boolean,
-                displayAllParentheses: Boolean = false): CompilerStep[SourceCodeProvider, Unit] = {
+  def lowerer(outputDirectoryPath: Path, filename: String,
+              indentGranularity: Int = 2, overwriteFileCallback: String => Boolean,
+              displayAllParentheses: Boolean = false): CompilerStep[SourceCodeProvider, Unit] = {
     val er = createErrorReporter
     frontend(er)
       .andThen(Mapper(List(_)))
       .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
       .andThen(new TypeChecker(er))
-      .andThen(new Desugarer())
+      .andThen(new Lowerer())
       .andThen(Mapper(_._1.head))
       .andThen(new PrettyPrinter(indentGranularity, displayAllParentheses))
       .andThen(new StringWriter(outputDirectoryPath, filename, er, overwriteFileCallback))
@@ -82,7 +82,7 @@ object TasksPipelines {
     MultiStep(frontend(er))
       .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
       .andThen(new TypeChecker(er))
-      .andThen(new Desugarer())
+      .andThen(new Lowerer())
       .andThen(new Backend(backendMode, er, outputDirectoryPath, javaVersionCode, outputName, FunctionsToInject.functionsToInject, generateTests))
   }
 

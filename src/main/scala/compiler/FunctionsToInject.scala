@@ -2,7 +2,7 @@ package compiler
 
 import compiler.Errors.{CompilationError, ErrorReporter}
 import compiler.ctxcreator.ContextCreator
-import compiler.desugarer.Desugarer
+import compiler.lowerer.Lowerer
 import compiler.io.SourceFile
 import compiler.irs.Asts.{FunDef, Source}
 import compiler.lexer.Lexer
@@ -50,9 +50,9 @@ object FunctionsToInject {
         .andThen(Mapper(List(_)))
         .andThen(new ContextCreator(er, functionsToInject = Nil))
         .andThen(new TypeChecker(er))
-        .andThen(new Desugarer())
+        .andThen(new Lowerer())
 
-    // load code of the function, desugar it and replace its name
+    // load code of the function, lower it and replace its name
     val resFile = stringEqualityCodeProvider
     val result = pipeline.apply(resFile)
     val (List(Source(List(funDef: FunDef @unchecked))), _) = result
