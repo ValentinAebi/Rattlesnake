@@ -94,6 +94,18 @@ val str = "Rattlesnake";
 ```
 `var`s (but not `val`s) can be reassigned: `x = <new value>`
 
+### Constants
+
+Constants can only be of primitive types. Their name must be lowercase.
+```
+const <name>: <type> = <value>
+```
+Type may be omitted. E.g.:
+```
+const anwser = 42
+```
+
+
 ### Control structures
 
 #### If-else
