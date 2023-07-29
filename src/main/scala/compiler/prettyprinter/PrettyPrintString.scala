@@ -1,5 +1,7 @@
 package compiler.prettyprinter
 
+import identifiers.Identifier
+
 import scala.collection.mutable
 
 /**
@@ -44,6 +46,10 @@ final class PrettyPrintString(indentGranularity: Int) {
       lines.addAll(newLines.map(indentSpaces ++ _))
     }
     this
+  }
+
+  def add(identifier: Identifier): PrettyPrintString = {
+    add(identifier.stringId)
   }
 
   def startBlock(): PrettyPrintString = {

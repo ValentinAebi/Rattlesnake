@@ -7,6 +7,7 @@ import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType
 import compiler.backend.TypesConverter.{convertToAsmType, convertToAsmTypeCode, internalNameOf, opcodeFor}
 import compiler.irs.Asts.*
 import compiler.{AnalysisContext, CompilerStep, FileExtensions, GenFilesNames}
+import identifiers.BackendGeneratedVarId
 import lang.Operator.*
 import lang.Types.PrimitiveType.*
 import lang.Types.{ArrayType, PrimitiveType, StructType}
@@ -70,9 +71,9 @@ final class Backend[V <: ClassVisitor](
       // paths to the output files containing the structs
       val structFilesPaths = {
         for struct <- structs yield {
-          val structFilePath = outputDir.resolve(mode.withExtension(struct.structName))
+          val structFilePath = outputDir.resolve(mode.withExtension(struct.structName.stringId))
           val cv = mode.createVisitor(structFilePath)
-          cv.visit(javaVersionCode, ACC_PUBLIC, struct.structName, null, objectTypeStr, null)
+          cv.visit(javaVersionCode, ACC_PUBLIC, struct.structName.stringId, null, objectTypeStr, null)
           generateStruct(struct, cv)
           cv.visitEnd()
           mode.terminate(cv, structFilePath, errorReporter)
@@ -87,7 +88,7 @@ final class Backend[V <: ClassVisitor](
       val cv: V = mode.createVisitor(coreFilePath)
       cv.visit(javaVersionCode, ACC_PUBLIC, outputName, null, objectTypeStr, null)
       for function <- (functions ++ functionsToInject) do {
-        val mv = cv.visitMethod(ACC_PUBLIC | ACC_STATIC, function.funName, descriptorForFunc(function.signature), null, null)
+        val mv = cv.visitMethod(ACC_PUBLIC | ACC_STATIC, function.funName.stringId, descriptorForFunc(function.signature), null, null)
         generateFunction(function, mv, analysisContext, outputName)
       }
       cv.visitEnd()
@@ -99,7 +100,7 @@ final class Backend[V <: ClassVisitor](
         val tv: V = mode.createVisitor(testFilePath)
         tv.visit(javaVersionCode, ACC_PUBLIC, GenFilesNames.testFileName, null, objectTypeStr, null)
         for test <- tests do {
-          val mv = tv.visitMethod(ACC_PUBLIC | ACC_STATIC, GenFilesNames.testMethodPrefix ++ test.testName, "()Z", null, null)
+          val mv = tv.visitMethod(ACC_PUBLIC | ACC_STATIC, GenFilesNames.testMethodPrefix ++ test.testName.stringId, "()Z", null, null)
           generateTest(test, mv, analysisContext, outputName)
         }
         tv.visitEnd()
@@ -114,7 +115,7 @@ final class Backend[V <: ClassVisitor](
 
   private def generateStruct(structDef: StructDef, cv: ClassVisitor): Unit = {
     for field <- structDef.fields do {
-      val fieldVisitor = cv.visitField(Opcodes.ACC_PUBLIC, field.paramName, descriptorForType(field.tpe), null, null)
+      val fieldVisitor = cv.visitField(Opcodes.ACC_PUBLIC, field.paramName.stringId, descriptorForType(field.tpe), null, null)
       fieldVisitor.visitEnd()
     }
     val constructorVisitor = cv.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null)
@@ -156,10 +157,10 @@ final class Backend[V <: ClassVisitor](
     mv.visitLabel(handler)
     mv.visitMethodInsn(INVOKEVIRTUAL, "java/lang/Throwable", "getMessage", "()Ljava/lang/String;", false)
     mv.visitVarInsn(Opcodes.ASTORE, ctx.currLocalIdx)
-    val msgVarName = "$msg"
+    val msgVarName = BackendGeneratedVarId("msg")
     ctx.addLocal(msgVarName, StringType)
     generateCode(
-      printCallFor(StringLit("/!\\ Test "), StringLit(testDef.testName), StringLit(" FAILED: "), VariableRef(msgVarName), StringLit("\n")),
+      printCallFor(StringLit("/!\\ Test "), StringLit(testDef.testName.stringId), StringLit(" FAILED: "), VariableRef(msgVarName), StringLit("\n")),
       ctx
     )(mv, outputName)
     mv.visitLdcInsn(false)
@@ -219,7 +220,7 @@ final class Backend[V <: ClassVisitor](
         } else {
           generateArgs()
           val descriptor = descriptorForFunc(analysisContext.functions.apply(name))
-          mv.visitMethodInsn(Opcodes.INVOKESTATIC, outputName, name, descriptor, false)
+          mv.visitMethodInsn(Opcodes.INVOKESTATIC, outputName, name.stringId, descriptor, false)
         }
       }
 
@@ -244,19 +245,19 @@ final class Backend[V <: ClassVisitor](
       case StructInit(structName, args) =>
         val structType = StructType(structName)
         val tmpVarIdx = ctx.currLocalIdx
-        val tempLocalName = "$" + tmpVarIdx
+        val tempLocalName = BackendGeneratedVarId(tmpVarIdx)
         ctx.addLocal(tempLocalName, structType)
         val storeTmpOpcode = opcodeFor(structType, Opcodes.ISTORE, Opcodes.ASTORE)
-        mv.visitTypeInsn(Opcodes.NEW, structName)
+        mv.visitTypeInsn(Opcodes.NEW, structName.stringId)
         mv.visitInsn(Opcodes.DUP)
-        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, structName, "<init>", "()V", false)
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, structName.stringId, "<init>", "()V", false)
         mv.visitVarInsn(storeTmpOpcode, tmpVarIdx)
         val structSig = analysisContext.structs.apply(structName)
         val loadTmpOpcode = opcodeFor(structType, Opcodes.ILOAD, Opcodes.ALOAD)
         for (arg, (paramName, tpe)) <- args.zip(structSig.fields) do {
           mv.visitVarInsn(loadTmpOpcode, tmpVarIdx)
           generateCode(arg, ctx)
-          mv.visitFieldInsn(Opcodes.PUTFIELD, structName, paramName, descriptorForType(tpe))
+          mv.visitFieldInsn(Opcodes.PUTFIELD, structName.stringId, paramName.stringId, descriptorForType(tpe))
         }
         mv.visitVarInsn(loadTmpOpcode, tmpVarIdx)
 
@@ -367,7 +368,7 @@ final class Backend[V <: ClassVisitor](
         generateCode(lhs, ctx)
         val structName = lhs.getType.asInstanceOf[StructType].typeName
         val selectedType = analysisContext.structs.apply(structName).fields.apply(selected)
-        mv.visitFieldInsn(Opcodes.GETFIELD, structName, selected, descriptorForType(selectedType))
+        mv.visitFieldInsn(Opcodes.GETFIELD, structName.stringId, selected.stringId, descriptorForType(selectedType))
 
       case VarAssig(lhs, rhs) =>
         lhs match {
@@ -392,7 +393,7 @@ final class Backend[V <: ClassVisitor](
             generateCode(ownerStruct, ctx)
             generateCode(rhs, ctx)
             val ownerName = ownerStruct.getType.asInstanceOf[StructType].typeName
-            mv.visitFieldInsn(Opcodes.PUTFIELD, ownerName, fieldName, descriptorForType(rhs.getType))
+            mv.visitFieldInsn(Opcodes.PUTFIELD, ownerName.stringId, fieldName.stringId, descriptorForType(rhs.getType))
 
           case _ => shouldNotHappen()
         }

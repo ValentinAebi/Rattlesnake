@@ -11,6 +11,7 @@ import lang.Keyword.*
 import lang.Operator.*
 import lang.Types.{ArrayType, StructType, Type}
 import lang.{Keyword, Operator, Operators, Types}
+import identifiers.*
 
 import scala.util.Try
 
@@ -88,26 +89,26 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val funDef = {
     kw(Fn).ignored ::: lowName ::: openParenth ::: repeatWithSep(param, comma) ::: closeParenth ::: opt(-> ::: tpe) ::: block map {
       case funName ^: params ^: optRetType ^: body =>
-        FunDef(funName, params, optRetType, body)
+        FunDef(NormalFunOrVarId(funName), params, optRetType, body)
     }
   } setName "funDef"
 
   private lazy val param = {
     lowName ::: colon ::: tpe map {
       case name ^: tpe =>
-        Param(name, tpe)
+        Param(NormalFunOrVarId(name), tpe)
     }
   } setName "param"
 
   private lazy val structDef = {
     kw(Struct).ignored ::: highName ::: openBrace ::: repeatWithSep(param, comma) ::: closeBrace map {
-      case name ^: fields => StructDef(name, fields)
+      case name ^: fields => StructDef(NormalStructId(name), fields)
     }
   } setName "structDef"
   
   private lazy val testDef = {
     kw(Test).ignored ::: lowName ::: block map {
-      case name ^: body => TestDef(name, body)
+      case name ^: body => TestDef(NormalFunOrVarId(name), body)
     }
   }
 
@@ -120,7 +121,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "tpe"
 
   private lazy val atomicType = {
-    highName map (name => Types.primTypeFor(name).getOrElse(StructType(name)))
+    highName map (name => Types.primTypeFor(name).getOrElse(StructType(NormalStructId(name))))
   } setName "atomicType"
 
   private lazy val arrayType = recursive {
@@ -181,15 +182,15 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val varRefOrFunCall = recursive {
     lowName ::: opt(callArgs) map {
       case name ^: Some(args) =>
-        Call(VariableRef(name), args)
+        Call(VariableRef(NormalFunOrVarId(name)), args)
       case name ^: None =>
-        VariableRef(name)
+        VariableRef(NormalFunOrVarId(name))
     }
   } setName "varRefOrCallArgs"
 
   private lazy val funCall = recursive {
     lowName ::: callArgs map {
-      case calleeName ^: args => Call(VariableRef(calleeName), args)
+      case calleeName ^: args => Call(VariableRef(NormalFunOrVarId(calleeName)), args)
     }
   } setName "funCall"
 
@@ -202,7 +203,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
       case atExpr ^: selOrInds =>
         selOrInds.foldLeft(atExpr){ (acc, curr) =>
           curr match
-            case field: String => Select(acc, field)
+            case field: String => Select(acc, NormalFunOrVarId(field))
             case idx: Expr => Indexing(acc, idx)
         }
     }
@@ -224,7 +225,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   private lazy val structInit = recursive {
     kw(New).ignored ::: highName ::: openBrace ::: repeatWithSep(expr, comma) ::: closeBrace map {
-      case structName ^: args => StructInit(structName, args)
+      case structName ^: args => StructInit(NormalStructId(structName), args)
     }
   } setName "structInit"
 
@@ -234,13 +235,13 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   private lazy val valDef = {
     kw(Val).ignored ::: lowName ::: opt(colon ::: tpe) ::: assig ::: expr map {
-      case valName ^: optType ^: rhs => LocalDef(valName, optType, rhs, isReassignable = false)
+      case valName ^: optType ^: rhs => LocalDef(NormalFunOrVarId(valName), optType, rhs, isReassignable = false)
     }
   } setName "valDef"
 
   private lazy val varDef = {
     kw(Var).ignored ::: lowName ::: opt(colon ::: tpe) ::: assig ::: expr map {
-      case varName ^: optType ^: rhs => LocalDef(varName, optType, rhs, isReassignable = true)
+      case varName ^: optType ^: rhs => LocalDef(NormalFunOrVarId(varName), optType, rhs, isReassignable = true)
     }
   } setName "varDef"
 

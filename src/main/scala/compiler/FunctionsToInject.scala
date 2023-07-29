@@ -8,6 +8,7 @@ import compiler.irs.Asts.{FunDef, Source}
 import compiler.lexer.Lexer
 import compiler.parser.Parser
 import compiler.typechecker.TypeChecker
+import identifiers.StringEqualityFunId
 
 import scala.util.{Success, Try}
 
@@ -17,8 +18,6 @@ import scala.util.{Success, Try}
  * Currently only `$stringEq`, which is called when comparing strings using `==`
  */
 object FunctionsToInject {
-
-  val stringEqualityMethodName = "$stringEq"
 
   private val stringEqualityCodeProvider = new SourceCodeProvider {
     override def lines: Try[Seq[String]] = Success(
@@ -37,7 +36,7 @@ object FunctionsToInject {
         |}""".stripMargin.lines().toArray().toList.map(_.asInstanceOf[String])
     )
 
-    override def name: String = stringEqualityMethodName
+    override def name: String = StringEqualityFunId.stringId
   }
 
   private val stringEqualityFunction: FunDef = {
@@ -57,8 +56,8 @@ object FunctionsToInject {
     val resFile = stringEqualityCodeProvider
     val result = pipeline.apply(resFile)
     val (List(Source(List(funDef: FunDef @unchecked))), _) = result
-    assert(funDef.funName == stringEqualityMethodName.tail)
-    funDef.copy(funName = stringEqualityMethodName)
+    assert(funDef.funName.stringId == StringEqualityFunId.rawName)
+    funDef.copy(funName = StringEqualityFunId)
   }
 
   val functionsToInject: List[FunDef] = List(stringEqualityFunction)

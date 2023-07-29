@@ -4,6 +4,7 @@ import compiler.AnalysisContext
 import compiler.CompilationStep.ContextCreation
 import compiler.Errors.{CompilationError, Err, ErrorReporter, errorsExitCode}
 import compiler.irs.Asts.{FunDef, StructDef, TestDef}
+import identifiers.{StructIdentifier, FunOrVarId}
 import lang.Types.PrimitiveType.{NothingType, VoidType}
 import lang.Types.Type
 import lang.{BuiltInFunctions, FunctionSignature, StructSignature, Types}
@@ -12,9 +13,9 @@ import scala.annotation.tailrec
 import scala.collection.mutable
 
 final case class AnalysisContext(
-                                  functions: Map[String, FunctionSignature],
-                                  structs: Map[String, StructSignature],
-                                  tests: Set[String]
+                                  functions: Map[FunOrVarId, FunctionSignature],
+                                  structs: Map[StructIdentifier, StructSignature],
+                                  tests: Set[FunOrVarId]
                                 ){
 
   /**
@@ -35,9 +36,9 @@ final case class AnalysisContext(
 object AnalysisContext {
 
   final class Builder(errorReporter: ErrorReporter) {
-    private val functions: mutable.Map[String, FunctionSignature] = mutable.Map.empty
-    private val structs: mutable.Map[String, StructSignature] = mutable.Map.empty
-    private val tests: mutable.Set[String] = mutable.Set.empty
+    private val functions: mutable.Map[FunOrVarId, FunctionSignature] = mutable.Map.empty
+    private val structs: mutable.Map[StructIdentifier, StructSignature] = mutable.Map.empty
+    private val tests: mutable.Set[FunOrVarId] = mutable.Set.empty
 
     def addFunction(funDef: FunDef): Unit = {
       val name = funDef.funName
@@ -55,7 +56,7 @@ object AnalysisContext {
       if (structs.contains(name)) {
         errorReporter.push(Err(ContextCreation, s"redefinition of struct '$name'", structDef.getPosition))
       } else {
-        val fieldsMap = new mutable.LinkedHashMap[String, Type]()
+        val fieldsMap = new mutable.LinkedHashMap[FunOrVarId, Type]()
         for param <- structDef.fields do {
           if (param.tpe == VoidType || param.tpe == NothingType) {
             errorReporter.push(Err(ContextCreation, s"struct field cannot have type '${param.tpe}'", param.getPosition))

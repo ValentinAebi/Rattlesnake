@@ -6,6 +6,7 @@ import lang.Operator.*
 import lang.Operators
 import lang.Types.PrimitiveType.*
 import lang.Types.{ArrayType, UndefinedType}
+import identifiers.StringEqualityFunId
 
 /**
  * Desugaring replaces:
@@ -123,7 +124,7 @@ final class Desugarer extends CompilerStep[(List[Source], AnalysisContext), (Lis
         val desugaredLhs = desugar(lhs)
         val desugaredRhs = desugar(rhs)
         Call(
-          VariableRef(FunctionsToInject.stringEqualityMethodName).setType(UndefinedType),
+          VariableRef(StringEqualityFunId).setType(UndefinedType),
           List(desugaredLhs, desugaredRhs)
         ).setType(BoolType)
       }

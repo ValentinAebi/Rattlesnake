@@ -1,6 +1,7 @@
 package compiler.irs
 
 import compiler.Position
+import identifiers.*
 import lang.Types.*
 import lang.Types.PrimitiveType.*
 import lang.{FunctionSignature, Keyword, Operator}
@@ -112,7 +113,7 @@ object Asts {
   /**
    * Function definition
    */
-  final case class FunDef(funName: String, params: List[Param], optRetType: Option[Type], body: Block) extends TopLevelDef {
+  final case class FunDef(funName: FunOrVarId, params: List[Param], optRetType: Option[Type], body: Block) extends TopLevelDef {
     val signature: FunctionSignature = FunctionSignature(funName, params.map(_.tpe), optRetType.getOrElse(VoidType))
 
     override def children: List[Ast] = params :+ body
@@ -121,21 +122,21 @@ object Asts {
   /**
    * Structure (`struct`) definition
    */
-  final case class StructDef(structName: String, fields: List[Param]) extends TopLevelDef {
+  final case class StructDef(structName: StructIdentifier, fields: List[Param]) extends TopLevelDef {
     override def children: List[Ast] = fields
   }
 
   /**
    * Test definition
    */
-  final case class TestDef(testName: String, body: Block) extends TopLevelDef {
+  final case class TestDef(testName: FunOrVarId, body: Block) extends TopLevelDef {
     override def children: List[Ast] = List(body)
   }
 
   /**
    * Parameter of a function
    */
-  final case class Param(paramName: String, tpe: Type) extends Ast {
+  final case class Param(paramName: FunOrVarId, tpe: Type) extends Ast {
     override def children: List[Ast] = Nil
   }
 
@@ -146,7 +147,7 @@ object Asts {
    * @param rhs            expression producing the value that will be assigned to the local
    * @param isReassignable `true` if `var`, `false` if `val`
    */
-  final case class LocalDef(localName: String, var optType: Option[Type], rhs: Expr, isReassignable: Boolean) extends Statement {
+  final case class LocalDef(localName: FunOrVarId, var optType: Option[Type], rhs: Expr, isReassignable: Boolean) extends Statement {
     val keyword: Keyword = if isReassignable then Keyword.Var else Keyword.Val
 
     override def children: List[Ast] = List(rhs)
@@ -196,7 +197,7 @@ object Asts {
   /**
    * Occurence of a variable (`val`, `var`, function parameter, etc.)
    */
-  final case class VariableRef(name: String) extends Expr {
+  final case class VariableRef(name: FunOrVarId) extends Expr {
     override def children: List[Ast] = Nil
   }
 
@@ -231,7 +232,7 @@ object Asts {
   /**
    * Initialization of a struct, e.g. `new Foo { 0, 1 }`
    */
-  final case class StructInit(structName: String, args: List[Expr]) extends Expr {
+  final case class StructInit(structName: StructIdentifier, args: List[Expr]) extends Expr {
     override def children: List[Ast] = args
   }
 
@@ -252,7 +253,7 @@ object Asts {
   /**
    * Access to a struct field: `lhs.select`
    */
-  final case class Select(lhs: Expr, selected: String) extends Expr {
+  final case class Select(lhs: Expr, selected: FunOrVarId) extends Expr {
     override def children: List[Ast] = List(lhs)
   }
 

@@ -1,18 +1,19 @@
 package lang
 
+import identifiers.*
 import lang.Types.ArrayType
 import lang.Types.PrimitiveType.*
 
 object BuiltInFunctions {
   
-  val print: String = "print"
-  val intToString: String = "intToString"
-  val doubleToString: String = "doubleToString"
-  val charToString: String = "charToString"
-  val boolToString: String = "boolToString"
-  val toCharArray: String = "toCharArray"
+  val print: NormalFunOrVarId = NormalFunOrVarId("print")
+  val intToString: NormalFunOrVarId = NormalFunOrVarId("intToString")
+  val doubleToString: NormalFunOrVarId = NormalFunOrVarId("doubleToString")
+  val charToString: NormalFunOrVarId = NormalFunOrVarId("charToString")
+  val boolToString: NormalFunOrVarId = NormalFunOrVarId("boolToString")
+  val toCharArray: NormalFunOrVarId = NormalFunOrVarId("toCharArray")
 
-  val builtInFunctions: Map[String, FunctionSignature] = Map(
+  val builtInFunctions: Map[FunOrVarId, FunctionSignature] = Map(
     FunctionSignature(print, List(StringType), VoidType).keyed,
     FunctionSignature(intToString, List(IntType), StringType).keyed,
     FunctionSignature(doubleToString, List(DoubleType), StringType).keyed,
@@ -21,7 +22,7 @@ object BuiltInFunctions {
     FunctionSignature(toCharArray, List(StringType), ArrayType(CharType)).keyed
   )
 
-  extension(sig: FunctionSignature) private def keyed: (String, FunctionSignature) = {
+  extension(sig: FunctionSignature) private def keyed: (FunOrVarId, FunctionSignature) = {
     sig.name -> sig
   }
 

@@ -1,6 +1,7 @@
 package compiler.typechecker
 
 import compiler.AnalysisContext
+import identifiers.FunOrVarId
 import lang.Types.PrimitiveType.{NothingType, VoidType}
 import lang.Types.Type
 
@@ -9,7 +10,10 @@ import scala.collection.mutable
 /**
  * Mutabble context for type checking
  */
-final case class TypeCheckingContext(analysisContext: AnalysisContext, locals: mutable.Map[String, (Type, Boolean)] = mutable.Map.empty) {
+final case class TypeCheckingContext(
+                                      analysisContext: AnalysisContext,
+                                      locals: mutable.Map[FunOrVarId, (Type, Boolean)] = mutable.Map.empty
+                                    ) {
 
   /**
    * @return a copy of this with empty locals map
@@ -33,7 +37,7 @@ final case class TypeCheckingContext(analysisContext: AnalysisContext, locals: m
    * @param duplicateVarCallback to be called if the name is already used by another local
    * @param forbiddenTypeCallback to be called if the local has a type that is not acceptable for a local
    */
-  def addLocal(name: String, tpe: Type, isReassignable: Boolean, duplicateVarCallback: () => Unit, forbiddenTypeCallback: () => Unit): Unit = {
+  def addLocal(name: FunOrVarId, tpe: Type, isReassignable: Boolean, duplicateVarCallback: () => Unit, forbiddenTypeCallback: () => Unit): Unit = {
     if (tpe == NothingType || tpe == VoidType) {
       forbiddenTypeCallback()
     } else if (locals.contains(name)) {
