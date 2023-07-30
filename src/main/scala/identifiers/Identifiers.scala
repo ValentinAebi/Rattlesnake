@@ -11,10 +11,8 @@ sealed trait FunOrVarId extends Identifier
 
 sealed trait TypeIdentifier extends Identifier
 
-sealed trait StructIdentifier extends TypeIdentifier
-
 final case class NormalFunOrVarId(stringId: String) extends FunOrVarId
-final case class NormalStructId(stringId: String) extends StructIdentifier
+final case class NormalTypeId(stringId: String) extends TypeIdentifier
 
 case object StringEqualityFunId extends FunOrVarId {
   val rawName = "stringEq"

@@ -122,9 +122,11 @@ object Asts {
   /**
    * Structure (`struct`) definition
    */
-  final case class StructDef(structName: StructIdentifier, fields: List[Param]) extends TopLevelDef {
+  final case class StructDef(structName: TypeIdentifier, fields: List[Param]) extends TopLevelDef {
     override def children: List[Ast] = fields
   }
+  
+  
 
   /**
    * Test definition
@@ -241,7 +243,7 @@ object Asts {
   /**
    * Initialization of a struct, e.g. `new Foo { 0, 1 }`
    */
-  final case class StructInit(structName: StructIdentifier, args: List[Expr]) extends Expr {
+  final case class StructInit(structName: TypeIdentifier, args: List[Expr]) extends Expr {
     override def children: List[Ast] = args
   }
 

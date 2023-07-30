@@ -31,11 +31,11 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   }
 
   private val lowName = treeParser("identifier starting with a lowercase") {
-    case FirstLowercaseIdentifierToken(strValue) => strValue
+    case FirstLowercaseIdentifierToken(strValue) => NormalFunOrVarId(strValue)
   }
 
   private val highName = treeParser("identifier starting with an uppercase") {
-    case FirstUppercaseIdentifierToken(strValue) => strValue
+    case FirstUppercaseIdentifierToken(strValue) => NormalTypeId(strValue)
   }
 
   private val literalValue: FinalTreeParser[Literal] = treeParser("literal value") {
@@ -89,32 +89,32 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val funDef = {
     kw(Fn).ignored ::: lowName ::: openParenth ::: repeatWithSep(param, comma) ::: closeParenth ::: opt(-> ::: tpe) ::: block map {
       case funName ^: params ^: optRetType ^: body =>
-        FunDef(NormalFunOrVarId(funName), params, optRetType, body)
+        FunDef(funName, params, optRetType, body)
     }
   } setName "funDef"
 
   private lazy val param = {
     lowName ::: colon ::: tpe map {
       case name ^: tpe =>
-        Param(NormalFunOrVarId(name), tpe)
+        Param(name, tpe)
     }
   } setName "param"
 
   private lazy val structDef = {
     kw(Struct).ignored ::: highName ::: openBrace ::: repeatWithSep(param, comma) ::: closeBrace map {
-      case name ^: fields => StructDef(NormalStructId(name), fields)
+      case name ^: fields => StructDef(name, fields)
     }
   } setName "structDef"
   
   private lazy val testDef = {
     kw(Test).ignored ::: lowName ::: block map {
-      case name ^: body => TestDef(NormalFunOrVarId(name), body)
+      case name ^: body => TestDef(name, body)
     }
   } setName "testDef"
 
   private lazy val constDef = {
     kw(Const).ignored ::: lowName ::: opt(colon ::: tpe) ::: assig ::: literalValue map {
-      case name ^: tpeOpt ^: value => ConstDef(NormalFunOrVarId(name), tpeOpt, value)
+      case name ^: tpeOpt ^: value => ConstDef(name, tpeOpt, value)
     }
   } setName "constDef"
 
@@ -127,7 +127,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "tpe"
 
   private lazy val atomicType = {
-    highName map (name => Types.primTypeFor(name).getOrElse(StructType(NormalStructId(name))))
+    highName map (name => Types.primTypeFor(name.stringId).getOrElse(StructType(name)))
   } setName "atomicType"
 
   private lazy val arrayType = recursive {
@@ -188,15 +188,15 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val varRefOrFunCall = recursive {
     lowName ::: opt(callArgs) map {
       case name ^: Some(args) =>
-        Call(VariableRef(NormalFunOrVarId(name)), args)
+        Call(VariableRef(name), args)
       case name ^: None =>
-        VariableRef(NormalFunOrVarId(name))
+        VariableRef(name)
     }
   } setName "varRefOrCallArgs"
 
   private lazy val funCall = recursive {
     lowName ::: callArgs map {
-      case calleeName ^: args => Call(VariableRef(NormalFunOrVarId(calleeName)), args)
+      case calleeName ^: args => Call(VariableRef(calleeName), args)
     }
   } setName "funCall"
 
@@ -209,7 +209,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
       case atExpr ^: selOrInds =>
         selOrInds.foldLeft(atExpr){ (acc, curr) =>
           curr match
-            case field: String => Select(acc, NormalFunOrVarId(field))
+            case field: NormalFunOrVarId => Select(acc, field)
             case idx: Expr => Indexing(acc, idx)
         }
     }
@@ -231,7 +231,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   private lazy val structInit = recursive {
     kw(New).ignored ::: highName ::: openBrace ::: repeatWithSep(expr, comma) ::: closeBrace map {
-      case structName ^: args => StructInit(NormalStructId(structName), args)
+      case structName ^: args => StructInit(structName, args)
     }
   } setName "structInit"
 
@@ -241,13 +241,13 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   private lazy val valDef = {
     kw(Val).ignored ::: lowName ::: opt(colon ::: tpe) ::: assig ::: expr map {
-      case valName ^: optType ^: rhs => LocalDef(NormalFunOrVarId(valName), optType, rhs, isReassignable = false)
+      case valName ^: optType ^: rhs => LocalDef(valName, optType, rhs, isReassignable = false)
     }
   } setName "valDef"
 
   private lazy val varDef = {
     kw(Var).ignored ::: lowName ::: opt(colon ::: tpe) ::: assig ::: expr map {
-      case varName ^: optType ^: rhs => LocalDef(NormalFunOrVarId(varName), optType, rhs, isReassignable = true)
+      case varName ^: optType ^: rhs => LocalDef(varName, optType, rhs, isReassignable = true)
     }
   } setName "varDef"
 

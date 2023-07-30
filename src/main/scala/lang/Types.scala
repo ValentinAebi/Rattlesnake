@@ -1,6 +1,6 @@
 package lang
 
-import identifiers.StructIdentifier
+import identifiers.TypeIdentifier
 import lang.Types.PrimitiveType.NothingType
 
 /**
@@ -46,7 +46,7 @@ object Types {
   /**
    * Type of a structure instance
    */
-  final case class StructType(typeName: StructIdentifier) extends Type {
+  final case class StructType(typeName: TypeIdentifier) extends Type {
     override def toString: String = typeName.stringId
   }
 

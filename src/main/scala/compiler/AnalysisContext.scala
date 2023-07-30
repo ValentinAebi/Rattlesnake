@@ -4,7 +4,7 @@ import compiler.AnalysisContext
 import compiler.CompilationStep.ContextCreation
 import compiler.Errors.{CompilationError, Err, ErrorReporter, errorsExitCode}
 import compiler.irs.Asts.{ConstDef, FunDef, StructDef, TestDef}
-import identifiers.{FunOrVarId, StructIdentifier}
+import identifiers.{FunOrVarId, TypeIdentifier}
 import lang.Types.PrimitiveType.{NothingType, VoidType}
 import lang.Types.Type
 import lang.{BuiltInFunctions, FunctionSignature, StructSignature, Types}
@@ -14,7 +14,7 @@ import scala.collection.mutable
 
 final case class AnalysisContext(
                                   functions: Map[FunOrVarId, FunctionSignature],
-                                  structs: Map[StructIdentifier, StructSignature],
+                                  structs: Map[TypeIdentifier, StructSignature],
                                   tests: Set[FunOrVarId],
                                   constants: Map[FunOrVarId, Type]
                                 ){
@@ -38,7 +38,7 @@ object AnalysisContext {
 
   final class Builder(errorReporter: ErrorReporter) {
     private val functions: mutable.Map[FunOrVarId, FunctionSignature] = mutable.Map.empty
-    private val structs: mutable.Map[StructIdentifier, StructSignature] = mutable.Map.empty
+    private val structs: mutable.Map[TypeIdentifier, StructSignature] = mutable.Map.empty
     private val tests: mutable.Set[FunOrVarId] = mutable.Set.empty
     private val constants: mutable.Map[FunOrVarId, Type] = mutable.Map.empty
 

@@ -8,4 +8,4 @@ import scala.collection.mutable
 
 final case class FunctionSignature(name: FunOrVarId, argTypes: List[Type], retType: Type)
 
-final case class StructSignature(name: StructIdentifier, fields: mutable.LinkedHashMap[FunOrVarId, Type])
+final case class StructSignature(name: TypeIdentifier, fields: mutable.LinkedHashMap[FunOrVarId, Type])
