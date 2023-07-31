@@ -17,7 +17,7 @@ object Errors {
 
   /**
    * Compilation error or warning
-   * 
+   *
    * Ordered according to their position in the program
    */
   sealed trait CompilationError extends Ordered[CompilationError] {
@@ -32,7 +32,7 @@ object Errors {
 
     override def compare(that: CompilationError): Int = {
       val stepComp = this.compilationStep.ordinal.compare(that.compilationStep.ordinal)
-      if (stepComp != 0){
+      if (stepComp != 0) {
         stepComp
       } else {
         (this.posOpt, that.posOpt) match {
@@ -93,12 +93,14 @@ object Errors {
 
   type ErrorsConsumer = (CompilationError | String) => Unit
 
+  type ExitCode = Int
+
   /**
    * Container for errors found during compilation
    *
    * @param errorsConsumer to be called when errors need to be displayed
    */
-  final class ErrorReporter(errorsConsumer: ErrorsConsumer) {
+  final class ErrorReporter(errorsConsumer: ErrorsConsumer, exit: ExitCode => Nothing) {
     private var errors: List[NonFatal] = Nil
 
     /**
@@ -122,10 +124,7 @@ object Errors {
     def displayErrorsAndTerminate(): Nothing = {
       displayErrors()
       displayExitMessage()
-      System.exit(if errors.isEmpty then 0 else errorsExitCode)
-
-      // never executed
-      throw new AssertionError()
+      exit(if errors.isEmpty then 0 else errorsExitCode)
     }
 
     /**
@@ -135,7 +134,7 @@ object Errors {
       if (errors.exists(!_.isWarning)) {
         displayErrors()
         displayExitMessage()
-        System.exit(errorsExitCode)
+        exit(errorsExitCode)
       }
       else {
         displayAndDeleteWarnings()
@@ -150,10 +149,7 @@ object Errors {
       if errors.nonEmpty then errorsConsumer("Previously found errors:")
       displayErrors()
       displayExitMessage()
-      System.exit(fatalErrorExitCode)
-
-      // never executed
-      throw new AssertionError()
+      exit(fatalErrorExitCode)
     }
 
     private def displayAndDeleteWarnings(): Unit = {

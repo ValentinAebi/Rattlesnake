@@ -42,7 +42,11 @@ object FunctionsToInject {
   private val stringEqualityFunction: FunDef = {
 
     val errorsConsumer: (CompilationError | String) => Nothing = _ => assert(false)
-    val er = new ErrorReporter(errorsConsumer)
+    val er = new ErrorReporter(errorsConsumer,
+      exitCode => throw new AssertionError(
+        s"should not happen: could not compile string equality function (exit code $exitCode"
+      )
+    )
 
     val pipeline =
       new Lexer(er)

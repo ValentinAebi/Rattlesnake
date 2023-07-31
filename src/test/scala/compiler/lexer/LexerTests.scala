@@ -4,8 +4,8 @@ import lang.Operator.*
 import lang.Keyword.*
 import compiler.{Position, SourceCodeProvider}
 import compiler.irs.Tokens.*
-import compiler.Errors.{ ErrorReporter, CompilationError }
-import org.junit.Assert.{assertArrayEquals, assertEquals, assertTrue}
+import compiler.Errors.{CompilationError, ErrorReporter, ExitCode}
+import org.junit.Assert.{assertArrayEquals, assertEquals, assertTrue, fail}
 import org.junit.Test
 
 import scala.collection.mutable.ListBuffer
@@ -40,7 +40,7 @@ class LexerTests {
     }
 
     val errorsCollector = ListBuffer.empty[CompilationError | String]
-    val errorReporter = ErrorReporter(errorsCollector.addOne)
+    val errorReporter = ErrorReporter(errorsCollector.addOne, failExit)
 
     val expectedTokSeq = List(
       KeywordToken(Fn),
@@ -95,6 +95,11 @@ class LexerTests {
     assertEquals(expectedTokSeq, actualTokSeq)
     errorReporter.displayErrors()
     assertTrue(errorsCollector.isEmpty)
+  }
+
+  private def failExit(exitCode: ExitCode): Nothing = {
+    fail(s"exit called, exit code: $exitCode")
+    throw new AssertionError("cannot happen")
   }
 
 

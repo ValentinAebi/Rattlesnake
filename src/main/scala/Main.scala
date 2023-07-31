@@ -264,7 +264,7 @@ object Main {
   private case class TypeCheck(argsMap: MutArgsMap) extends Action {
     override def run(sources: List[SourceCodeProvider]): Unit = {
       reportUnknownArgsIfAny(argsMap)
-      TasksPipelines.typeChecker.apply(sources)
+      TasksPipelines.typeChecker().apply(sources)
       succeed()
     }
   }
