@@ -5,7 +5,7 @@ const failure: String = "K.O.";
 fn testFunc(xarr: arr Int) -> String {
     var x = xarr[0];
     x += neg;
-    x -= (neg/4);
+    x -= (neg/(-neg2));
     if x < ref {
         return success;
     } else {
@@ -16,3 +16,4 @@ fn testFunc(xarr: arr Int) -> String {
 const ref = 544
 
 const neg = -12
+const neg2 = -4
