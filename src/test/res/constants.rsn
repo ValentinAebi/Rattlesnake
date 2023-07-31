@@ -1,9 +1,11 @@
 
-const success = "OK"
-const failure: String = "K.O."
+const success = "OK";
+const failure: String = "K.O.";
 
 fn testFunc(xarr: arr Int) -> String {
-    val x = xarr[0];
+    var x = xarr[0];
+    x += neg;
+    x -= (neg/4);
     if x < ref {
         return success;
     } else {
@@ -12,3 +14,5 @@ fn testFunc(xarr: arr Int) -> String {
 }
 
 const ref = 544
+
+const neg = -12

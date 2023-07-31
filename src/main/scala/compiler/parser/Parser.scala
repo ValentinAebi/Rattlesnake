@@ -38,13 +38,20 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     case FirstUppercaseIdentifierToken(strValue) => NormalTypeId(strValue)
   }
 
-  private val literalValue: FinalTreeParser[Literal] = treeParser("literal value") {
+  private val numericLiteralValue: FinalTreeParser[NumericLiteral] = treeParser("numeric literal value"){
     case IntLitToken(value) => IntLit(value)
     case DoubleLitToken(value) => DoubleLit(value)
+  }
+
+  private val nonNumericLiteralValue: FinalTreeParser[NonNumericLiteral] = treeParser("non numeric literal value"){
     case BoolLitToken(value) => BoolLit(value)
     case CharLitToken(value) => CharLit(value)
     case StringLitToken(value) => StringLit(value)
   }
+
+  private val literalValue: FinalTreeParser[Literal] = {
+    numericLiteralValue OR nonNumericLiteralValue
+  } setName "literalValue"
 
   private val endOfFile = treeParser("end of file") {
     case EndOfFileToken => ()
@@ -112,8 +119,20 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     }
   } setName "testDef"
 
+  private lazy val possiblyNegativeNumericLiteralValue: FinalTreeParser[NumericLiteral] = {
+    (numericLiteralValue OR (op(Minus) ::: numericLiteralValue)) map {
+      case _ ^: IntLit(value) => IntLit(-value)
+      case _ ^: DoubleLit(value) => DoubleLit(-value)
+      case (lit: NumericLiteral) => lit
+    }
+  } setName "possiblyNegativeNumericLiteralValue"
+
+  private lazy val constExprLiteralValue = {
+    possiblyNegativeNumericLiteralValue OR nonNumericLiteralValue
+  } setName "constExprLiteralValue"
+
   private lazy val constDef = {
-    kw(Const).ignored ::: lowName ::: opt(colon ::: tpe) ::: assig ::: literalValue map {
+    kw(Const).ignored ::: lowName ::: opt(colon ::: tpe) ::: assig ::: constExprLiteralValue map {
       case name ^: tpeOpt ^: value => ConstDef(name, tpeOpt, value)
     }
   } setName "constDef"
@@ -168,6 +187,8 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   private lazy val noBinopExpr = recursive {
     opt(unaryOperator) ::: selectOrIndexingChain map {
+      case Some(Minus) ^: IntLit(value) => IntLit(-value)
+      case Some(Minus) ^: DoubleLit(value) => DoubleLit(-value)
       case Some(unOp) ^: operand => UnaryOp(unOp, operand)
       case None ^: simpleExpr => simpleExpr
     }

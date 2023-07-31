@@ -251,7 +251,7 @@ class CompilerTests {
   }
 
   @Test def constantsTest(): Unit = {
-    val inputs = List(32, 798, 544, 543)
+    val inputs = List(41, 807, 553, 552)
     val rawActualRes = compileAndExecSeveralIter("constants", "testFunc",
       inputs.map(i => Array(Array(i)))
     )

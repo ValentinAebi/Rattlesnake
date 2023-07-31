@@ -170,38 +170,42 @@ object Asts {
     override def getTypeOpt: Option[Type]
   }
 
+  sealed trait NumericLiteral extends Literal
+
+  sealed trait NonNumericLiteral extends Literal
+
   /**
    * Integer literal
    */
-  final case class IntLit(value: Int) extends Literal {
+  final case class IntLit(value: Int) extends NumericLiteral {
     override def getTypeOpt: Option[Type] = Some(IntType)
   }
 
   /**
    * Double literal
    */
-  final case class DoubleLit(value: Double) extends Literal {
+  final case class DoubleLit(value: Double) extends NumericLiteral {
     override def getTypeOpt: Option[Type] = Some(DoubleType)
   }
 
   /**
    * Char literal
    */
-  final case class CharLit(value: Char) extends Literal {
+  final case class CharLit(value: Char) extends NonNumericLiteral {
     override def getTypeOpt: Option[Type] = Some(CharType)
   }
 
   /**
    * Bool (boolean) literal
    */
-  final case class BoolLit(value: Boolean) extends Literal {
+  final case class BoolLit(value: Boolean) extends NonNumericLiteral {
     override def getTypeOpt: Option[Type] = Some(BoolType)
   }
 
   /**
    * String literal
    */
-  final case class StringLit(value: String) extends Literal {
+  final case class StringLit(value: String) extends NonNumericLiteral {
     override def getTypeOpt: Option[Type] = Some(StringType)
   }
 
