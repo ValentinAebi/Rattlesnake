@@ -1,6 +1,10 @@
 # Rattlesnake 🐍
 
-Statically typed imperative toy programming language, compiled to the JVM
+A simple procedural programming language, statically typed and compiled to JVM bytecode
+
+## Example project
+
+A sudoku solver: https://github.com/ValentinAebi/Rattlesnake-sudoku-solver
 
 ## Example program
 ```
@@ -22,8 +26,6 @@ fn main(args: arr String){
 }
 
 ```
-
-Example project: https://github.com/ValentinAebi/Rattlesnake-sudoku-solver
 
 [Compiler documentation here](CompilerDoc.md)
 
