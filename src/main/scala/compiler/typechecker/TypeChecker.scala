@@ -164,23 +164,23 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
             reportError("array size should be nonnegative", size.getPosition)
           case _ => // do nothing
         }
-        ArrayType(elemType)
+        ArrayType(elemType, modifiable = true)
 
-      case filledArrayInit@FilledArrayInit(Nil) =>
+      case filledArrayInit@FilledArrayInit(Nil, _) =>
         reportError("cannot infer type of empty array, use 'arr <type>[<size>]' instead", filledArrayInit.getPosition)
 
-      case filledArrayInit@FilledArrayInit(arrayElems) =>
+      case filledArrayInit@FilledArrayInit(arrayElems, modifiable) =>
         val types = arrayElems.map(check(_, ctx))
         types.find(tpe => types.forall(_.subtypeOf(tpe))) match {
-          case Some(inferredElemType) => ArrayType(inferredElemType)
+          case Some(inferredElemType) => ArrayType(inferredElemType, modifiable)
           case None => reportError("cannot infer array type", filledArrayInit.getPosition)
         }
 
-      case structInit@StructInit(structName, args) =>
+      case structInit@StructInit(structName, args, modifiable) =>
         ctx.structs.get(structName) match {
           case Some(structSig) =>
             checkCallArgs(structSig.fields.values.toList, args, ctx, structInit.getPosition)
-            StructType(structName)
+            StructType(structName, modifiable)
           case None => reportError(s"not found: struct '$structName'", structInit.getPosition)
         }
 
@@ -219,7 +219,7 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
       case select@Select(lhs, selected) =>
         val lhsType = check(lhs, ctx)
         lhsType match {
-          case StructType(typeName) =>
+          case StructType(typeName, structIsModifiable) =>
             val structSig = ctx.structs.apply(typeName)
             structSig.fields.get(selected) match {
               case Some(fieldType) => fieldType
@@ -243,13 +243,19 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
               case None =>
                 reportError(s"not found: '$name'", varAssig.getPosition)
             }
-          case indexing: Indexing =>
+          case indexing@Indexing(indexed, _) =>
             val lhsType = check(indexing, ctx)
+            if (indexed.getType.isInstanceOf[ArrayType] && !indexed.getType.isModifiable) {
+              reportError("cannot modify an unmodifiable array", indexing.getPosition)
+            }
             if (!rhsType.subtypeOf(lhsType)) {
               reportError(s"cannot assign a value of type '$rhsType' to an array of element type '$lhsType'", indexing.getPosition)
             }
-          case select: Select =>
+          case select@Select(lhs, _) =>
             val lhsType = check(select, ctx)
+            if (lhs.getType.isInstanceOf[StructType] && !lhs.getType.isModifiable){
+              reportError("cannot modify an unmodifiable struct", lhs.getPosition)
+            }
             if (!rhsType.subtypeOf(lhsType)) {
               reportError(s"cannot assign a value of type '$rhsType' to a field of type '$lhsType'", select.getPosition)
             }
@@ -280,6 +286,13 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
             }
           case indexingOrSelect: (Indexing | Select) =>
             val lhsType = check(indexingOrSelect, ctx)
+            indexingOrSelect match {
+              case Indexing(indexed, _) if indexed.getType.isInstanceOf[ArrayType] && !indexed.getType.isModifiable =>
+                reportError("cannot modify an unmodifiable array", indexingOrSelect.getPosition)
+              case Select(lhs, _) if lhs.getType.isInstanceOf[StructType] && !lhs.getType.isModifiable =>
+                reportError("cannot modify an unmodifiable struct", lhs.getPosition)
+              case _ => ()
+            }
             Operators.binaryOperatorSigFor(lhsType, op, rhsType) match {
               case Some(opSig) =>
                 if (!opSig.retType.subtypeOf(lhsType)) {
@@ -383,10 +396,10 @@ final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List
         errorFound = true
       }
     }
-    if (expTypesIter.hasNext) {
+    if (expTypesIter.hasNext && !errorFound) {
       reportError(s"expected argument of type '${expTypesIter.next()}', found end of arguments list", callPos)
     }
-    if (argsIter.hasNext) {
+    if (argsIter.hasNext && !errorFound) {
       val arg = argsIter.next()
       reportError(s"expected end of arguments list, found argument of type '${check(arg, ctx)}'", arg.getPosition)
       for arg <- argsIter do {

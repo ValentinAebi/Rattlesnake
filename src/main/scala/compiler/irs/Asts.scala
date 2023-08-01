@@ -240,14 +240,14 @@ object Asts {
   /**
    * Initialization of an array that contains all the elements in `arrayElems` (in order)
    */
-  final case class FilledArrayInit(arrayElems: List[Expr]) extends Expr {
+  final case class FilledArrayInit(arrayElems: List[Expr], modifiable: Boolean) extends Expr {
     override def children: List[Ast] = arrayElems
   }
 
   /**
    * Initialization of a struct, e.g. `new Foo { 0, 1 }`
    */
-  final case class StructInit(structName: TypeIdentifier, args: List[Expr]) extends Expr {
+  final case class StructInit(structName: TypeIdentifier, args: List[Expr], modifiable: Boolean) extends Expr {
     override def children: List[Ast] = args
   }
 

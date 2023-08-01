@@ -280,8 +280,8 @@ final class Backend[V <: ClassVisitor](
           case Types.UndefinedType => shouldNotHappen()
         }
 
-      case StructInit(structName, args) =>
-        val structType = StructType(structName)
+      case StructInit(structName, args, modifiable) =>
+        val structType = StructType(structName, modifiable)
         val tmpVarIdx = ctx.currLocalIdx
         val tempLocalName = BackendGeneratedVarId(tmpVarIdx)
         ctx.addLocal(tempLocalName, structType)

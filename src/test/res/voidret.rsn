@@ -1,5 +1,5 @@
 
-fn main(args: arr Int) -> Void {
+fn main(args: mut arr Int) -> Void {
     val x = -15;
     args[0] = x;
     if x < 10 {

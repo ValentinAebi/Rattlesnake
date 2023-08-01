@@ -1,17 +1,18 @@
 package compiler.parser
 
-import compiler.Errors.{ErrorReporter, Fatal}
+import compiler.Errors.{ErrorReporter, Fatal, errorsExitCode}
 import compiler.irs.Asts.*
 import compiler.irs.Tokens.*
 import compiler.parser.ParseTree.^:
 import compiler.parser.TreeParsers.*
 import compiler.prettyprinter.PrettyPrinter
-import compiler.{CompilationStep, CompilerStep, Errors, Position}
+import compiler.{CompilerStep, Errors, Position}
 import lang.Keyword.*
 import lang.Operator.*
 import lang.Types.{ArrayType, StructType, Type}
 import lang.{Keyword, Operator, Operators, Types}
 import identifiers.*
+import compiler.CompilationStep.Parsing
 
 import scala.util.Try
 
@@ -142,15 +143,30 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "noParenthType"
 
   private lazy val tpe: P[Type] = recursive {
-    noParenthType OR (openParenth ::: tpe ::: closeParenth)
+    modifiableType OR unmodifiableType
   } setName "tpe"
 
+  private lazy val modifiableType: P[Type] = recursive {
+    kw(Mut).ignored ::: unmodifiableType map {
+      case StructType(typeName, _) => StructType(typeName, modifiable = true)
+      case ArrayType(elemType, _) => ArrayType(elemType, modifiable = true)
+      case tpe =>
+        // TODO report position
+        errorReporter.push(Errors.Err(Parsing, s"$tpe is never modifiable", posOpt = None))
+        tpe
+    }
+  } setName "modifiableType"
+
+  private lazy val unmodifiableType: P[Type] = recursive {
+    noParenthType OR (openParenth ::: tpe ::: closeParenth)
+  } setName "unmodifiableType"
+
   private lazy val atomicType = {
-    highName map (name => Types.primTypeFor(name.stringId).getOrElse(StructType(name)))
+    highName map (name => Types.primTypeFor(name).getOrElse(StructType(name, modifiable = false)))
   } setName "atomicType"
 
   private lazy val arrayType = recursive {
-    kw(Arr).ignored ::: tpe map (ArrayType.apply)
+    kw(Arr).ignored ::: tpe map (ArrayType.apply(_, modifiable = false))
   } setName "arrayType"
 
   private lazy val block = recursive {
@@ -247,12 +263,14 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "arrayInit"
 
   private lazy val filledArrayInit = recursive {
-    openingBracket ::: repeatWithSep(expr, comma) ::: closingBracket map (arrElems => FilledArrayInit(arrElems))
+    opt(kw(Mut)) ::: openingBracket ::: repeatWithSep(expr, comma) ::: closingBracket map {
+      case optMut ^: arrElems => FilledArrayInit(arrElems, optMut.isDefined)
+    }
   } setName "filledArrayInit"
 
   private lazy val structInit = recursive {
-    kw(New).ignored ::: highName ::: openBrace ::: repeatWithSep(expr, comma) ::: closeBrace map {
-      case structName ^: args => StructInit(structName, args)
+    kw(New).ignored ::: opt(kw(Mut)) ::: highName ::: openBrace ::: repeatWithSep(expr, comma) ::: closeBrace map {
+      case optMut ^: structName ^: args => StructInit(structName, args, optMut.isDefined)
     }
   } setName "structInit"
 
@@ -309,7 +327,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   override def apply(input: (List[PositionedToken], String)): Source = {
     val (positionedTokens, srcName) = input
     if (positionedTokens.isEmpty) {
-      errorReporter.pushFatal(Fatal(CompilationStep.Parsing, "empty source", Some(Position(srcName, 1, 1))))
+      errorReporter.pushFatal(Fatal(Parsing, "empty source", Some(Position(srcName, 1, 1))))
     } else {
       val iterator = LL1Iterator.from(positionedTokens)
       source.extract(iterator) match {

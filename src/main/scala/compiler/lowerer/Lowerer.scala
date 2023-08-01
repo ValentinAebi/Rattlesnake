@@ -98,10 +98,10 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
       case call: Call => Call(lower(call.callee), call.args.map(lower))
       case indexing: Indexing => Indexing(lower(indexing.indexed), lower(indexing.arg))
       case arrayInit: ArrayInit => ArrayInit(arrayInit.elemType, lower(arrayInit.size))
-      case structInit: StructInit => StructInit(structInit.structName, structInit.args.map(lower))
+      case structInit: StructInit => StructInit(structInit.structName, structInit.args.map(lower), structInit.modifiable)
       
       // [x_1, ... , x_n] ---> explicit assignments
-      case filledArrayInit@FilledArrayInit(arrayElems) =>
+      case filledArrayInit@FilledArrayInit(arrayElems, _) =>
         val arrayType = filledArrayInit.getType.asInstanceOf[ArrayType]
         val elemType = arrayType.elemType
         val arrValId = uniqueIdGenerator.next()

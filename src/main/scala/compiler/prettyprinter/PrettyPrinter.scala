@@ -134,10 +134,20 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         addAst(size)
         pps.add("]")
 
-      case FilledArrayInit(arrayElems) =>
+      case FilledArrayInit(arrayElems, modifiable) =>
+        if (modifiable) {
+          pps
+            .add(Mut.str)
+            .addSpace()
+        }
         addParenthList(arrayElems, parenth = ("[", "]"))
 
-      case StructInit(structName, args) =>
+      case StructInit(structName, args, modifiable) =>
+        if (modifiable) {
+          pps
+            .add(Mut.str)
+            .addSpace()
+        }
         pps
           .add(New.str)
           .addSpace()

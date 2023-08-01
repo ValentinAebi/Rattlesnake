@@ -27,6 +27,19 @@ object TreeParsers {
   }
 
   /**
+   * Creates a parser that uses a `PartialFunction` and returns the position along with the result
+   *
+   * @param expectedDescr description of the expected token (for error reporting)
+   * @param pf            the `PartialFunction`, defined at tokens treated by this parser and returning an instance of `U`
+   * @param errorReporter errors will be saved there
+   * @return the created parser
+   */
+  inline def treeParserPositioned[U](expectedDescr: String)(inline pf: PartialFunction[Token, U])
+                                 (implicit errorReporter: ErrorReporter): FinalTreeParser[(U, Position)] = {
+    ExtractorTreeParserPositioned(pf, expectedDescr, errorReporter, pfToDescr(pf)) setNameResetable expectedDescr
+  }
+
+  /**
    * Creates a parser that returns a `Some[U]` with the result of `optional` if `optional` accepts the token and `None` o.w.
    */
   def opt[U](optional: AnyTreeParser[U])
@@ -469,15 +482,26 @@ object TreeParsers {
     }
   }
 
-  private final case class ExtractorTreeParser[+U]
-  (pf: PartialFunction[Token, U], firstExpectedDescr: String, errorReporter: ErrorReporter, pfCode: String)
-    extends FinalTreeParser[U] {
+  private abstract sealed class AbstractExtractorTreeParser[+U] extends FinalTreeParser[U]{
 
-    private val liftedPf = pf.lift
+    val pf: PartialFunction[Token, _]
+    val pfCode: String
 
     override def admits(ll1Iterator: LL1Iterator): Boolean = {
       pf.isDefinedAt(ll1Iterator.current.token)
     }
+
+    override def safeToStringImpl(remDepth: Int): String = {
+      s"$firstExpectedDescr: $pfCode"
+    }
+
+  }
+
+  private final case class ExtractorTreeParser[+U]
+  (pf: PartialFunction[Token, U], firstExpectedDescr: String, errorReporter: ErrorReporter, pfCode: String)
+    extends AbstractExtractorTreeParser[U] {
+
+    private val liftedPf = pf.lift
 
     override def extract(ll1Iterator: LL1Iterator): Option[U] = {
       val extractedPosTok = ll1Iterator.moveForward()
@@ -488,9 +512,22 @@ object TreeParsers {
         case s@Some(_) => s
       }
     }
+  }
 
-    override def safeToStringImpl(remDepth: Int): String = {
-      s"$firstExpectedDescr: $pfCode"
+  private final case class ExtractorTreeParserPositioned[+U]
+  (pf: PartialFunction[Token, U], firstExpectedDescr: String, errorReporter: ErrorReporter, pfCode: String)
+    extends AbstractExtractorTreeParser[(U, Position)] {
+
+    private val liftedPf = pf.lift
+
+    override def extract(ll1Iterator: LL1Iterator): Option[(U, Position)] = {
+      val extractedPosTok = ll1Iterator.moveForward()
+      liftedPf.apply(extractedPosTok.token) match {
+        case None =>
+          reportMismatch(errorReporter, firstExpectedDescr, extractedPosTok.token.strValue, extractedPosTok.position)
+          None
+        case Some(u) => Some((u, extractedPosTok.position))
+      }
     }
   }
 

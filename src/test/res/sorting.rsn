@@ -1,11 +1,11 @@
 
-fn swap(array: arr Int, i1: Int, i2: Int) -> Void {
+fn swap(array: mut arr Int, i1: Int, i2: Int) -> Void {
     val tmp = array[i1];
     array[i1] = array[i2];
     array[i2] = tmp;
 }
 
-fn selectionSort(array: arr Int) {
+fn selectionSort(array: mut arr Int) {
     for var i = 0; i < #array; i += 1 {
         val maxIdx = maxIdx(array, i);
         swap(array, i, maxIdx)

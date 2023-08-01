@@ -26,8 +26,8 @@ final case class AnalysisContext(
   def knowsType(tpe: Type): Boolean = {
     tpe match {
       case _: Types.PrimitiveType => true
-      case Types.StructType(typeName) => structs.contains(typeName)
-      case Types.ArrayType(elemType) => knowsType(elemType)
+      case Types.StructType(typeName, _) => structs.contains(typeName)
+      case Types.ArrayType(elemType, _) => knowsType(elemType)
       case Types.UndefinedType => true
     }
   }
