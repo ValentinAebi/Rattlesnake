@@ -18,11 +18,6 @@ import java.nio.file.Path
  * Contains methods producing pipelines for different tasks, indicated by their name
  */
 object TasksPipelines {
-  
-  private def defaultExit(exitCode: ExitCode): Nothing = {
-    System.exit(exitCode)
-    throw new AssertionError("cannot happen")
-  }
 
   /**
    * Pipeline for compilation (src file -> .class file)
@@ -32,9 +27,9 @@ object TasksPipelines {
                 javaVersionCode: Int,
                 outputName: String,
                 generateTests: Boolean,
-                exit: ExitCode => Nothing = defaultExit
+                er: ErrorReporter = defaultErrorReporter
               ): CompilerStep[List[SourceCodeProvider], List[Path]] = {
-    compilerImpl(outputDirectoryPath, Backend.BinaryMode, javaVersionCode, outputName, generateTests, exit)
+    compilerImpl(outputDirectoryPath, Backend.BinaryMode, javaVersionCode, outputName, generateTests, er)
   }
 
   /**
@@ -44,9 +39,9 @@ object TasksPipelines {
                       outputDirectoryPath: Path,
                       javaVersionCode: Int,
                       outputName: String,
-                      exit: ExitCode => Nothing = defaultExit
+                      er: ErrorReporter = defaultErrorReporter
                     ): CompilerStep[List[SourceCodeProvider], List[Path]] = {
-    compilerImpl(outputDirectoryPath, Backend.AssemblyMode, javaVersionCode, outputName, true, exit)
+    compilerImpl(outputDirectoryPath, Backend.AssemblyMode, javaVersionCode, outputName, true, er)
   }
 
   /**
@@ -58,9 +53,8 @@ object TasksPipelines {
                  indentGranularity: Int,
                  overwriteFileCallback: String => Boolean, 
                  displayAllParentheses: Boolean = false,
-                 exit: ExitCode => Nothing = defaultExit
+                 er: ErrorReporter = defaultErrorReporter
                ): CompilerStep[SourceCodeProvider, Unit] = {
-    val er = createErrorReporter(exit)
     frontend(er)
       .andThen(new PrettyPrinter(indentGranularity, displayAllParentheses))
       .andThen(new StringWriter(directoryPath, filename, er, overwriteFileCallback))
@@ -69,12 +63,11 @@ object TasksPipelines {
   /**
    * Pipeline for typechecker (src file -> side effects of error reporting)
    */
-  def typeChecker(exit: ExitCode => Nothing = defaultExit): CompilerStep[List[SourceCodeProvider], Unit] = {
-    val er = createErrorReporter(exit)
+  def typeChecker(er: ErrorReporter = defaultErrorReporter, okReporter: String => Unit = println): CompilerStep[List[SourceCodeProvider], Unit] = {
     MultiStep(frontend(er))
       .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
       .andThen(new TypeChecker(er))
-      .andThen(Mapper(_ => println("no error found")))
+      .andThen(Mapper(_ => okReporter("no error found")))
   }
 
   /**
@@ -86,9 +79,8 @@ object TasksPipelines {
                indentGranularity: Int = 2,
                overwriteFileCallback: String => Boolean, 
                displayAllParentheses: Boolean = false,
-               exit: ExitCode => Nothing = defaultExit
+               er: ErrorReporter = defaultErrorReporter
              ): CompilerStep[SourceCodeProvider, Unit] = {
-    val er = createErrorReporter(exit)
     frontend(er)
       .andThen(Mapper(List(_)))
       .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
@@ -104,8 +96,7 @@ object TasksPipelines {
                                               javaVersionCode: Int,
                                               outputName: String,
                                               generateTests: Boolean,
-                                              exit: ExitCode => Nothing) = {
-    val er = createErrorReporter(exit)
+                                              er: ErrorReporter) = {
     MultiStep(frontend(er))
       .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
       .andThen(new TypeChecker(er))
@@ -120,7 +111,12 @@ object TasksPipelines {
     new Lexer(er).andThen(new Parser(er))
   }
 
-  private def createErrorReporter(exit: ExitCode => Nothing): ErrorReporter =
-    new ErrorReporter(errorsConsumer = System.err.println, exit = exit)
+  private def defaultErrorReporter: ErrorReporter =
+    new ErrorReporter(errorsConsumer = System.err.print, exit = defaultExit)
+
+  private def defaultExit(exitCode: ExitCode): Nothing = {
+    System.exit(exitCode)
+    throw new AssertionError("cannot happen")
+  }
 
 }

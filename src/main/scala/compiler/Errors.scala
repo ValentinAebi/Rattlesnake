@@ -115,6 +115,7 @@ object Errors {
     def displayErrors(): Unit = {
       for error <- errors.sorted do {
         errorsConsumer(error)
+        errorsConsumer("\n")
       }
     }
 
@@ -146,20 +147,26 @@ object Errors {
      */
     def pushFatal(fatalError: Fatal): Nothing = {
       errorsConsumer(fatalError)
-      if errors.nonEmpty then errorsConsumer("Previously found errors:")
+      errorsConsumer("\n")
+      if errors.nonEmpty then errorsConsumer("Previously found errors:\n")
       displayErrors()
       displayExitMessage()
       exit(fatalErrorExitCode)
     }
 
     private def displayAndDeleteWarnings(): Unit = {
+      val yellow = "\u001B[33m"
+      val resetColor = "\u001B[0m"
       for warning <- errors if warning.isWarning do {
+        errorsConsumer(yellow)
         errorsConsumer(warning)
+        errorsConsumer(resetColor)
+        errorsConsumer("\n")
       }
       errors = errors.filterNot(_.isWarning)
     }
 
-    private def displayExitMessage(): Unit = errorsConsumer("Rattlesnake compiler exiting")
+    private def displayExitMessage(): Unit = errorsConsumer("Rattlesnake compiler exiting\n")
 
   }
 

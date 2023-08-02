@@ -23,28 +23,28 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   // ---------- Syntax primitives -----------------------------------------------------------------------
 
-  private def op(operators: Operator*) = treeParser(s"operator(s) ${operators.mkString("'", "', '", "'")}") {
+  private def op(operators: Operator*) = treeParser(operators.mkString(" or ")) {
     case OperatorToken(operator) if operators.contains(operator) => operator
   }
 
-  private def kw(keywords: Keyword*) = treeParser(s"keyword(s) ${keywords.mkString("'", "', '", "'")}") {
+  private def kw(keywords: Keyword*) = treeParser(keywords.mkString(" or ")) {
     case KeywordToken(keyword) if keywords.contains(keyword) => keyword
   }
 
-  private val lowName = treeParser("identifier starting with a lowercase") {
+  private val lowName = treeParser("a..z") {
     case FirstLowercaseIdentifierToken(strValue) => NormalFunOrVarId(strValue)
   }
 
-  private val highName = treeParser("identifier starting with an uppercase") {
+  private val highName = treeParser("A..Z") {
     case FirstUppercaseIdentifierToken(strValue) => NormalTypeId(strValue)
   }
 
-  private val numericLiteralValue: FinalTreeParser[NumericLiteral] = treeParser("numeric literal value"){
+  private val numericLiteralValue: FinalTreeParser[NumericLiteral] = treeParser("int or double"){
     case IntLitToken(value) => IntLit(value)
     case DoubleLitToken(value) => DoubleLit(value)
   }
 
-  private val nonNumericLiteralValue: FinalTreeParser[NonNumericLiteral] = treeParser("non numeric literal value"){
+  private val nonNumericLiteralValue: FinalTreeParser[NonNumericLiteral] = treeParser("bool or char or string"){
     case BoolLitToken(value) => BoolLit(value)
     case CharLitToken(value) => CharLit(value)
     case StringLitToken(value) => StringLit(value)
@@ -211,7 +211,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "noBinopExpr"
 
   private lazy val binopArg = recursive {
-    noBinopExpr OR arrayInit OR structInit
+    noBinopExpr OR mutPossiblyFilledArrayInit OR arrayInit OR structInit
   } setName "binopArg"
 
   private lazy val callArgs = recursive {
@@ -256,15 +256,27 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     openParenth ::: expr ::: closeParenth
   } setName "parenthesizedExpr"
 
+  private lazy val mutPossiblyFilledArrayInit = recursive {
+    kw(Mut).ignored ::: (arrayInit OR filledArrayInit) map {
+      case arrayInit: ArrayInit =>
+        errorReporter.push(Errors.Warning(Parsing,
+          s"${Mut.str} is redundant in front of an uninitialized array declaration", arrayInit.getPosition))
+        arrayInit
+      case filledArrayInit: FilledArrayInit =>
+        filledArrayInit.copy(modifiable = true)
+    }
+  } setName "mutPossiblyFilledArrayInit"
+
   private lazy val arrayInit = recursive {
     kw(Arr).ignored ::: tpe ::: openingBracket ::: expr ::: closingBracket map {
-      case elemType ^: size => ArrayInit(elemType, size)
+      case elemType ^: size =>
+        ArrayInit(elemType, size)
     }
   } setName "arrayInit"
 
   private lazy val filledArrayInit = recursive {
-    opt(kw(Mut)) ::: openingBracket ::: repeatWithSep(expr, comma) ::: closingBracket map {
-      case optMut ^: arrElems => FilledArrayInit(arrElems, optMut.isDefined)
+    openingBracket ::: repeatWithSep(expr, comma) ::: closingBracket map {
+      case arrElems => FilledArrayInit(arrElems, false)
     }
   } setName "filledArrayInit"
 
