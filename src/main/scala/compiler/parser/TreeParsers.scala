@@ -187,7 +187,7 @@ object TreeParsers {
      * @param suffixAdmits function to compute whether the next parser admits the next token
      * @return `true` iff this parser admits the next token in `ll1Iterator`
      */
-    def admits(ll1Iterator: LL1Iterator, suffixAdmits: () => Boolean): Boolean
+    def admits(ll1Iterator: LL1Iterator, suffixAdmits: => Boolean): Boolean
 
     /**
      *
@@ -197,7 +197,7 @@ object TreeParsers {
      * @param firstSuffix next parser
      * @return the `U` produced by parsing, wrapped in a `Some`, if parsing succeeded, `None` o.w.
      */
-    def extract(ll1Iterator: LL1Iterator, suffixAdmits: () => Boolean, suffixDescr: => String, firstSuffix: AnyTreeParser[_]): Option[U]
+    def extract(ll1Iterator: LL1Iterator, suffixAdmits: => Boolean, suffixDescr: => String, firstSuffix: AnyTreeParser[_]): Option[U]
 
     /**
      * @param suffixDescr description of the following parser(s)
@@ -237,7 +237,7 @@ object TreeParsers {
       val original = this
       new AnyTreeParser[T] {
         export original.admits
-        override def extract(ll1Iterator: LL1Iterator, suffixAdmits: () => Boolean,
+        override def extract(ll1Iterator: LL1Iterator, suffixAdmits: => Boolean,
                              suffixDescr: => String, firstSuffix: AnyTreeParser[_]): Option[T] = {
           val pos = ll1Iterator.current.position
           val res = original.extract(ll1Iterator, suffixAdmits, suffixDescr, firstSuffix).map(f)
@@ -280,9 +280,9 @@ object TreeParsers {
     def extract(ll1Iterator: LL1Iterator): Option[U]
     def firstExpectedDescr: String
 
-    override def admits(ll1Iterator: LL1Iterator, suffixAdmits: () => Boolean): Boolean = admits(ll1Iterator)
+    override def admits(ll1Iterator: LL1Iterator, suffixAdmits: => Boolean): Boolean = admits(ll1Iterator)
 
-    override def extract(ll1Iterator: LL1Iterator, suffixAdmits: () => Boolean,
+    override def extract(ll1Iterator: LL1Iterator, suffixAdmits: => Boolean,
                          suffixDescr: => String, firstSuffix: AnyTreeParser[_]): Option[U] = extract(ll1Iterator)
 
     override def firstExpectedDescr(suffixDescr: => String): String = firstExpectedDescr
@@ -377,11 +377,11 @@ object TreeParsers {
                                                right: FinalTreeParser[R])
     extends FinalTreeParser[L ^: R] {
 
-    override def admits(ll1Iterator: LL1Iterator): Boolean = left.admits(ll1Iterator, () => right.admits(ll1Iterator))
+    override def admits(ll1Iterator: LL1Iterator): Boolean = left.admits(ll1Iterator, right.admits(ll1Iterator))
 
     override def extract(ll1Iterator: LL1Iterator): Option[L ^: R] = {
       for
-        l <- left.extract(ll1Iterator, () => right.admits(ll1Iterator), right.firstExpectedDescr, right)
+        l <- left.extract(ll1Iterator, right.admits(ll1Iterator), right.firstExpectedDescr, right)
         r <- right.extract(ll1Iterator)
       yield
         l ^: r
@@ -398,14 +398,14 @@ object TreeParsers {
                                                   right: AnyTreeParser[R])
     extends AnyTreeParser[L ^: R]{
 
-    override def admits(ll1Iterator: LL1Iterator, suffixAdmits: () => Boolean): Boolean = {
-      left.admits(ll1Iterator, () => right.admits(ll1Iterator, suffixAdmits))
+    override def admits(ll1Iterator: LL1Iterator, suffixAdmits: => Boolean): Boolean = {
+      left.admits(ll1Iterator, right.admits(ll1Iterator, suffixAdmits))
     }
 
-    override def extract(ll1Iterator: LL1Iterator, suffixAdmits: () => Boolean,
+    override def extract(ll1Iterator: LL1Iterator, suffixAdmits: => Boolean,
                          suffixDescr: => String, firstSuffix: AnyTreeParser[_]): Option[L ^: R] = {
       for
-        l <- left.extract(ll1Iterator, () => right.admits(ll1Iterator, suffixAdmits), right.firstExpectedDescr(suffixDescr), right)
+        l <- left.extract(ll1Iterator, right.admits(ll1Iterator, suffixAdmits), right.firstExpectedDescr(suffixDescr), right)
         r <- right.extract(ll1Iterator, suffixAdmits, suffixDescr, firstSuffix)
       yield
         l ^: r
@@ -450,11 +450,11 @@ object TreeParsers {
   private final case class NonFinalDisjunction[+L, +R](left: AnyTreeParser[L], right: AnyTreeParser[R], errorReporter: ErrorReporter)
     extends AnyTreeParser[L | R]{
 
-    override def admits(ll1Iterator: LL1Iterator, suffixAdmits: () => Boolean): Boolean = {
+    override def admits(ll1Iterator: LL1Iterator, suffixAdmits: => Boolean): Boolean = {
       left.admits(ll1Iterator, suffixAdmits) || right.admits(ll1Iterator, suffixAdmits)
     }
 
-    override def extract(ll1Iterator: LL1Iterator, suffixAdmits: () => Boolean,
+    override def extract(ll1Iterator: LL1Iterator, suffixAdmits: => Boolean,
                          suffixDescr: => String, firstSuffix: AnyTreeParser[_]): Option[L | R] = {
       val leftAdmits = left.admits(ll1Iterator, suffixAdmits)
       val rightAdmits = right.admits(ll1Iterator, suffixAdmits)
@@ -534,14 +534,14 @@ object TreeParsers {
   private final case class OptionalTreeParser[T](optional: AnyTreeParser[T], errorReporter: ErrorReporter)
     extends AnyTreeParser[Option[T]]{
 
-    override def admits(ll1Iterator: LL1Iterator, suffixAdmits: () => Boolean): Boolean = {
-      optional.admits(ll1Iterator, suffixAdmits) || suffixAdmits()
+    override def admits(ll1Iterator: LL1Iterator, suffixAdmits: => Boolean): Boolean = {
+      optional.admits(ll1Iterator, suffixAdmits) || suffixAdmits
     }
 
-    override def extract(ll1Iterator: LL1Iterator, suffixAdmits: () => Boolean,
+    override def extract(ll1Iterator: LL1Iterator, suffixAdmits: => Boolean,
                          suffixDescr: => String, firstSuffix: AnyTreeParser[_]): Option[Option[T]] = {
       val optAdmitsVal = optional.admits(ll1Iterator, suffixAdmits)
-      val suffixAdmitsVal = suffixAdmits()
+      val suffixAdmitsVal = suffixAdmits
       if (optAdmitsVal && suffixAdmitsVal){
         reportNonLL1Error(ll1Iterator, optional.firstExpectedDescr(suffixDescr), suffixDescr,
           optional.getName, firstSuffix.getName, "OptionalTreeParser")
