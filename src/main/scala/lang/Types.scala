@@ -78,8 +78,11 @@ object Types {
   final case class ArrayType(elemType: Type, modifiable: Boolean) extends Type {
 
     override def subtypeOf(that: Type): Boolean = {
-      that match
-        case that: ArrayType =>
+      (this, that) match
+        // Covariant iff supertype is unmodifiable
+        case (ArrayType(subT, _), ArrayType(superT, false)) =>
+          subT.subtypeOf(superT)
+        case (_, that: ArrayType) =>
           that.elemType == this.elemType && logicalImplies(that.modifiable, this.modifiable)
         case _ => false
     }
