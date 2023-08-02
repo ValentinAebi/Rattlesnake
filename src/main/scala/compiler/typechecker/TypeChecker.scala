@@ -9,8 +9,10 @@ import lang.{Operators, TypeConversion}
 import lang.Types.*
 import lang.Types.PrimitiveType.*
 
-final class TypeChecker(errorReporter: ErrorReporter) extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
+final class TypeChecker(errorReporter: ErrorReporter)
+  extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
 
+  // TODO warning when useless mut
 
   override def apply(input: (List[Source], AnalysisContext)): (List[Source], AnalysisContext) = {
     val (sources, analysisContext) = input
