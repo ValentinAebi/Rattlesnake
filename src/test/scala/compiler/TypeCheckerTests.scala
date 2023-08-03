@@ -37,7 +37,8 @@ class TypeCheckerTests {
                                          private val line: Int = -1,
                                          private val col: Int = -1,
                                          private val msgMatcher: String => Boolean = null,
-                                         compilationStep: CompilationStep = CompilationStep.TypeChecking
+                                         compilationStep: CompilationStep = CompilationStep.TypeChecking,
+                                         errorClass: Class[_ <: CompilationError] = classOf[Err]
                                        ) {
 
     private def _line: Option[Int] = Some(line).filter(_ >= 0)
@@ -53,6 +54,7 @@ class TypeCheckerTests {
         && _col.forall { c => err.posOpt.exists(_.col == c) }
         && _msgMatcher.forall { matcher => matcher(err.msg) }
         && err.compilationStep == compilationStep
+        && err.getClass == errorClass
     }
   }
 
