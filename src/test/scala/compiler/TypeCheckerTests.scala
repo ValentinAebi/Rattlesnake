@@ -11,8 +11,7 @@ import scala.collection.mutable.ListBuffer
 
 class TypeCheckerTests {
 
-  private val srcDir = "src/test/res/should-fail"
-
+  private val srcDir = "src/test/res/typechecker-tests"
 
   @Test def modifiableArrayShouldNotBeCovariant(): Unit = {
     performTest("mut_covariance") {
