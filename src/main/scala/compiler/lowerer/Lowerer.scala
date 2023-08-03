@@ -95,7 +95,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
     val lowered = expr match {
       case literal: Literal => literal
       case varRef: VariableRef => varRef
-      case call: Call => Call(lower(call.callee), call.args.map(lower))
+      case call: Call => Call(lower(call.callee), call.args.map(lower), call.propagateModif)
       case indexing: Indexing => Indexing(lower(indexing.indexed), lower(indexing.arg))
       case arrayInit: ArrayInit => ArrayInit(arrayInit.elemType, lower(arrayInit.size))
       case structInit: StructInit => StructInit(structInit.structName, structInit.args.map(lower), structInit.modifiable)
@@ -127,7 +127,8 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
         val loweredRhs = lower(rhs)
         Call(
           VariableRef(StringEqualityFunId).setType(UndefinedType),
-          List(loweredLhs, loweredRhs)
+          List(loweredLhs, loweredRhs),
+          propagateModif = false
         ).setType(BoolType)
       }
         

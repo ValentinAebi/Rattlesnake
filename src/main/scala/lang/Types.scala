@@ -24,6 +24,8 @@ object Types {
     }
 
     def isModifiable: Boolean
+    
+    def unmodifiable: Type
 
   }
   
@@ -42,6 +44,7 @@ object Types {
     }
 
     override def isModifiable: Boolean = false
+    override def unmodifiable: Type = this
 
     override def toString: String = str
   }
@@ -64,6 +67,8 @@ object Types {
     }
 
     override def isModifiable: Boolean = modifiable
+
+    override def unmodifiable: Type = copy(modifiable = false)
 
     override def toString: String = {
       (if modifiable then (Keyword.Mut.str ++ " ") else "") ++ typeName.stringId
@@ -88,6 +93,7 @@ object Types {
     }
 
     override def isModifiable: Boolean = modifiable
+    override def unmodifiable: Type = copy(modifiable = false)
 
     override def toString: String = {
       (if modifiable then (Keyword.Mut.str ++ " ") else "") ++ s"arr $elemType"
@@ -102,6 +108,7 @@ object Types {
     override def subtypeOf(that: Type): Boolean = true  // otherwise may yield a cascade of error messages in type-checking
 
     override def isModifiable: Boolean = false
+    override def unmodifiable: Type = this
 
     override def toString: String = "[undefined type]"
   }

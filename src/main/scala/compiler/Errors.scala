@@ -84,6 +84,12 @@ object Errors {
    */
   final case class Warning(compilationStep: CompilationStep, msg: String, posOpt: Option[Position]) extends NonFatal {
     override val errorLevelDescr: String = "warning"
+
+    override def toString: String = {
+      val yellow = "\u001B[33m"
+      val resetColor = "\u001B[0m"
+      yellow ++ super.toString ++ resetColor
+    }
   }
 
   object Warning {
@@ -155,12 +161,8 @@ object Errors {
     }
 
     private def displayAndDeleteWarnings(): Unit = {
-      val yellow = "\u001B[33m"
-      val resetColor = "\u001B[0m"
       for warning <- errors if warning.isWarning do {
-        errorsConsumer(yellow)
         errorsConsumer(warning)
-        errorsConsumer(resetColor)
         errorsConsumer("\n")
       }
       errors = errors.filterNot(_.isWarning)

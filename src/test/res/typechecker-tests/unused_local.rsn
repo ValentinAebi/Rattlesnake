@@ -1,0 +1,4 @@
+
+fn foo(x: Int, y: Double) -> Double {
+    return y + 1.0;
+}

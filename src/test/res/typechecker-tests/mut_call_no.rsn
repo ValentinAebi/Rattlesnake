@@ -1,0 +1,9 @@
+
+fn produceMutArray() -> mut arr Int {
+    return mut [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+}
+
+fn main(args: arr String){
+    val x = produceMutArray();
+    val y: mut arr Int = x;     // should fail here: x is not modifiable
+}

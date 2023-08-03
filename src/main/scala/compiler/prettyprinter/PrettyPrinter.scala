@@ -115,7 +115,12 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
       case VariableRef(name) =>
         pps.add(name)
 
-      case Call(callee, args) =>
+      case Call(callee, args, propagateModif) =>
+        if (propagateModif){
+          pps
+            .add(Mut.str)
+            .addSpace()
+        }
         addAst(callee)
         addParenthList(args)
 

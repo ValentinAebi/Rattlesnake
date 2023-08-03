@@ -3,16 +3,18 @@ package compiler.typechecker
 import compiler.CompilationStep.TypeChecking
 import compiler.Errors.{CompilationError, Err, ErrorReporter, Warning}
 import compiler.irs.Asts.*
+import compiler.typechecker.TypeCheckingContext.LocalInfo
 import compiler.{AnalysisContext, CompilerStep, Position}
+import identifiers.FunOrVarId
 import lang.Operator.{Equality, Inequality, Sharp}
-import lang.{Operators, TypeConversion}
+import lang.{Keyword, Operators, TypeConversion}
 import lang.Types.*
 import lang.Types.PrimitiveType.*
 
 final class TypeChecker(errorReporter: ErrorReporter)
   extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
 
-  // TODO warning when useless mut
+  // TODO remove warnings for unused args in main (or create ignored modifier for parameters)
 
   override def apply(input: (List[Source], AnalysisContext)): (List[Source], AnalysisContext) = {
     val (sources, analysisContext) = input
@@ -25,7 +27,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def check(ast: Ast, ctx: TypeCheckingContext): Type = {
-    val tpe = ast match {
+    val tpe: Type = ast match {
 
       case Source(defs) =>
         for df <- defs do {
@@ -38,6 +40,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         for stat <- stats do {
           check(stat, newCtx)
         }
+        newCtx.writeLocalsRelatedWarnings(errorReporter)
         VoidType
 
       case StructDef(_, fields) =>
@@ -48,7 +51,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case funDef@FunDef(funName, params, optRetType, body) =>
         optRetType.foreach { retType =>
-          if (!ctx.knowsType(retType)){
+          if (!ctx.knowsType(retType)) {
             reportError(s"return type is unknown: '$retType'", funDef.getPosition)
           }
         }
@@ -60,11 +63,12 @@ final class TypeChecker(errorReporter: ErrorReporter)
             reportError(s"unknown type: ${param.tpe}", param.getPosition)
           }
           val paramType = if typeIsKnown then param.tpe else UndefinedType
-          ctxWithParams.addLocal(param.paramName, paramType, false, duplicateVarCallback = { () =>
-            reportError(s"identifier '${param.paramName}' is already used by another parameter of function '$funName'", param.getPosition)
-          }, forbiddenTypeCallback = { () =>
-            reportError(s"parameter '${param.paramName}' of function '$funName' has type '$paramType', which is forbidden", param.getPosition)
-          })
+          ctxWithParams.addLocal(param.paramName, paramType, param.getPosition, isReassignable = false,
+            duplicateVarCallback = { () =>
+              reportError(s"identifier '${param.paramName}' is already used by another parameter of function '$funName'", param.getPosition)
+            }, forbiddenTypeCallback = { () =>
+              reportError(s"parameter '${param.paramName}' of function '$funName' has type '$paramType', which is forbidden", param.getPosition)
+            })
         }
         check(body, ctxWithParams)
         val endStatus = checkReturns(body)
@@ -79,6 +83,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         if (expRetType == NothingType && !endStatus.alwaysStopped) {
           reportError(s"cannot prove that function '$funName' with return type '$NothingType' cannot return", funDef.getPosition)
         }
+        ctxWithParams.writeLocalsRelatedWarnings(errorReporter)
         VoidType
 
       case TestDef(_, body) =>
@@ -88,7 +93,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case constDef@ConstDef(constName, tpeOpt, value) =>
         val inferredType = check(value, ctx)
         tpeOpt.foreach { tpe =>
-          if (!inferredType.subtypeOf(tpe)){
+          if (!inferredType.subtypeOf(tpe)) {
             reportError(s"constant is declared with type '$tpe' but defined as '$inferredType'", constDef.getPosition)
           }
         }
@@ -99,18 +104,20 @@ final class TypeChecker(errorReporter: ErrorReporter)
         optType.foreach { expType =>
           val typeIsKnown = ctx.knowsType(expType)
           if (!typeIsKnown) {
-            reportError(s"unknown type: $expType", localDef.getPosition)
+            reportError(s"unknown type: '$expType'", localDef.getPosition)
           } else if (!inferredType.subtypeOf(expType)) {
-            reportError(s"${localDef.keyword} should be of type '$expType', found '$inferredType'", localDef.getPosition)
+            reportError(s"'$localName' should be of type '$expType', found '$inferredType'", localDef.getPosition)
           }
         }
         val actualType = optType.getOrElse(inferredType)
         localDef.optType = Some(actualType)
-        ctx.addLocal(localName, actualType, isReassignable, duplicateVarCallback = { () =>
-          reportError(s"'$localName' is already defined in this scope", localDef.getPosition)
-        }, forbiddenTypeCallback = { () =>
-          reportError(s"${localDef.keyword} '$localName' has type '$actualType', which is forbidden", localDef.getPosition)
-        })
+        ctx.addLocal(localName, actualType, localDef.getPosition, isReassignable,
+          duplicateVarCallback = { () =>
+            reportError(s"'$localName' is already defined in this scope", localDef.getPosition)
+          }, forbiddenTypeCallback = { () =>
+            reportError(s"${localDef.keyword} '$localName' has type '$actualType', which is forbidden", localDef.getPosition)
+          })
+        markMutPropagation(actualType, rhs, ctx)
         VoidType
 
       case _: IntLit => IntType
@@ -120,20 +127,25 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case _: StringLit => StringType
 
       case varRef@VariableRef(name) =>
+        ctx.localIsQueried(name)
         ctx.get(name) match {
-          case Some((tpe, _)) => tpe
+          case Some(localInfo: LocalInfo) => localInfo.tpe
           case None =>
             reportError(s"not found: '$name'", varRef.getPosition)
         }
 
-      case call@Call(callee, args) =>
+      case call@Call(callee, args, propagateModif) =>
         callee match {
           case varRef@VariableRef(name) =>
             ctx.functions.get(name) match {
               case Some(funSig) =>
                 varRef.setType(UndefinedType) // useless but o.w. the check that all expressions have a type fails
                 checkCallArgs(funSig.argTypes, args, ctx, call.getPosition)
-                funSig.retType
+                val retType = funSig.retType
+                if (propagateModif && !retType.isModifiable){
+                  reportError(s"forbidden ${Keyword.Mut}: $name returns $retType, which is unmodifiable", call.getPosition)
+                }
+                if propagateModif then retType else retType.unmodifiable
 
               case None => reportError(s"not found: $name", call.getPosition)
             }
@@ -174,8 +186,17 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case filledArrayInit@FilledArrayInit(arrayElems, modifiable) =>
         val types = arrayElems.map(check(_, ctx))
         types.find(tpe => types.forall(_.subtypeOf(tpe))) match {
-          case Some(inferredElemType) => ArrayType(inferredElemType, modifiable)
-          case None => reportError("cannot infer array type", filledArrayInit.getPosition)
+          case Some(inferredElemType) =>
+            for arrayElem <- arrayElems do {
+              markMutPropagation(inferredElemType, arrayElem, ctx)
+            }
+            ArrayType(inferredElemType, modifiable)
+          case None =>
+            arrayElems.foreach {
+              case VariableRef(name) => ctx.mutIsUsed(name)   // avoid false positives
+              case _ => ()
+            }
+            reportError("cannot infer array type", filledArrayInit.getPosition)
         }
 
       case structInit@StructInit(structName, args, modifiable) =>
@@ -187,6 +208,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         }
 
       case unaryOp@UnaryOp(operator, operand) =>
+        // no check for unused mut because no unary operator requires mutability on its argument
         val operandType = check(operand, ctx)
         if (operator == Sharp) {
           if (operandType.isInstanceOf[ArrayType] || operandType == StringType) {
@@ -203,6 +225,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         }
 
       case binOp@BinaryOp(lhs, operator, rhs) =>
+        // no check for unused mut because no binary operator requires mutability on its arguments
         val lhsType = check(lhs, ctx)
         val rhsType = check(rhs, ctx)
         if (operator == Equality || operator == Inequality) {
@@ -234,8 +257,9 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val rhsType = check(rhs, ctx)
         lhs match {
           case VariableRef(name) =>
+            ctx.varIsAssigned(name)
             ctx.get(name) match {
-              case Some((tpe, mut)) if mut =>
+              case Some(LocalInfo(_, tpe, isReassignable, _)) if isReassignable =>
                 lhs.setType(tpe)
                 if (!rhsType.subtypeOf(tpe)) {
                   reportError(s"cannot assign a value of type '$rhsType' to a variable of type $tpe", varAssig.getPosition)
@@ -246,6 +270,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
                 reportError(s"not found: '$name'", varAssig.getPosition)
             }
           case indexing@Indexing(indexed, _) =>
+            ctx.mutIsUsed(indexing)
             val lhsType = check(indexing, ctx)
             if (indexed.getType.isInstanceOf[ArrayType] && !indexed.getType.isModifiable) {
               reportError("cannot modify an unmodifiable array", indexing.getPosition)
@@ -254,8 +279,9 @@ final class TypeChecker(errorReporter: ErrorReporter)
               reportError(s"cannot assign a value of type '$rhsType' to an array of element type '$lhsType'", indexing.getPosition)
             }
           case select@Select(lhs, _) =>
+            ctx.mutIsUsed(select)
             val lhsType = check(select, ctx)
-            if (lhs.getType.isInstanceOf[StructType] && !lhs.getType.isModifiable){
+            if (lhs.getType.isInstanceOf[StructType] && !lhs.getType.isModifiable) {
               reportError("cannot modify an unmodifiable struct", lhs.getPosition)
             }
             if (!rhsType.subtypeOf(lhsType)) {
@@ -264,14 +290,17 @@ final class TypeChecker(errorReporter: ErrorReporter)
           case _ =>
             reportError("syntax error: only variables, struct fields and array elements can be assigned", varAssig.getPosition)
         }
+        markMutPropagation(lhs.getType, rhs, ctx)
         VoidType
 
       case varModif@VarModif(lhs, rhs, op) =>
+        // no check for unused mut because no operator combinable with = can operate on mutable types
         val rhsType = check(rhs, ctx)
         lhs match {
           case VariableRef(name) =>
+            ctx.varIsAssigned(name)
             ctx.get(name) match {
-              case Some((tpe, mut)) if mut =>
+              case Some(LocalInfo(_, tpe, isReassignable, _)) if isReassignable =>
                 Operators.binaryOperatorSigFor(tpe, op, rhsType) match {
                   case Some(opSig) =>
                     lhs.setType(tpe)
@@ -287,6 +316,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
                 reportError(s"not found: '$name'", varModif.getPosition)
             }
           case indexingOrSelect: (Indexing | Select) =>
+            ctx.mutIsUsed(indexingOrSelect)
             val lhsType = check(indexingOrSelect, ctx)
             indexingOrSelect match {
               case Indexing(indexed, _) if indexed.getType.isInstanceOf[ArrayType] && !indexed.getType.isModifiable =>
@@ -326,13 +356,18 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val elseType = check(elseBr, ctx)
         val thenIsSupertype = elseType.subtypeOf(thenType)
         val thenIsSubtype = thenType.subtypeOf(elseType)
-        if (thenIsSupertype) {
-          thenType
-        } else if (thenIsSubtype) {
-          elseType
-        } else {
-          reportError(s"type mismatch in ternary operator: first branch has type $thenType, second has type $elseType", ternary.getPosition)
+        val ternaryType = {
+          if (thenIsSupertype) {
+            thenType
+          } else if (thenIsSubtype) {
+            elseType
+          } else {
+            reportError(s"type mismatch in ternary operator: first branch has type $thenType, second has type $elseType", ternary.getPosition)
+          }
         }
+        markMutPropagation(ternaryType, thenBr, ctx)
+        markMutPropagation(ternaryType, elseBr, ctx)
+        ternaryType
 
       case whileLoop@WhileLoop(cond, body) =>
         val condType = check(cond, ctx)
@@ -351,10 +386,18 @@ final class TypeChecker(errorReporter: ErrorReporter)
         }
         stepStats.foreach(check(_, newCtx))
         check(body, newCtx)
+        newCtx.writeLocalsRelatedWarnings(errorReporter)
         VoidType
 
       case ReturnStat(valueOpt) =>
-        valueOpt.foreach(check(_, ctx))
+        valueOpt.foreach { value =>
+          check(value, ctx)
+          value match {
+            case VariableRef(name) =>
+              ctx.mutIsUsed(name) // to avoid false positive   TODO actual check that mut is used
+            case _ => ()
+          }
+        }
         VoidType
 
       case cast@Cast(expr, tpe) =>
@@ -362,7 +405,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         if (exprTpe.subtypeOf(tpe)) {
           reportError(s"useless conversion: '$exprTpe' --> '$tpe'", cast.getPosition, isWarning = true)
           tpe
-        } else if (TypeConversion.conversionFor(exprTpe, tpe).isDefined){
+        } else if (TypeConversion.conversionFor(exprTpe, tpe).isDefined) {
           tpe
         } else {
           reportError(s"cannot cast ${expr.getType} to $tpe", cast.getPosition)
@@ -393,9 +436,14 @@ final class TypeChecker(errorReporter: ErrorReporter)
       val expType = expTypesIter.next()
       val arg = argsIter.next()
       val actType = check(arg, ctx)
+      markMutPropagation(expType, arg, ctx)
       if (!actType.subtypeOf(expType)) {
         reportError(s"expected '$expType', found '$actType'", arg.getPosition)
         errorFound = true
+        args.foreach {
+          case VariableRef(name) => ctx.mutIsUsed(name)  // minimize false positives
+          case _ => ()
+        }
       }
     }
     if (expTypesIter.hasNext && !errorFound) {
@@ -411,7 +459,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   /**
-   * @param returned types of all the expressions found after a `return`
+   * @param returned      types of all the expressions found after a `return`
    * @param alwaysStopped indicates whether the control-flow can reach the end of the considered construct without
    *                      encountering an instruction that terminates the function (`return` or `panic`)
    */
@@ -493,6 +541,20 @@ final class TypeChecker(errorReporter: ErrorReporter)
   private def reportError(msg: String, pos: Option[Position], isWarning: Boolean = false): UndefinedType.type = {
     errorReporter.push(if isWarning then Warning(TypeChecking, msg, pos) else Err(TypeChecking, msg, pos))
     UndefinedType
+  }
+
+  private def markMutPropagation(assignedLocalName: FunOrVarId, rhs: Expr, ctx: TypeCheckingContext): Unit = {
+    rhs match
+      case VariableRef(name) if ctx.get(assignedLocalName).exists(_.tpe.isModifiable) =>
+        ctx.mutIsUsed(name)
+      case _ => ()
+  }
+
+  private def markMutPropagation(expectedType: Type, rhs: Expr, ctx: TypeCheckingContext): Unit = {
+    rhs match
+      case VariableRef(name) if expectedType.isModifiable =>
+        ctx.mutIsUsed(name)
+      case _ => ()
   }
 
 }
