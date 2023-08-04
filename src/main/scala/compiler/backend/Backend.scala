@@ -204,7 +204,7 @@ final class Backend[V <: ClassVisitor](
   }
 
   private def printCallFor(msgParts: Expr*): Call = {
-    Call(VariableRef(BuiltInFunctions.print), List(msgParts.reduceLeft(BinaryOp(_, Plus, _).setType(StringType))), propagateModif = false)
+    Call(VariableRef(BuiltInFunctions.print), List(msgParts.reduceLeft(BinaryOp(_, Plus, _).setType(StringType))))
   }
 
   private def generateCode(ast: Ast, ctx: CodeGenerationContext)(implicit mv: MethodVisitor, outputName: String): Unit = {
@@ -236,7 +236,7 @@ final class Backend[V <: ClassVisitor](
       }
 
       // typechecker ensures that callee is a VariableRef
-      case Call(VariableRef(name), args, _) => {
+      case Call(VariableRef(name), args) => {
 
         // will be used as a callback when generating built-in functions
         val generateArgs: () => Unit = { () =>

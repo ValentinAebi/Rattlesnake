@@ -63,7 +63,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
             reportError(s"unknown type: ${param.tpe}", param.getPosition)
           }
           val paramType = if typeIsKnown then param.tpe else UndefinedType
-          ctxWithParams.addLocal(param.paramName, paramType, param.getPosition, isReassignable = false,
+          ctxWithParams.addLocal(param.paramName, paramType, param.getPosition, isReassignable = false, declHasTypeAnnot = true,
             duplicateVarCallback = { () =>
               reportError(s"identifier '${param.paramName}' is already used by another parameter of function '$funName'", param.getPosition)
             }, forbiddenTypeCallback = { () =>
@@ -111,7 +111,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         }
         val actualType = optType.getOrElse(inferredType)
         localDef.optType = Some(actualType)
-        ctx.addLocal(localName, actualType, localDef.getPosition, isReassignable,
+        ctx.addLocal(localName, actualType, localDef.getPosition, isReassignable, declHasTypeAnnot = optType.isDefined,
           duplicateVarCallback = { () =>
             reportError(s"'$localName' is already defined in this scope", localDef.getPosition)
           }, forbiddenTypeCallback = { () =>
@@ -134,18 +134,14 @@ final class TypeChecker(errorReporter: ErrorReporter)
             reportError(s"not found: '$name'", varRef.getPosition)
         }
 
-      case call@Call(callee, args, propagateModif) =>
+      case call@Call(callee, args) =>
         callee match {
           case varRef@VariableRef(name) =>
             ctx.functions.get(name) match {
               case Some(funSig) =>
                 varRef.setType(UndefinedType) // useless but o.w. the check that all expressions have a type fails
                 checkCallArgs(funSig.argTypes, args, ctx, call.getPosition)
-                val retType = funSig.retType
-                if (propagateModif && !retType.isModifiable){
-                  reportError(s"forbidden ${Keyword.Mut}: $name returns $retType, which is unmodifiable", call.getPosition)
-                }
-                if propagateModif then retType else retType.unmodifiable
+                funSig.retType
 
               case None => reportError(s"not found: $name", call.getPosition)
             }
@@ -259,7 +255,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
           case VariableRef(name) =>
             ctx.varIsAssigned(name)
             ctx.get(name) match {
-              case Some(LocalInfo(_, tpe, isReassignable, _)) if isReassignable =>
+              case Some(LocalInfo(_, tpe, isReassignable, _, _)) if isReassignable =>
                 lhs.setType(tpe)
                 if (!rhsType.subtypeOf(tpe)) {
                   reportError(s"cannot assign a value of type '$rhsType' to a variable of type $tpe", varAssig.getPosition)
@@ -300,7 +296,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
           case VariableRef(name) =>
             ctx.varIsAssigned(name)
             ctx.get(name) match {
-              case Some(LocalInfo(_, tpe, isReassignable, _)) if isReassignable =>
+              case Some(LocalInfo(_, tpe, isReassignable, _, _)) if isReassignable =>
                 Operators.binaryOperatorSigFor(tpe, op, rhsType) match {
                   case Some(opSig) =>
                     lhs.setType(tpe)

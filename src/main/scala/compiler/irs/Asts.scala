@@ -219,7 +219,7 @@ object Asts {
   /**
    * Function call: `callee(args)`
    */
-  final case class Call(callee: Expr, args: List[Expr], propagateModif: Boolean) extends Expr {
+  final case class Call(callee: Expr, args: List[Expr]) extends Expr {
     override def children: List[Ast] = callee :: args
   }
 

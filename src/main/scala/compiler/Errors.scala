@@ -106,7 +106,7 @@ object Errors {
    *
    * @param errorsConsumer to be called when errors need to be displayed
    */
-  final class ErrorReporter(errorsConsumer: ErrorsConsumer, exit: ExitCode => Nothing) {
+  final class ErrorReporter(errorsConsumer: ErrorsConsumer, exit: => ExitCode => Nothing) {
     private var errors: List[NonFatal] = Nil
 
     /**

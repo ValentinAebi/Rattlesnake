@@ -50,6 +50,7 @@ final case class TypeCheckingContext(
                 tpe: Type,
                 defPos: Option[Position],
                 isReassignable: Boolean,
+                declHasTypeAnnot: Boolean,
                 duplicateVarCallback: () => Unit,
                 forbiddenTypeCallback: () => Unit
               ): Unit = {
@@ -58,7 +59,7 @@ final case class TypeCheckingContext(
     } else if (locals.contains(name)) {
       duplicateVarCallback()
     } else {
-      locals.put(name, LocalInfo(name, tpe, isReassignable, defPos))
+      locals.put(name, LocalInfo(name, tpe, isReassignable, defPos, declHasTypeAnnot))
       ownedLocals.addOne(name)
     }
   }
@@ -67,7 +68,8 @@ final case class TypeCheckingContext(
     locals.get(name).orElse(
       analysisContext.constants
         .get(name)
-        .map(tpe => LocalInfo(name, tpe, isReassignable = false, defPos = None)) // position not used if constant
+        // defPos and declHasTypeAnnot are never used for constants, as long as constants can only be of primitive types
+        .map(tpe => LocalInfo(name, tpe, isReassignable = false, defPos = None, declHasTypeAnnot = false))
     )
   }
 
@@ -97,13 +99,13 @@ final case class TypeCheckingContext(
   }
 
   def writeLocalsRelatedWarnings(errorReporter: ErrorReporter): Unit = {
-    for (_, local@LocalInfo(name, tpe, isReassignable, defPos)) <- locals if ownedLocals.contains(name) do {
+    for (_, local@LocalInfo(name, tpe, isReassignable, defPos, declHasTypeAnnot)) <- locals if ownedLocals.contains(name) do {
       if (!local.queried){
         errorReporter.push(Warning(TypeChecking, s"unused local: '$name' is never queried", defPos))
       } else if (isReassignable && !local.reassigned){
         errorReporter.push(Warning(TypeChecking, s"value declared as variable: '$name' could be a ${Keyword.Val}", defPos))
       }
-      if (tpe.isModifiable && !local.mutUsed){
+      if (tpe.isModifiable && !local.mutUsed && declHasTypeAnnot){
         errorReporter.push(Warning(TypeChecking, s"unused modification privilege: '$name' could have type '${tpe.unmodifiable}'", defPos))
       }
     }
@@ -115,7 +117,13 @@ final case class TypeCheckingContext(
 
 object TypeCheckingContext {
 
-  final case class LocalInfo(name: FunOrVarId, tpe: Type, isReassignable: Boolean, defPos: Option[Position]){
+  final case class LocalInfo(
+                              name: FunOrVarId,
+                              tpe: Type,
+                              isReassignable: Boolean,
+                              defPos: Option[Position],
+                              declHasTypeAnnot: Boolean
+                            ){
     private[TypeCheckingContext] var queried = false
     private[TypeCheckingContext] var reassigned = false
     private[TypeCheckingContext] var mutUsed = false

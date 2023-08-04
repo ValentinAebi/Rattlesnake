@@ -67,18 +67,8 @@ class TypeCheckerTests {
     runAndExpectCorrect("seemingly_unnecessary_mut", failOnWarning = true)
   }
   
-  @Test def expectErrorWhenMutNeededInFrontOfCall(): Unit = {
-    runAndExpectErrors("mut_call_no"){
-      ErrorMatcher("expect warning when call does not propagate mut",
-        line = 8, col = 5,
-        msgMatcher = _.contains("'y' should be of type 'mut arr Int', found 'arr Int'"),
-        errorClass = classOf[Err]
-      )
-    }
-  }
-  
   @Test def expectNoErrorWhenMutInFrontOfCall(): Unit = {
-    runAndExpectCorrect("mut_call_yes", failOnWarning = false)
+    runAndExpectCorrect("mut_call", failOnWarning = false)
   }
 
   private final case class ErrorMatcher(
@@ -146,7 +136,8 @@ class TypeCheckerTests {
       case w: Warning => warnings.addOne(w)
       case _ => ()
     }
-    val er = new ErrorReporter(errorsConsumer, exit = failExit)
+    var er: ErrorReporter = null
+    er = new ErrorReporter(errorsConsumer, exit = failExit(er))
     val tc = TasksPipelines.typeChecker(er, okReporter = _ => ())
     val testFile = SourceFile(s"$srcDir/$srcFileName.${FileExtensions.rattlesnake}")
     tc.apply(List(testFile))
@@ -155,8 +146,8 @@ class TypeCheckerTests {
     }
   }
 
-  private def failExit(exitCode: ExitCode): Nothing = {
-    fail(s"exit called, exit code: $exitCode")
+  private def failExit(errorReporter: ErrorReporter)(exitCode: ExitCode): Nothing = {
+    fail(s"exit called, exit code: $exitCode\nErrors found:\n" ++ errorReporter.getErrors.mkString("\n"))
     throw new AssertionError("cannot happen")
   }
 

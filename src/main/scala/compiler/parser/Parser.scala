@@ -225,17 +225,11 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val varRefOrFunCall = recursive {
     lowName ::: opt(callArgs) map {
       case name ^: Some(args) =>
-        Call(VariableRef(name), args, propagateModif = false)
+        Call(VariableRef(name), args)
       case name ^: None =>
         VariableRef(name)
     }
   } setName "varRefOrCallArgs"
-
-  private lazy val funCall = recursive {
-    lowName ::: callArgs map {
-      case calleeName ^: args => Call(VariableRef(calleeName), args, propagateModif = false)
-    }
-  } setName "funCall"
 
   private lazy val atomicExpr = {
     varRefOrFunCall OR literalValue OR filledArrayInit OR parenthesizedExpr
@@ -257,15 +251,13 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "parenthesizedExpr"
 
   private lazy val mutPossiblyFilledArrayInit = recursive {
-    kw(Mut).ignored ::: (arrayInit OR filledArrayInit OR funCall) map {
+    kw(Mut).ignored ::: (arrayInit OR filledArrayInit) map {
       case arrayInit: ArrayInit =>
         errorReporter.push(Errors.Warning(Parsing,
           s"${Mut.str} is redundant in front of an uninitialized array declaration", arrayInit.getPosition))
         arrayInit
       case filledArrayInit: FilledArrayInit =>
         filledArrayInit.copy(modifiable = true)
-      case call: Call =>
-        call.copy(propagateModif = true)
     }
   } setName "mutPossiblyFilledArrayInit"
 
