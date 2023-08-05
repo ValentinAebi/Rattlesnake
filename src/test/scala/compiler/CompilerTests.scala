@@ -265,6 +265,17 @@ class CompilerTests {
     assertEquals(expectedRes, actualRes)
   }
 
+  @Test def modifParamsTest(): Unit = {
+    val samples = List((120, 72) -> 24, (15, 95) -> 5, (99, 27) -> 9)
+    val expectedRes = samples.map(_._2)
+    val actualResRaw = compileAndExecSeveralIter("modif_params", "wrapper",
+      samples.map { case ((a, b), _) => Array(Array(a, b)) }
+    )
+    assertTrue(actualResRaw.forall(_.isInstanceOf[Int]))
+    val actualRes = actualResRaw.map(_.asInstanceOf[Int])
+    assertEquals(expectedRes, actualRes)
+  }
+
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
     compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
   }

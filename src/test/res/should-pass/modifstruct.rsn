@@ -9,8 +9,8 @@ fn testFunc(args: arr Int) -> arr Int {
 }
 
 struct Counter {
-    evens: Int,
-    odds: Int
+    var evens: Int,
+    var odds: Int
 }
 
 fn add(counter: mut Counter, n: Int){

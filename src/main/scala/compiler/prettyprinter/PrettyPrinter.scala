@@ -72,7 +72,12 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         pps.add(" = ")
         addAst(value)
 
-      case Param(paramName, tpe) =>
+      case Param(paramName, tpe, isReassignable) =>
+        if (isReassignable){
+          pps
+            .add(Var.str)
+            .addSpace()
+        }
         pps
           .add(paramName)
           .add(": ")

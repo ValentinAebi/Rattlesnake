@@ -7,7 +7,8 @@ import compiler.typechecker.TypeCheckingContext.LocalInfo
 import compiler.{AnalysisContext, CompilerStep, Position}
 import identifiers.FunOrVarId
 import lang.Operator.{Equality, Inequality, Sharp}
-import lang.{Keyword, Operators, TypeConversion}
+import lang.StructSignature.FieldInfo
+import lang.{Keyword, Operator, Operators, StructSignature, TypeConversion}
 import lang.Types.*
 import lang.Types.PrimitiveType.*
 
@@ -44,7 +45,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         VoidType
 
       case StructDef(_, fields) =>
-        for param@Param(_, tpe) <- fields if !ctx.knowsType(tpe) do {
+        for param@Param(_, tpe, _) <- fields if !ctx.knowsType(tpe) do {
           reportError(s"unknown type: $tpe", param.getPosition)
         }
         VoidType
@@ -63,7 +64,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
             reportError(s"unknown type: ${param.tpe}", param.getPosition)
           }
           val paramType = if typeIsKnown then param.tpe else UndefinedType
-          ctxWithParams.addLocal(param.paramName, paramType, param.getPosition, isReassignable = false, declHasTypeAnnot = true,
+          ctxWithParams.addLocal(param.paramName, paramType, param.getPosition, param.isReassignable, declHasTypeAnnot = true,
             duplicateVarCallback = { () =>
               reportError(s"identifier '${param.paramName}' is already used by another parameter of function '$funName'", param.getPosition)
             }, forbiddenTypeCallback = { () =>
@@ -93,9 +94,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case constDef@ConstDef(constName, tpeOpt, value) =>
         val inferredType = check(value, ctx)
         tpeOpt.foreach { tpe =>
-          if (!inferredType.subtypeOf(tpe)) {
-            reportError(s"constant is declared with type '$tpe' but defined as '$inferredType'", constDef.getPosition)
-          }
+          checkSubtypingConstraint(tpe, inferredType, constDef.getPosition, "constant definition")
         }
         VoidType
 
@@ -105,8 +104,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
           val typeIsKnown = ctx.knowsType(expType)
           if (!typeIsKnown) {
             reportError(s"unknown type: '$expType'", localDef.getPosition)
-          } else if (!inferredType.subtypeOf(expType)) {
-            reportError(s"'$localName' should be of type '$expType', found '$inferredType'", localDef.getPosition)
+          } else {
+            checkSubtypingConstraint(expType, inferredType, localDef.getPosition, "local definition")
           }
         }
         val actualType = optType.getOrElse(inferredType)
@@ -128,11 +127,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case varRef@VariableRef(name) =>
         ctx.localIsQueried(name)
-        ctx.get(name) match {
-          case Some(localInfo: LocalInfo) => localInfo.tpe
-          case None =>
-            reportError(s"not found: '$name'", varRef.getPosition)
-        }
+        mustBeKnown(name, ctx, varRef.getPosition)
 
       case call@Call(callee, args) =>
         callee match {
@@ -148,31 +143,22 @@ final class TypeChecker(errorReporter: ErrorReporter)
           case _ => reportError("syntax error, only functions can be called", call.getPosition)
         }
 
-      case Indexing(indexed, arg) =>
+      case indexing@Indexing(indexed, arg) =>
         val indexedType = check(indexed, ctx)
-        val indexedError = !indexedType.isInstanceOf[ArrayType]
-        if (indexedError) {
-          reportError("indexed expression is not an array", indexed.getPosition)
-        }
         val argType = check(arg, ctx)
-        val argError = !argType.subtypeOf(IntType)
-        if (argError) {
-          reportError(s"indexing expression should be of type '${IntType.str}', found '$argType'", arg.getPosition)
-        }
-        if indexedError then UndefinedType else indexedType.asInstanceOf[ArrayType].elemType
+        checkSubtypingConstraint(IntType, argType, indexing.getPosition, "array index")
+        exprMustBeArray(indexed.getType, ctx, indexed.getPosition, mustUpdate = false)
 
       case arrayInit@ArrayInit(elemType, size) =>
         if (elemType == VoidType || elemType == NothingType) {
           reportError(s"array cannot have element type $elemType", arrayInit.getPosition)
         }
         val sizeType = check(size, ctx)
-        if (!sizeType.subtypeOf(IntType)) {
-          reportError(s"array size should be of type '${IntType.str}', found '$sizeType'", size.getPosition)
-        }
+        checkSubtypingConstraint(IntType, sizeType, size.getPosition, "array size")
         size match {
           case IntLit(value) if value < 0 =>
             reportError("array size should be nonnegative", size.getPosition)
-          case _ => // do nothing
+          case _ => ()
         }
         ArrayType(elemType, modifiable = true)
 
@@ -198,7 +184,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case structInit@StructInit(structName, args, modifiable) =>
         ctx.structs.get(structName) match {
           case Some(structSig) =>
-            checkCallArgs(structSig.fields.values.toList, args, ctx, structInit.getPosition)
+            checkCallArgs(structSig.fields.values.map(_.tpe).toList, args, ctx, structInit.getPosition)
             StructType(structName, modifiable)
           case None => reportError(s"not found: struct '$structName'", structInit.getPosition)
         }
@@ -230,59 +216,32 @@ final class TypeChecker(errorReporter: ErrorReporter)
           }
           BoolType
         } else {
-          Operators.binaryOperatorSigFor(lhsType, operator, rhsType) match {
-            case Some(sig) => sig.retType
-            case None =>
-              reportError(s"no definition of operator '$operator' found for operands '$lhsType' and '$rhsType'", binOp.getPosition)
-          }
+          mustExistOperator(lhsType, operator, rhsType, binOp.getPosition)
         }
 
       case select@Select(lhs, selected) =>
         val lhsType = check(lhs, ctx)
-        lhsType match {
-          case StructType(typeName, structIsModifiable) =>
-            val structSig = ctx.structs.apply(typeName)
-            structSig.fields.get(selected) match {
-              case Some(fieldType) => fieldType
-              case None => reportError(s"no '$selected' field found for type '$lhsType'", select.getPosition)
-            }
-          case _ => reportError(s"no '$selected' field found: not a struct", select.getPosition)
-        }
+        exprMustBeStructWithField(lhsType, selected, ctx, select.getPosition, mustUpdateField = false)
 
       case varAssig@VarAssig(lhs, rhs) =>
         val rhsType = check(rhs, ctx)
         lhs match {
-          case VariableRef(name) =>
+          case varRef@VariableRef(name) =>
             ctx.varIsAssigned(name)
-            ctx.get(name) match {
-              case Some(LocalInfo(_, tpe, isReassignable, _, _)) if isReassignable =>
-                lhs.setType(tpe)
-                if (!rhsType.subtypeOf(tpe)) {
-                  reportError(s"cannot assign a value of type '$rhsType' to a variable of type $tpe", varAssig.getPosition)
-                }
-              case Some(_) =>
-                reportError(s"cannot mutate '$name': not a var", varAssig.getPosition)
-              case None =>
-                reportError(s"not found: '$name'", varAssig.getPosition)
-            }
+            val varType = mustBeReassignable(name, ctx, varAssig.getPosition)
+            checkSubtypingConstraint(varType, rhsType, varAssig.getPosition, "")
+            varRef.setType(varType)
           case indexing@Indexing(indexed, _) =>
             ctx.mutIsUsed(indexing)
-            val lhsType = check(indexing, ctx)
-            if (indexed.getType.isInstanceOf[ArrayType] && !indexed.getType.isModifiable) {
-              reportError("cannot modify an unmodifiable array", indexing.getPosition)
-            }
-            if (!rhsType.subtypeOf(lhsType)) {
-              reportError(s"cannot assign a value of type '$rhsType' to an array of element type '$lhsType'", indexing.getPosition)
-            }
-          case select@Select(lhs, _) =>
+            check(indexing, ctx)
+            val lhsType = exprMustBeArray(indexed.getType, ctx, varAssig.getPosition, mustUpdate = true)
+            checkSubtypingConstraint(lhsType, rhsType, varAssig.getPosition, "")
+          case select@Select(structExpr, selected) =>
             ctx.mutIsUsed(select)
-            val lhsType = check(select, ctx)
-            if (lhs.getType.isInstanceOf[StructType] && !lhs.getType.isModifiable) {
-              reportError("cannot modify an unmodifiable struct", select.getPosition)
-            }
-            if (!rhsType.subtypeOf(lhsType)) {
-              reportError(s"cannot assign a value of type '$rhsType' to a field of type '$lhsType'", select.getPosition)
-            }
+            val structType = check(structExpr, ctx)
+            val fieldType = exprMustBeStructWithField(structType, selected, ctx, varAssig.getPosition, mustUpdateField = true)
+            checkSubtypingConstraint(fieldType, rhsType, varAssig.getPosition, "")
+            select.setType(fieldType)
           case _ =>
             reportError("syntax error: only variables, struct fields and array elements can be assigned", varAssig.getPosition)
         }
@@ -293,42 +252,25 @@ final class TypeChecker(errorReporter: ErrorReporter)
         // no check for unused mut because no operator combinable with = can operate on mutable types
         val rhsType = check(rhs, ctx)
         lhs match {
-          case VariableRef(name) =>
+          case varRef@VariableRef(name) =>
             ctx.varIsAssigned(name)
-            ctx.get(name) match {
-              case Some(LocalInfo(_, tpe, isReassignable, _, _)) if isReassignable =>
-                Operators.binaryOperatorSigFor(tpe, op, rhsType) match {
-                  case Some(opSig) =>
-                    lhs.setType(tpe)
-                    if (!opSig.retType.subtypeOf(tpe)) {
-                      reportError(s"$tpe ${op.str} $rhsType ==> ${opSig.retType}, not ${op.str}", varModif.getPosition)
-                    }
-                  case None =>
-                    reportError(s"no definition of operator '$op' found for operands '$tpe' and '$rhsType'", varModif.getPosition)
-                }
-              case Some(_) =>
-                reportError(s"cannot mutate '$name': not a var", varModif.getPosition)
-              case None =>
-                reportError(s"not found: '$name'", varModif.getPosition)
-            }
-          case indexingOrSelect: (Indexing | Select) =>
-            ctx.mutIsUsed(indexingOrSelect)
-            val lhsType = check(indexingOrSelect, ctx)
-            indexingOrSelect match {
-              case Indexing(indexed, _) if indexed.getType.isInstanceOf[ArrayType] && !indexed.getType.isModifiable =>
-                reportError("cannot modify an unmodifiable array", indexingOrSelect.getPosition)
-              case Select(lhs, _) if lhs.getType.isInstanceOf[StructType] && !lhs.getType.isModifiable =>
-                reportError("cannot modify an unmodifiable struct", lhs.getPosition)
-              case _ => ()
-            }
-            Operators.binaryOperatorSigFor(lhsType, op, rhsType) match {
-              case Some(opSig) =>
-                if (!opSig.retType.subtypeOf(lhsType)) {
-                  reportError(s"$lhsType ${op.str} $rhsType ==> ${opSig.retType}, not ${op.str}", varModif.getPosition)
-                }
-              case None =>
-                reportError(s"no definition of operator '$op' found for operands '$lhsType' and '$rhsType'", varModif.getPosition)
-            }
+            val inPlaceModifiedType = mustBeReassignable(name, ctx, varModif.getPosition)
+            val operatorRetType = mustExistOperator(inPlaceModifiedType, op, rhsType, varModif.getPosition)
+            checkSubtypingConstraint(inPlaceModifiedType, operatorRetType, varModif.getPosition, "")
+            varRef.setType(inPlaceModifiedType)
+          case indexing@Indexing(indexed, _) =>
+            ctx.mutIsUsed(indexing)
+            check(indexing, ctx)
+            val inPlaceModifiedElemType = exprMustBeArray(indexed.getType, ctx, varModif.getPosition, mustUpdate = true)
+            val operatorRetType = mustExistOperator(inPlaceModifiedElemType, op, rhsType, varModif.getPosition)
+            checkSubtypingConstraint(inPlaceModifiedElemType, operatorRetType, varModif.getPosition, "")
+          case select@Select(structExpr, selected) =>
+            ctx.mutIsUsed(select)
+            val structType = check(structExpr, ctx)
+            val inPlaceModifiedFieldType = exprMustBeStructWithField(structType, selected, ctx, varModif.getPosition, mustUpdateField = true)
+            val operatorRetType = mustExistOperator(inPlaceModifiedFieldType, op, rhsType, varModif.getPosition)
+            checkSubtypingConstraint(inPlaceModifiedFieldType, operatorRetType, varModif.getPosition, "")
+            select.setType(inPlaceModifiedFieldType)
           case _ =>
             reportError("syntax error: only variables and array elements can be assigned", varModif.getPosition)
         }
@@ -336,18 +278,14 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case ifThenElse@IfThenElse(cond, thenBr, elseBrOpt) =>
         val condType = check(cond, ctx)
-        if (!condType.subtypeOf(BoolType)) {
-          reportError(s"condition should be of type '${BoolType.str}', found '$condType'", ifThenElse.getPosition)
-        }
+        checkSubtypingConstraint(BoolType, condType, ifThenElse.getPosition, "if condition")
         check(thenBr, ctx)
         elseBrOpt.foreach(check(_, ctx))
         VoidType
 
       case ternary@Ternary(cond, thenBr, elseBr) =>
         val condType = check(cond, ctx)
-        if (!condType.subtypeOf(BoolType)) {
-          reportError(s"condition should be of type '${BoolType.str}', found '$condType'", ternary.getPosition)
-        }
+        checkSubtypingConstraint(BoolType, condType, ternary.getPosition, "ternary operator condition")
         val thenType = check(thenBr, ctx)
         val elseType = check(elseBr, ctx)
         val thenIsSupertype = elseType.subtypeOf(thenType)
@@ -367,9 +305,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case whileLoop@WhileLoop(cond, body) =>
         val condType = check(cond, ctx)
-        if (!condType.subtypeOf(BoolType)) {
-          reportError(s"condition should be of type '${BoolType.str}', found '$condType'", whileLoop.getPosition)
-        }
+        checkSubtypingConstraint(BoolType, condType, whileLoop.getPosition, "while condition")
         check(body, ctx)
         VoidType
 
@@ -377,9 +313,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val newCtx = ctx.copied
         initStats.foreach(check(_, newCtx))
         val condType = check(cond, newCtx)
-        if (!condType.subtypeOf(BoolType)) {
-          reportError(s"condition should be of type '${BoolType.str}', found '$condType'", forLoop.getPosition)
-        }
+        checkSubtypingConstraint(BoolType, condType, forLoop.getPosition, "for loop condition")
         stepStats.foreach(check(_, newCtx))
         check(body, newCtx)
         newCtx.writeLocalsRelatedWarnings(errorReporter)
@@ -534,6 +468,80 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
   }
 
+  private def mustBeKnown(name: FunOrVarId, ctx: TypeCheckingContext, posOpt: Option[Position]): Type = {
+    ctx.get(name) match
+      case None =>
+        reportError(s"unknown: $name", posOpt)
+      case Some(localInfo: LocalInfo) =>
+        localInfo.tpe
+  }
+
+  private def mustBeReassignable(name: FunOrVarId, ctx: TypeCheckingContext, posOpt: Option[Position]): Type = {
+    ctx.get(name) match
+      case None =>
+        reportError(s"unknown: $name", posOpt)
+      case Some(LocalInfo(_, tpe, isReassignable, _, _)) =>
+        if (!isReassignable){
+          reportError(s"$name is not reassignable", posOpt)
+        }
+        tpe
+  }
+
+  private def exprMustBeArray(exprType: Type, ctx: TypeCheckingContext, posOpt: Option[Position], mustUpdate: Boolean): Type = {
+    exprType match
+      case ArrayType(elemType, modifiable) =>
+        if (mustUpdate && !modifiable){
+          reportError("update impossible: missing modification privileges on array", posOpt)
+        }
+        elemType
+      case _ =>
+        reportError(s"expected an array, found '$exprType'", posOpt)
+  }
+
+  private def mustExistOperator(lhsType: Type, operator: Operator, rhsType: Type, position: Option[Position]): Type = {
+    Operators.binaryOperatorSigFor(lhsType, operator, rhsType) match {
+      case Some(sig) => sig.retType
+      case None =>
+        reportError(s"no definition of operator '$operator' found for operands '$lhsType' and '$rhsType'", position)
+    }
+  }
+
+  private def exprMustBeStructWithField(
+                                         exprType: Type,
+                                         fieldName: FunOrVarId,
+                                         ctx: TypeCheckingContext,
+                                         posOpt: Option[Position],
+                                         mustUpdateField: Boolean
+                                       ): Type = {
+    exprType match {
+      case StructType(typeName, modifiable) =>
+        ctx.structs.apply(typeName) match {
+          case StructSignature(_, fields) if fields.contains(fieldName) =>
+            val FieldInfo(fieldType, fieldIsReassig) = fields.apply(fieldName)
+            val missingModifPrivilege = mustUpdateField && !modifiable
+            if (missingModifPrivilege){
+              reportError(s"cannot update field '$fieldName': missing modification privileges on owner struct", posOpt)
+            }
+            val missingFieldMutability = mustUpdateField && !fieldIsReassig
+            if (missingFieldMutability){
+              reportError(s"cannot update immutable field '$fieldName'", posOpt)
+            }
+            fieldType
+          case _ =>
+            reportError(s"struct '$typeName' has no field named '$fieldName'", posOpt)
+        }
+      case _ =>
+        reportError(s"expected a struct, found '$exprType'", posOpt)
+    }
+  }
+
+  private def checkSubtypingConstraint(expected: Type, actual: Type, posOpt: Option[Position], msgPrefix: String): Unit = {
+    if (expected != UndefinedType && actual != UndefinedType && !actual.subtypeOf(expected)){
+      val fullprefix = if msgPrefix == "" then "" else (msgPrefix ++ " : ")
+      reportError(fullprefix ++ s"expected '$expected', found '$actual'", posOpt)
+    }
+  }
+
   private def reportError(msg: String, pos: Option[Position], isWarning: Boolean = false): UndefinedType.type = {
     errorReporter.push(if isWarning then Warning(TypeChecking, msg, pos) else Err(TypeChecking, msg, pos))
     UndefinedType
@@ -551,6 +559,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case VariableRef(name) if expectedType.isModifiable =>
         ctx.mutIsUsed(name)
       case _ => ()
+  }
+
+  private def shouldNotHappen(): Nothing = {
+    throw new AssertionError("should not happen")
   }
 
 }

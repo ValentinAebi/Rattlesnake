@@ -27,7 +27,7 @@ class TypeCheckerTests {
     runAndExpectErrors("array_of_mut") {
       ErrorMatcher("array of modifiable array should not accept unmodifiable array",
         line = 6, col = 5,
-        msgMatcher = _.contains("cannot assign a value of type 'arr Y' to an array of element type 'mut arr Y'"),
+        msgMatcher = _.contains("expected 'mut arr Y', found 'arr Y'"),
         errorClass = classOf[Err]
       )
     }
@@ -75,7 +75,7 @@ class TypeCheckerTests {
     runAndExpectErrors("mut_leak_local"){
       ErrorMatcher("local with mut type should be rejected when no mut permission",
         line = 3, col = 5,
-        msgMatcher = _.contains("'x' should be of type 'mut arr Int', found 'arr Int'"),
+        msgMatcher = _.contains("expected 'mut arr Int', found 'arr Int'"),
         errorClass = classOf[Err]
       )
     }
@@ -95,7 +95,7 @@ class TypeCheckerTests {
     runAndExpectErrors("mut_leak_ret"){
       ErrorMatcher("mutation on returned unmodifiable array should be rejected",
         line = 8, col = 5,
-        msgMatcher = _.contains("cannot modify an unmodifiable array"),
+        msgMatcher = _.contains("update impossible: missing modification privileges on array"),
         errorClass = classOf[Err]
       )
     }
@@ -105,7 +105,7 @@ class TypeCheckerTests {
     runAndExpectErrors("mut_leak_fld_get"){
       ErrorMatcher("modifying an unmodifiable struct gotten as a field should be rejected",
         line = 12, col = 5,
-        msgMatcher = _.contains("cannot modify an unmodifiable struct"),
+        msgMatcher = _.contains("cannot update field 'x': missing modification privileges on owner struct"),
         errorClass = classOf[Err]
       )
     }

@@ -138,7 +138,7 @@ object Asts {
   /**
    * Parameter of a function or field of a struct
    */
-  final case class Param(paramName: FunOrVarId, tpe: Type) extends Ast {
+  final case class Param(paramName: FunOrVarId, tpe: Type, isReassignable: Boolean) extends Ast {
     override def children: List[Ast] = Nil
   }
 

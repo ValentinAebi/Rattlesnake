@@ -1,2 +1,3 @@
 
-TODO more tests (especially on `TypeChecker`)
+TODO tests for type checker: assert detection of typing errors
+TODO test cont/var fields of structs
