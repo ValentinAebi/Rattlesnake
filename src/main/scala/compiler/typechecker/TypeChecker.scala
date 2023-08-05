@@ -278,7 +278,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
             ctx.mutIsUsed(select)
             val lhsType = check(select, ctx)
             if (lhs.getType.isInstanceOf[StructType] && !lhs.getType.isModifiable) {
-              reportError("cannot modify an unmodifiable struct", lhs.getPosition)
+              reportError("cannot modify an unmodifiable struct", select.getPosition)
             }
             if (!rhsType.subtypeOf(lhsType)) {
               reportError(s"cannot assign a value of type '$rhsType' to a field of type '$lhsType'", select.getPosition)
