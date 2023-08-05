@@ -71,6 +71,56 @@ class TypeCheckerTests {
     runAndExpectCorrect("mut_call", failOnWarning = false)
   }
 
+  @Test def expectErrorWhenMutLeakOnLocal(): Unit = {
+    runAndExpectErrors("mut_leak_local"){
+      ErrorMatcher("local with mut type should be rejected when no mut permission",
+        line = 3, col = 5,
+        msgMatcher = _.contains("'x' should be of type 'mut arr Int', found 'arr Int'"),
+        errorClass = classOf[Err]
+      )
+    }
+  }
+
+  @Test def expectErrorWhenMutLeakOnParam(): Unit = {
+    runAndExpectErrors("mut_leak_param") {
+      ErrorMatcher("param with mut type should be rejected when no mut permission",
+        line = 8, col = 9,
+        msgMatcher = _.contains("expected 'mut arr String', found 'arr String'"),
+        errorClass = classOf[Err]
+      )
+    }
+  }
+
+  @Test def expectErrorWhenMutLeakOnRet(): Unit = {
+    runAndExpectErrors("mut_leak_ret"){
+      ErrorMatcher("mutation on returned unmodifiable array should be rejected",
+        line = 8, col = 5,
+        msgMatcher = _.contains("cannot modify an unmodifiable array"),
+        errorClass = classOf[Err]
+      )
+    }
+  }
+
+  @Test def expectErrorWhenMutLeakOnFieldGet(): Unit = {
+    runAndExpectErrors("mut_leak_fld_get"){
+      ErrorMatcher("modifying an unmodifiable struct gotten as a field should be rejected",
+        line = 12, col = 5,
+        msgMatcher = _.contains("cannot modify an unmodifiable struct"),
+        errorClass = classOf[Err]
+      )
+    }
+  }
+
+  @Test def expectErrorWhenMutLeakOnFieldInit(): Unit = {
+    runAndExpectErrors("mut_leak_fld_init"){
+      ErrorMatcher("passing an unmodifiable struct as a mut field of another struct should result in an error",
+        line = 8, col = 23,
+        msgMatcher = _.contains("expected 'mut arr Int', found 'arr Int'"),
+        errorClass = classOf[Err]
+      )
+    }
+  }
+
   private final case class ErrorMatcher(
                                          descr: String,
                                          private val line: Int = -1,

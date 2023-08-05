@@ -1,0 +1,9 @@
+
+fn foo() -> arr Int {
+    return [1, 2, 3, 4, 3, 2, 1];
+}
+
+fn main(args: arr String){
+    val x = foo();
+    x[0] += 15;
+}

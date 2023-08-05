@@ -1,0 +1,4 @@
+
+fn foo(){
+    val x: mut arr Int = [0, 1, 2]
+}

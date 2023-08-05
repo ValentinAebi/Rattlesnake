@@ -1,0 +1,13 @@
+
+struct Foo {
+    x: Int
+}
+
+struct Bar {
+    f: Foo
+}
+
+fn testF(){
+    val b = new Bar { new Foo { 20 } };
+    b.f.x = 11;
+}
