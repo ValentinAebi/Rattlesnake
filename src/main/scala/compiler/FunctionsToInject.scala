@@ -64,7 +64,7 @@ object FunctionsToInject {
     // load code of the function, lower it and replace its name
     val resFile = stringEqualityCodeProvider
     val result = pipeline.apply(resFile)
-    val (List(Source(List(funDef: FunDef@unchecked))), _) = result
+    val (List(Source(List(funDef: FunDef))), _) = result : @unchecked
     assert(funDef.funName.stringId == StringEqualityFunId.rawName)
     funDef.copy(funName = StringEqualityFunId)
   }
