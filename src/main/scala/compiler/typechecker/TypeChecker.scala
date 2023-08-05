@@ -19,7 +19,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   override def apply(input: (List[Source], AnalysisContext)): (List[Source], AnalysisContext) = {
     val (sources, analysisContext) = input
     for src <- sources do {
-      check(src, TypeCheckingContext(analysisContext))
+      check(src, TypeCheckingContext(analysisContext, expectedRetType = VoidType))  // expectedRetType is be ignored here
     }
     errorReporter.displayAndTerminateIfErrors()
     sources.foreach(_.assertAllTypesAreSet())
@@ -31,7 +31,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case Source(defs) =>
         for df <- defs do {
-          check(df, ctx.copyWithoutLocals)
+          check(df, ctx)
         }
         VoidType
 
@@ -56,7 +56,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
           }
         }
         val expRetType = optRetType.getOrElse(VoidType)
-        val ctxWithParams = ctx.copyWithoutLocals
+        val ctxWithParams = ctx.copyWithoutLocals(expRetType)
         for param <- params do {
           val typeIsKnown = ctx.knowsType(param.tpe)
           if (!typeIsKnown) {
@@ -389,8 +389,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
         valueOpt.foreach { value =>
           check(value, ctx)
           value match {
-            case VariableRef(name) =>
-              ctx.mutIsUsed(name) // to avoid false positive   TODO actual check that mut is used
+            case VariableRef(name) if ctx.expectedRetType.isModifiable =>
+              ctx.mutIsUsed(name)
             case _ => ()
           }
         }
