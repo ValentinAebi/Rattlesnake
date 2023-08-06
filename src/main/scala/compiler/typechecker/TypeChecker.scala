@@ -15,8 +15,6 @@ import lang.Types.PrimitiveType.*
 final class TypeChecker(errorReporter: ErrorReporter)
   extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
 
-  // TODO remove warnings for unused args in main (or create ignored modifier for parameters)
-
   override def apply(input: (List[Source], AnalysisContext)): (List[Source], AnalysisContext) = {
     val (sources, analysisContext) = input
     for src <- sources do {
@@ -60,12 +58,14 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val ctxWithParams = ctx.copyWithoutLocals(expRetType)
         for param <- params do {
           val paramType = typeMustBeKnown(param.tpe, ctx, param.getPosition)
-          ctxWithParams.addLocal(param.paramName, paramType, param.getPosition, param.isReassignable, declHasTypeAnnot = true,
-            duplicateVarCallback = { () =>
-              reportError(s"identifier '${param.paramName}' is already used by another parameter of function '$funName'", param.getPosition)
-            }, forbiddenTypeCallback = { () =>
-              reportError(s"parameter '${param.paramName}' of function '$funName' has type '$paramType', which is forbidden", param.getPosition)
-            })
+          param.paramNameOpt.foreach { paramName =>
+            ctxWithParams.addLocal(paramName, paramType, param.getPosition, param.isReassignable, declHasTypeAnnot = true,
+              duplicateVarCallback = { () =>
+                reportError(s"identifier '${param.paramNameOpt}' is already used by another parameter of function '$funName'", param.getPosition)
+              }, forbiddenTypeCallback = { () =>
+                reportError(s"parameter '${param.paramNameOpt}' of function '$funName' has type '$paramType', which is forbidden", param.getPosition)
+              })
+          }
         }
         check(body, ctxWithParams)
         val endStatus = checkReturns(body)

@@ -276,6 +276,13 @@ class CompilerTests {
     assertEquals(expectedRes, actualRes)
   }
 
+  @Test def unnamedParamTest(): Unit = {
+    val array = new Array[Int](4)
+    compileAndExecOneIter("unnamed_param", "testF", array)
+    val expected = Array(37, 26, -168, 3)
+    assertArrayEquals(expected, array)
+  }
+
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
     compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
   }
