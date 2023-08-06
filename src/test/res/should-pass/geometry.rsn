@@ -16,7 +16,7 @@ fn computeArea(rectangle: Rectangle) -> Double {
 
 // creates the rectangles described by rectDims (leftUpperX, leftUpperY, width, height) and returns them
 // fills 'areas' with their areas
-fn createRectangles(rectDims: arr Double, areas: arr Double) -> arr Rectangle {
+fn createRectangles(rectDims: arr Double, areas: mut arr Double) -> arr Rectangle {
     if #rectDims % 4 != 0 {
         panic "length of rectDims should be a multiple of 4"
     };

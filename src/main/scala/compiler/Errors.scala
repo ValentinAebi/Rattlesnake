@@ -15,6 +15,11 @@ object Errors {
    */
   val fatalErrorExitCode: Int = -21
 
+  // Colors
+  private val red = "\u001B[31m"
+  private val yellow = "\u001B[33m"
+  private val resetColor = "\u001B[0m"
+
   /**
    * Compilation error or warning
    *
@@ -26,6 +31,7 @@ object Errors {
     val posOpt: Option[Position]
 
     val errorLevelDescr: String
+    val color: String
 
     val isWarning: Boolean = isInstanceOf[Warning]
     val isFatal: Boolean = isInstanceOf[Fatal]
@@ -46,7 +52,7 @@ object Errors {
 
     override def toString: String = {
       val positionDescr = posOpt.map(pos => s"at $pos ").getOrElse("")
-      s"[$errorLevelDescr] " ++ positionDescr ++ s"$msg #$compilationStep"
+      color ++ s"[$errorLevelDescr] " ++ positionDescr ++ s"$msg #$compilationStep" ++ resetColor
     }
   }
 
@@ -60,6 +66,7 @@ object Errors {
    */
   final case class Fatal(compilationStep: CompilationStep, msg: String, posOpt: Option[Position]) extends CompilationError {
     override val errorLevelDescr: String = "FATAL"
+    override val color: String = red
   }
 
   object Fatal {
@@ -72,6 +79,7 @@ object Errors {
    */
   final case class Err(compilationStep: CompilationStep, msg: String, posOpt: Option[Position]) extends NonFatal {
     override val errorLevelDescr: String = "error"
+    override val color: String = red
   }
 
   object Err {
@@ -84,6 +92,7 @@ object Errors {
    */
   final case class Warning(compilationStep: CompilationStep, msg: String, posOpt: Option[Position]) extends NonFatal {
     override val errorLevelDescr: String = "warning"
+    override val color: String = yellow
   }
 
   object Warning {
@@ -100,7 +109,7 @@ object Errors {
    *
    * @param errorsConsumer to be called when errors need to be displayed
    */
-  final class ErrorReporter(errorsConsumer: ErrorsConsumer, exit: ExitCode => Nothing) {
+  final class ErrorReporter(errorsConsumer: ErrorsConsumer, exit: => ExitCode => Nothing) {
     private var errors: List[NonFatal] = Nil
 
     /**
@@ -115,6 +124,7 @@ object Errors {
     def displayErrors(): Unit = {
       for error <- errors.sorted do {
         errorsConsumer(error)
+        errorsConsumer("\n")
       }
     }
 
@@ -146,7 +156,8 @@ object Errors {
      */
     def pushFatal(fatalError: Fatal): Nothing = {
       errorsConsumer(fatalError)
-      if errors.nonEmpty then errorsConsumer("Previously found errors:")
+      errorsConsumer("\n")
+      if errors.nonEmpty then errorsConsumer("Previously found errors:\n")
       displayErrors()
       displayExitMessage()
       exit(fatalErrorExitCode)
@@ -155,11 +166,12 @@ object Errors {
     private def displayAndDeleteWarnings(): Unit = {
       for warning <- errors if warning.isWarning do {
         errorsConsumer(warning)
+        errorsConsumer("\n")
       }
       errors = errors.filterNot(_.isWarning)
     }
 
-    private def displayExitMessage(): Unit = errorsConsumer("Rattlesnake compiler exiting")
+    private def displayExitMessage(): Unit = errorsConsumer("Rattlesnake compiler exiting\n")
 
   }
 

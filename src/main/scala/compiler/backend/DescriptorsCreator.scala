@@ -17,8 +17,8 @@ object DescriptorsCreator {
       case PrimitiveType.StringType => "Ljava/lang/String;"
       case PrimitiveType.VoidType => "V"
       case PrimitiveType.NothingType => "V"
-      case Types.StructType(typeName) => s"L$typeName;"
-      case Types.ArrayType(elemType) => s"[${descriptorForType(elemType)}"
+      case Types.StructType(typeName, _) => s"L$typeName;"
+      case Types.ArrayType(elemType, _) => s"[${descriptorForType(elemType)}"
       case Types.UndefinedType => assert(false)
   }
 

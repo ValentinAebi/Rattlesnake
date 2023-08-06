@@ -1,6 +1,6 @@
 
-fn createMultiplicationTable(max: Int) -> arr(arr Int) {
-    val table = arr(arr Int)[max];
+fn createMultiplicationTable(max: Int) -> arr(mut arr Int) {
+    val table = arr(mut arr Int)[max];
     for var i = 1; i <= max; i += 1 {
         table[i-1] = arr Int[max];
         for var j = 1; j <= max; j += 1 {

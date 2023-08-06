@@ -1,0 +1,9 @@
+
+struct Bar {
+    x: Int,
+    var y: Int
+}
+
+fn foo() {
+    (new mut Bar { 10, 20 }).x = 15;
+}

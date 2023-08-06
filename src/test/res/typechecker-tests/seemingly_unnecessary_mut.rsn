@@ -1,0 +1,9 @@
+
+fn foo(x: mut arr Int, i: Int, j: Int, k: Int){
+    x[0] = (i+j) * k;
+}
+
+fn bar(pqrs: mut arr Int){
+    val abc = pqrs[12];
+    foo(pqrs, abc, 15, abc+1);
+}

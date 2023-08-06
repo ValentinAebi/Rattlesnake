@@ -24,7 +24,7 @@ class ParseAndReprintTests {
 
     val er = new ErrorReporter(failTestOnAttemptToPrintSomething, failExit)
     val formatter = new Lexer(er) andThen new Parser(er) andThen new PrettyPrinter(indentGranularity = 4)
-    val file = SourceFile("src/test/res/geometry.rsn")
+    val file = SourceFile("src/test/res/should-pass/geometry.rsn")
     val actualRes = formatter.apply(file)
     val expectedRes = filterOutCommentLines(file.content.get)
     assertEquals(expectedRes, actualRes)

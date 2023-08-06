@@ -41,11 +41,16 @@ object FunctionsToInject {
 
   private val stringEqualityFunction: FunDef = {
 
-    val errorsConsumer: (CompilationError | String) => Nothing = _ => assert(false)
-    val er = new ErrorReporter(errorsConsumer,
-      exitCode => throw new AssertionError(
-        s"should not happen: could not compile string equality function (exit code $exitCode"
-      )
+    var er: ErrorReporter = null
+    er = new ErrorReporter(
+      errorsConsumer = { _ =>
+        throw new AssertionError(er.getErrors.mkString("\n", "\n", ""))
+      },
+      exit = { exitCode =>
+        throw new AssertionError(
+          s"should not happen: could not compile string equality function (exit code $exitCode)"
+        )
+      }
     )
 
     val pipeline =
@@ -59,7 +64,7 @@ object FunctionsToInject {
     // load code of the function, lower it and replace its name
     val resFile = stringEqualityCodeProvider
     val result = pipeline.apply(resFile)
-    val (List(Source(List(funDef: FunDef @unchecked))), _) = result
+    val (List(Source(List(funDef: FunDef))), _) = result : @unchecked
     assert(funDef.funName.stringId == StringEqualityFunId.rawName)
     funDef.copy(funName = StringEqualityFunId)
   }

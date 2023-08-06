@@ -1,6 +1,6 @@
 package compiler
 
-import compiler.Errors.ExitCode
+import compiler.Errors.{ErrorReporter, ExitCode}
 import compiler.io.SourceFile
 import org.junit.Assert.{assertArrayEquals, assertEquals, assertFalse, assertTrue, fail}
 import org.junit.{After, Before, Test}
@@ -15,6 +15,7 @@ import org.objectweb.asm.Opcodes.V1_8
 
 class CompilerTests {
 
+  private val srcDir = "src/test/res/should-pass"
   private val tmpTestDir = "testtmp"
   private val javaVersionCode = V1_8
 
@@ -264,6 +265,17 @@ class CompilerTests {
     assertEquals(expectedRes, actualRes)
   }
 
+  @Test def modifParamsTest(): Unit = {
+    val samples = List((120, 72) -> 24, (15, 95) -> 5, (99, 27) -> 9)
+    val expectedRes = samples.map(_._2)
+    val actualResRaw = compileAndExecSeveralIter("modif_params", "wrapper",
+      samples.map { case ((a, b), _) => Array(Array(a, b)) }
+    )
+    assertTrue(actualResRaw.forall(_.isInstanceOf[Int]))
+    val actualRes = actualResRaw.map(_.asInstanceOf[Int])
+    assertEquals(expectedRes, actualRes)
+  }
+
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
     compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
   }
@@ -282,8 +294,9 @@ class CompilerTests {
   private def compileAndExecSeveralIter(srcFileName: String, testedMethodName: String, argsPerIter: List[Array[_]]): List[Any] = {
     val tmpDir = Path.of(tmpTestDir, srcFileName)
     val outputName = srcFileName.withHeadUppercase + GenFilesNames.coreFilePostfix
-    val compiler = TasksPipelines.compiler(tmpDir, javaVersionCode, outputName, true, failExit)
-    val testFile = SourceFile(s"src/test/res/$srcFileName.${FileExtensions.rattlesnake}")
+    val errorReporter = new ErrorReporter(errorsConsumer = System.err.print, exit = failExit)
+    val compiler = TasksPipelines.compiler(tmpDir, javaVersionCode, outputName, true, errorReporter)
+    val testFile = SourceFile(s"$srcDir/$srcFileName.${FileExtensions.rattlesnake}")
     val writtenFilesPaths = compiler.apply(List(testFile))
     val classes = {
       for path <- writtenFilesPaths yield {

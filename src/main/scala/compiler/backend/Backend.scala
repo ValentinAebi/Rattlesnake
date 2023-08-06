@@ -280,8 +280,8 @@ final class Backend[V <: ClassVisitor](
           case Types.UndefinedType => shouldNotHappen()
         }
 
-      case StructInit(structName, args) =>
-        val structType = StructType(structName)
+      case StructInit(structName, args, modifiable) =>
+        val structType = StructType(structName, modifiable)
         val tmpVarIdx = ctx.currLocalIdx
         val tempLocalName = BackendGeneratedVarId(tmpVarIdx)
         ctx.addLocal(tempLocalName, structType)
@@ -292,10 +292,10 @@ final class Backend[V <: ClassVisitor](
         mv.visitVarInsn(storeTmpOpcode, tmpVarIdx)
         val structSig = analysisContext.structs.apply(structName)
         val loadTmpOpcode = opcodeFor(structType, Opcodes.ILOAD, Opcodes.ALOAD)
-        for (arg, (paramName, tpe)) <- args.zip(structSig.fields) do {
+        for (arg, (paramName, fieldInfo)) <- args.zip(structSig.fields) do {
           mv.visitVarInsn(loadTmpOpcode, tmpVarIdx)
           generateCode(arg, ctx)
-          mv.visitFieldInsn(Opcodes.PUTFIELD, structName.stringId, paramName.stringId, descriptorForType(tpe))
+          mv.visitFieldInsn(Opcodes.PUTFIELD, structName.stringId, paramName.stringId, descriptorForType(fieldInfo.tpe))
         }
         mv.visitVarInsn(loadTmpOpcode, tmpVarIdx)
 
@@ -405,8 +405,8 @@ final class Backend[V <: ClassVisitor](
       case Select(lhs, selected) =>
         generateCode(lhs, ctx)
         val structName = lhs.getType.asInstanceOf[StructType].typeName
-        val selectedType = analysisContext.structs.apply(structName).fields.apply(selected)
-        mv.visitFieldInsn(Opcodes.GETFIELD, structName.stringId, selected.stringId, descriptorForType(selectedType))
+        val fieldInfo = analysisContext.structs.apply(structName).fields.apply(selected)
+        mv.visitFieldInsn(Opcodes.GETFIELD, structName.stringId, selected.stringId, descriptorForType(fieldInfo.tpe))
 
       case VarAssig(lhs, rhs) =>
         lhs match {

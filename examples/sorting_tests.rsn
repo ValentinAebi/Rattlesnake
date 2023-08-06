@@ -27,7 +27,7 @@ test emptySortTest {
 }
 
 test nonEmptySortTest {
-    val array = [12, 21, -5, 7, 18, 22, 0, 4, -7, -2, 9];
+    val array = mut [12, 21, -5, 7, 18, 22, 0, 4, -7, -2, 9];
     selectionSort(array);
     val exp = [22, 21, 18, 12, 9, 7, 4, 0, -2, -5, -7];
     assertArrayEquals(exp, array);

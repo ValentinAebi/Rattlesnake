@@ -1,6 +1,6 @@
 
 fn testFunc(args: arr Int) -> arr Int {
-    val counter = new Counter { 0, -1 };
+    val counter = new mut Counter { 0, -1 };
     counter.odds = 0;
     for var k = 0; k < #args; k += 1 {
         add(counter, args[k]);
@@ -9,11 +9,11 @@ fn testFunc(args: arr Int) -> arr Int {
 }
 
 struct Counter {
-    evens: Int,
-    odds: Int
+    var evens: Int,
+    var odds: Int
 }
 
-fn add(counter: Counter, n: Int){
+fn add(counter: mut Counter, n: Int){
     if n % 2 == 0 {
         counter.evens += 1;
     } else {

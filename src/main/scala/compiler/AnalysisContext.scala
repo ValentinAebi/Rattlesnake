@@ -26,8 +26,8 @@ final case class AnalysisContext(
   def knowsType(tpe: Type): Boolean = {
     tpe match {
       case _: Types.PrimitiveType => true
-      case Types.StructType(typeName) => structs.contains(typeName)
-      case Types.ArrayType(elemType) => knowsType(elemType)
+      case Types.StructType(typeName, _) => structs.contains(typeName)
+      case Types.ArrayType(elemType, _) => knowsType(elemType)
       case Types.UndefinedType => true
     }
   }
@@ -58,14 +58,14 @@ object AnalysisContext {
       if (structs.contains(name)) {
         errorReporter.push(Err(ContextCreation, s"redefinition of struct '$name'", structDef.getPosition))
       } else {
-        val fieldsMap = new mutable.LinkedHashMap[FunOrVarId, Type]()
+        val fieldsMap = new mutable.LinkedHashMap[FunOrVarId, StructSignature.FieldInfo]()
         for param <- structDef.fields do {
           if (param.tpe == VoidType || param.tpe == NothingType) {
             errorReporter.push(Err(ContextCreation, s"struct field cannot have type '${param.tpe}'", param.getPosition))
           } else if (fieldsMap.contains(param.paramName)) {
             errorReporter.push(Err(ContextCreation, s"duplicated field: '${param.paramName}'", param.getPosition))
           } else {
-            fieldsMap.put(param.paramName, param.tpe)
+            fieldsMap.put(param.paramName, StructSignature.FieldInfo(param.tpe, param.isReassignable))
           }
         }
         val sig = StructSignature(name, fieldsMap)

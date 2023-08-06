@@ -1,17 +1,18 @@
 package compiler.parser
 
-import compiler.Errors.{ErrorReporter, Fatal}
+import compiler.Errors.{ErrorReporter, Fatal, errorsExitCode}
 import compiler.irs.Asts.*
 import compiler.irs.Tokens.*
 import compiler.parser.ParseTree.^:
 import compiler.parser.TreeParsers.*
 import compiler.prettyprinter.PrettyPrinter
-import compiler.{CompilationStep, CompilerStep, Errors, Position}
+import compiler.{CompilerStep, Errors, Position}
 import lang.Keyword.*
 import lang.Operator.*
 import lang.Types.{ArrayType, StructType, Type}
 import lang.{Keyword, Operator, Operators, Types}
 import identifiers.*
+import compiler.CompilationStep.Parsing
 
 import scala.util.Try
 
@@ -22,28 +23,28 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   // ---------- Syntax primitives -----------------------------------------------------------------------
 
-  private def op(operators: Operator*) = treeParser(s"operator(s) ${operators.mkString("'", "', '", "'")}") {
+  private def op(operators: Operator*) = treeParser(operators.mkString(" or ")) {
     case OperatorToken(operator) if operators.contains(operator) => operator
   }
 
-  private def kw(keywords: Keyword*) = treeParser(s"keyword(s) ${keywords.mkString("'", "', '", "'")}") {
+  private def kw(keywords: Keyword*) = treeParser(keywords.mkString(" or ")) {
     case KeywordToken(keyword) if keywords.contains(keyword) => keyword
   }
 
-  private val lowName = treeParser("identifier starting with a lowercase") {
+  private val lowName = treeParser("a..z") {
     case FirstLowercaseIdentifierToken(strValue) => NormalFunOrVarId(strValue)
   }
 
-  private val highName = treeParser("identifier starting with an uppercase") {
+  private val highName = treeParser("A..Z") {
     case FirstUppercaseIdentifierToken(strValue) => NormalTypeId(strValue)
   }
 
-  private val numericLiteralValue: FinalTreeParser[NumericLiteral] = treeParser("numeric literal value"){
+  private val numericLiteralValue: FinalTreeParser[NumericLiteral] = treeParser("int or double"){
     case IntLitToken(value) => IntLit(value)
     case DoubleLitToken(value) => DoubleLit(value)
   }
 
-  private val nonNumericLiteralValue: FinalTreeParser[NonNumericLiteral] = treeParser("non numeric literal value"){
+  private val nonNumericLiteralValue: FinalTreeParser[NonNumericLiteral] = treeParser("bool or char or string"){
     case BoolLitToken(value) => BoolLit(value)
     case CharLitToken(value) => CharLit(value)
     case StringLitToken(value) => StringLit(value)
@@ -101,9 +102,9 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "funDef"
 
   private lazy val param = {
-    lowName ::: colon ::: tpe map {
-      case name ^: tpe =>
-        Param(name, tpe)
+    opt(kw(Var)) ::: lowName ::: colon ::: tpe map {
+      case optVar ^: name ^: tpe =>
+        Param(name, tpe, optVar.isDefined)
     }
   } setName "param"
 
@@ -142,15 +143,30 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "noParenthType"
 
   private lazy val tpe: P[Type] = recursive {
-    noParenthType OR (openParenth ::: tpe ::: closeParenth)
+    modifiableType OR unmodifiableType
   } setName "tpe"
 
+  private lazy val modifiableType: P[Type] = recursive {
+    kw(Mut).ignored ::: unmodifiableType map {
+      case StructType(typeName, _) => StructType(typeName, modifiable = true)
+      case ArrayType(elemType, _) => ArrayType(elemType, modifiable = true)
+      case tpe =>
+        // TODO report position
+        errorReporter.push(Errors.Err(Parsing, s"$tpe is never modifiable", posOpt = None))
+        tpe
+    }
+  } setName "modifiableType"
+
+  private lazy val unmodifiableType: P[Type] = recursive {
+    noParenthType OR (openParenth ::: tpe ::: closeParenth)
+  } setName "unmodifiableType"
+
   private lazy val atomicType = {
-    highName map (name => Types.primTypeFor(name.stringId).getOrElse(StructType(name)))
+    highName map (name => Types.primTypeFor(name).getOrElse(StructType(name, modifiable = false)))
   } setName "atomicType"
 
   private lazy val arrayType = recursive {
-    kw(Arr).ignored ::: tpe map (ArrayType.apply)
+    kw(Arr).ignored ::: tpe map (ArrayType.apply(_, modifiable = false))
   } setName "arrayType"
 
   private lazy val block = recursive {
@@ -195,7 +211,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "noBinopExpr"
 
   private lazy val binopArg = recursive {
-    noBinopExpr OR arrayInit OR structInit
+    noBinopExpr OR mutPossiblyFilledArrayInit OR arrayInit OR structInit
   } setName "binopArg"
 
   private lazy val callArgs = recursive {
@@ -214,12 +230,6 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
         VariableRef(name)
     }
   } setName "varRefOrCallArgs"
-
-  private lazy val funCall = recursive {
-    lowName ::: callArgs map {
-      case calleeName ^: args => Call(VariableRef(calleeName), args)
-    }
-  } setName "funCall"
 
   private lazy val atomicExpr = {
     varRefOrFunCall OR literalValue OR filledArrayInit OR parenthesizedExpr
@@ -240,19 +250,33 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     openParenth ::: expr ::: closeParenth
   } setName "parenthesizedExpr"
 
+  private lazy val mutPossiblyFilledArrayInit = recursive {
+    kw(Mut).ignored ::: (arrayInit OR filledArrayInit) map {
+      case arrayInit: ArrayInit =>
+        errorReporter.push(Errors.Warning(Parsing,
+          s"${Mut.str} is redundant in front of an uninitialized array declaration", arrayInit.getPosition))
+        arrayInit
+      case filledArrayInit: FilledArrayInit =>
+        filledArrayInit.copy(modifiable = true)
+    }
+  } setName "mutPossiblyFilledArrayInit"
+
   private lazy val arrayInit = recursive {
     kw(Arr).ignored ::: tpe ::: openingBracket ::: expr ::: closingBracket map {
-      case elemType ^: size => ArrayInit(elemType, size)
+      case elemType ^: size =>
+        ArrayInit(elemType, size)
     }
   } setName "arrayInit"
 
   private lazy val filledArrayInit = recursive {
-    openingBracket ::: repeatWithSep(expr, comma) ::: closingBracket map (arrElems => FilledArrayInit(arrElems))
+    openingBracket ::: repeatWithSep(expr, comma) ::: closingBracket map {
+      case arrElems => FilledArrayInit(arrElems, false)
+    }
   } setName "filledArrayInit"
 
   private lazy val structInit = recursive {
-    kw(New).ignored ::: highName ::: openBrace ::: repeatWithSep(expr, comma) ::: closeBrace map {
-      case structName ^: args => StructInit(structName, args)
+    kw(New).ignored ::: opt(kw(Mut)) ::: highName ::: openBrace ::: repeatWithSep(expr, comma) ::: closeBrace map {
+      case optMut ^: structName ^: args => StructInit(structName, args, optMut.isDefined)
     }
   } setName "structInit"
 
@@ -309,7 +333,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   override def apply(input: (List[PositionedToken], String)): Source = {
     val (positionedTokens, srcName) = input
     if (positionedTokens.isEmpty) {
-      errorReporter.pushFatal(Fatal(CompilationStep.Parsing, "empty source", Some(Position(srcName, 1, 1))))
+      errorReporter.pushFatal(Fatal(Parsing, "empty source", Some(Position(srcName, 1, 1))))
     } else {
       val iterator = LL1Iterator.from(positionedTokens)
       source.extract(iterator) match {
