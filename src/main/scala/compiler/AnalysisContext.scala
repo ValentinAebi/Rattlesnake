@@ -60,12 +60,17 @@ object AnalysisContext {
       } else {
         val fieldsMap = new mutable.LinkedHashMap[FunOrVarId, StructSignature.FieldInfo]()
         for param <- structDef.fields do {
-          if (param.tpe == VoidType || param.tpe == NothingType) {
-            errorReporter.push(Err(ContextCreation, s"struct field cannot have type '${param.tpe}'", param.getPosition))
-          } else if (fieldsMap.contains(param.paramName)) {
-            errorReporter.push(Err(ContextCreation, s"duplicated field: '${param.paramName}'", param.getPosition))
-          } else {
-            fieldsMap.put(param.paramName, StructSignature.FieldInfo(param.tpe, param.isReassignable))
+          param.paramNameOpt match {
+            case None =>
+              errorReporter.push(Err(ContextCreation, "struct fields must be named", param.getPosition))
+            case Some(paramName) =>
+              if (param.tpe == VoidType || param.tpe == NothingType) {
+                errorReporter.push(Err(ContextCreation, s"struct field cannot have type '${param.tpe}'", param.getPosition))
+              } else if (fieldsMap.contains(paramName)) {
+                errorReporter.push(Err(ContextCreation, s"duplicated field: '$paramName'", param.getPosition))
+              } else {
+                fieldsMap.put(paramName, StructSignature.FieldInfo(param.tpe, param.isReassignable))
+              }
           }
         }
         val sig = StructSignature(name, fieldsMap)

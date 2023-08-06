@@ -102,7 +102,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "funDef"
 
   private lazy val param = {
-    opt(kw(Var)) ::: lowName ::: colon ::: tpe map {
+    opt(kw(Var)) ::: opt(lowName ::: colon) ::: tpe map {
       case optVar ^: name ^: tpe =>
         Param(name, tpe, optVar.isDefined)
     }

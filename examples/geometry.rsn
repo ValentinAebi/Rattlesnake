@@ -8,7 +8,7 @@ fn computeArea(rectangle: Rectangle) -> Double {
     return rectangle.width * rectangle.height
 }
 
-fn main(args: arr String){
+fn main(arr String){
     var width = 0.1 - 0.05 * (2.41 + 1.2) * 0.3;
     var alternate = true;
     while width < 4.0 {

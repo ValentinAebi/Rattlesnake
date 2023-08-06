@@ -19,6 +19,7 @@ import org.objectweb.asm.util.{Textifier, TraceClassVisitor}
 
 import java.io.{File, FileOutputStream, FileWriter, PrintWriter}
 import java.nio.file.{Files, Path}
+import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable.{Nil, StringOps}
 import scala.util.{Failure, Success, Try, Using}
 
@@ -149,7 +150,7 @@ final class Backend[V <: ClassVisitor](
 
   private def generateStruct(structDef: StructDef, cv: ClassVisitor): Unit = {
     for field <- structDef.fields do {
-      val fieldVisitor = cv.visitField(Opcodes.ACC_PUBLIC, field.paramName.stringId, descriptorForType(field.tpe), null, null)
+      val fieldVisitor = cv.visitField(Opcodes.ACC_PUBLIC, field.paramNameOpt.get.stringId, descriptorForType(field.tpe), null, null)
       fieldVisitor.visitEnd()
     }
     val constructorVisitor = cv.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null)
@@ -163,8 +164,14 @@ final class Backend[V <: ClassVisitor](
 
   private def generateFunction(funDef: FunDef, mv: MethodVisitor, analysisContext: AnalysisContext, outputName: String): Unit = {
     val ctx = CodeGenerationContext.from(analysisContext)
+    val unnamedParamIdx = new AtomicInteger(0)
     for param <- funDef.params do {
-      ctx.addLocal(param.paramName, param.tpe)
+      param.paramNameOpt match {
+        case None =>
+          ctx.addLocal(BackendGeneratedVarId(unnamedParamIdx.incrementAndGet()), param.tpe)
+        case Some(paramName) =>
+          ctx.addLocal(paramName, param.tpe)
+      }
     }
     mv.visitCode()
     generateCode(funDef.body, ctx)(mv, outputName)
