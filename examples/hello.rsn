@@ -9,7 +9,7 @@ fn joinWords(words: arr String, endSymbol: Char) -> String {
     return joined + charToString(endSymbol)
 }
 
-fn main(args: arr String){
+fn main(arr String){
     val msgWords = ["Hello", "world"];
     val msg = joinWords(msgWords, '!');
     print(msg)   // displays "Hello world!"

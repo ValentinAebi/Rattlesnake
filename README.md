@@ -19,7 +19,7 @@ fn joinWords(words: arr String, endSymbol: Char) -> String {
     return joined + charToString(endSymbol)
 }
 
-fn main(args: arr String){
+fn main(arr String){
     val msgWords = ["Hello", "world"];
     val msg = joinWords(msgWords, '!');
     print(msg)   // displays "Hello world!"
@@ -33,7 +33,7 @@ fn main(args: arr String){
 
 Run help to see the available commands and options
 
-## Language description
+## Language description [outdated]
 
 The language does not support modules. All functions and data structures are top-level and identified by their textual name across the whole program. Functions and types can be referred to from inside the file that defines them or from another file in the exact same way.
 
