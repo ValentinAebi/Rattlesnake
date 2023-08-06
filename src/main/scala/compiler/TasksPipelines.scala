@@ -47,7 +47,7 @@ object TasksPipelines {
   /**
    * Pipeline for formatting (src file -> formatted text file)
    */
-  def formatter(
+  def formatter(    // TODO should be able to handle comments
                  directoryPath: Path, 
                  filename: String, 
                  indentGranularity: Int,
@@ -70,6 +70,7 @@ object TasksPipelines {
       .andThen(Mapper(_ => okReporter("no error found")))
   }
 
+  // TODO should be able to support multi-files programs
   /**
    * Pipeline for lowering (src file -> lowered src file)
    */
