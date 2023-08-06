@@ -176,6 +176,16 @@ class TypeCheckerTests {
     )
   }
 
+  @Test def shouldRejectModifOfConstField(): Unit = {
+    runAndExpectErrors("modif_const_field"){
+      ErrorMatcher("should reject modification of constant field",
+        line = 8, col = 5,
+        msgMatcher = _.contains("cannot update immutable field"),
+        errorClass = classOf[Err]
+      )
+    }
+  }
+
   private final case class ErrorMatcher(
                                          descr: String,
                                          private val line: Int = -1,
