@@ -177,8 +177,15 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case structInit@StructInit(structName, args, modifiable) =>
         ctx.structs.get(structName) match {
-          case Some(structSig) =>
+          case Some(structSig: StructSignature) =>
             checkCallArgs(structSig.fields.values.map(_.tpe).toList, args, ctx, structInit.getPosition)
+            if (modifiable && !structSig.fields.exists(_._2.isReassignable)){
+              reportError(
+                s"modification permission granted on struct of type '$structName', but all of its fields are constant",
+                structInit.getPosition,
+                isWarning = true
+              )
+            }
             StructType(structName, modifiable)
           case None => reportError(s"not found: struct '$structName'", structInit.getPosition)
         }
