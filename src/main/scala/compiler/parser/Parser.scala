@@ -18,6 +18,7 @@ import scala.util.Try
 
 final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[PositionedToken], String), Source] {
   private implicit val implErrorReporter: ErrorReporter = errorReporter
+  private var ll1Iterator: LL1Iterator = _
 
   private type P[X] = AnyTreeParser[X]
 
@@ -151,8 +152,8 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
       case StructType(typeName, _) => StructType(typeName, modifiable = true)
       case ArrayType(elemType, _) => ArrayType(elemType, modifiable = true)
       case tpe =>
-        // TODO report position
-        errorReporter.push(Errors.Err(Parsing, s"$tpe is never modifiable", posOpt = None))
+        val pos = ll1Iterator.current.position  // imprecise (takes the position on the next token)
+        errorReporter.push(Errors.Err(Parsing, s"$tpe is never modifiable", Some(pos)))
         tpe
     }
   } setName "modifiableType"
@@ -335,8 +336,8 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     if (positionedTokens.isEmpty) {
       errorReporter.pushFatal(Fatal(Parsing, "empty source", Some(Position(srcName, 1, 1))))
     } else {
-      val iterator = LL1Iterator.from(positionedTokens)
-      source.extract(iterator) match {
+      ll1Iterator = LL1Iterator.from(positionedTokens)
+      source.extract(ll1Iterator) match {
         case Some(source) => source.setName(srcName)
         case None => errorReporter.displayErrorsAndTerminate()
       }
