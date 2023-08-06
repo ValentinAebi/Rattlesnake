@@ -5,7 +5,7 @@ import compiler.Errors.{CompilationError, Err, ErrorReporter, Warning}
 import compiler.irs.Asts.*
 import compiler.typechecker.TypeCheckingContext.LocalInfo
 import compiler.{AnalysisContext, CompilerStep, Position}
-import identifiers.FunOrVarId
+import identifiers.{FunOrVarId, TypeIdentifier}
 import lang.Operator.{Equality, Inequality, Sharp}
 import lang.StructSignature.FieldInfo
 import lang.{Keyword, Operator, Operators, StructSignature, TypeConversion}
@@ -45,8 +45,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
         VoidType
 
       case StructDef(_, fields) =>
-        for param@Param(_, tpe, _) <- fields if !ctx.knowsType(tpe) do {
-          reportError(s"unknown type: $tpe", param.getPosition)
+        for param@Param(_, tpe, _) <- fields do {
+          typeMustBeKnown(tpe, ctx, param.getPosition)
         }
         VoidType
 
@@ -59,11 +59,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val expRetType = optRetType.getOrElse(VoidType)
         val ctxWithParams = ctx.copyWithoutLocals(expRetType)
         for param <- params do {
-          val typeIsKnown = ctx.knowsType(param.tpe)
-          if (!typeIsKnown) {
-            reportError(s"unknown type: ${param.tpe}", param.getPosition)
-          }
-          val paramType = if typeIsKnown then param.tpe else UndefinedType
+          val paramType = typeMustBeKnown(param.tpe, ctx, param.getPosition)
           ctxWithParams.addLocal(param.paramName, paramType, param.getPosition, param.isReassignable, declHasTypeAnnot = true,
             duplicateVarCallback = { () =>
               reportError(s"identifier '${param.paramName}' is already used by another parameter of function '$funName'", param.getPosition)
@@ -93,20 +89,17 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case constDef@ConstDef(constName, tpeOpt, value) =>
         val inferredType = check(value, ctx)
-        tpeOpt.foreach { tpe =>
-          checkSubtypingConstraint(tpe, inferredType, constDef.getPosition, "constant definition")
+        tpeOpt.foreach { expType =>
+          val checkedType = typeMustBeKnown(expType, ctx, constDef.getPosition)
+          checkSubtypingConstraint(checkedType, inferredType, constDef.getPosition, "constant definition")
         }
         VoidType
 
       case localDef@LocalDef(localName, optType, rhs, isReassignable) =>
         val inferredType = check(rhs, ctx)
         optType.foreach { expType =>
-          val typeIsKnown = ctx.knowsType(expType)
-          if (!typeIsKnown) {
-            reportError(s"unknown type: '$expType'", localDef.getPosition)
-          } else {
-            checkSubtypingConstraint(expType, inferredType, localDef.getPosition, "local definition")
-          }
+          val checkedType = typeMustBeKnown(expType, ctx, localDef.getPosition)
+          checkSubtypingConstraint(checkedType, inferredType, localDef.getPosition, "local definition")
         }
         val actualType = optType.getOrElse(inferredType)
         localDef.optType = Some(actualType)
@@ -160,6 +153,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
             reportError("array size should be nonnegative", size.getPosition)
           case _ => ()
         }
+        val checkedType = typeMustBeKnown(elemType, ctx, arrayInit.getPosition)
         ArrayType(elemType, modifiable = true)
 
       case filledArrayInit@FilledArrayInit(Nil, _) =>
@@ -343,9 +337,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case panicStat@PanicStat(msg) =>
         val msgType = check(msg, ctx)
-        if (!msgType.subtypeOf(StringType)) {
-          reportError(s"panic can only be applied to type '${StringType.str}', found '$msgType'", panicStat.getPosition)
-        }
+        checkSubtypingConstraint(StringType, msgType, panicStat.getPosition, "panic")
         NothingType
 
       case _: (Param | Sequence) => assert(false)
@@ -537,8 +529,16 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
   private def checkSubtypingConstraint(expected: Type, actual: Type, posOpt: Option[Position], msgPrefix: String): Unit = {
     if (expected != UndefinedType && actual != UndefinedType && !actual.subtypeOf(expected)){
-      val fullprefix = if msgPrefix == "" then "" else (msgPrefix ++ " : ")
+      val fullprefix = if msgPrefix == "" then "" else (msgPrefix ++ ": ")
       reportError(fullprefix ++ s"expected '$expected', found '$actual'", posOpt)
+    }
+  }
+
+  private def typeMustBeKnown(tpe: Type, ctx: TypeCheckingContext, posOpt: Option[Position]): Type = {
+    if (ctx.knowsType(tpe)){
+      tpe
+    } else {
+      reportError(s"unknown type: '$tpe'", posOpt)
     }
   }
 

@@ -121,6 +121,61 @@ class TypeCheckerTests {
     }
   }
 
+  @Test def typingErrorsInSortingProgram(): Unit = {
+    runAndExpectErrors("sorting_bad_types")(
+      ErrorMatcher("i2 is String",
+        line = 4, col = 17,
+        msgMatcher = _.contains("expected 'Int', found 'String'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("swap expects an array of Double as its first argument",
+        line = 11, col = 14,
+        msgMatcher = _.contains("expected 'mut arr Double', found 'mut arr Int'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("type Index is unknown",
+        line = 16, col = 27,
+        msgMatcher = _.contains("unknown type: 'Index'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("no struct Baz known",
+        line = 17, col = 13,
+        msgMatcher = _.contains("not found: struct 'Baz'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("panic expects String, not Int",
+        line = 19, col = 9,
+        msgMatcher = _.contains("expected 'String', found 'Int'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("#array is Int",
+        line = 22, col = 13,
+        msgMatcher = _.contains("expected 'Char', found 'Int'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("expect Int, not String",
+        line = 24, col = 17,
+        msgMatcher = _.contains("expected 'Int', found 'String'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("Fake is unknown",
+        line = 32, col = 15,
+        msgMatcher = _.contains("unknown type: 'Fake'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("no operator Int + String -> Int",
+        line = 33, col = 28,
+        msgMatcher = _.contains("no definition of operator '+' found for operands 'Int' and 'String'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("expect array of Int, not array of String",
+        line = 37, col = 19,
+        msgMatcher = _.contains("expected 'mut arr Int', found 'mut arr String'"),
+        errorClass = classOf[Err]
+      )
+    )
+  }
+
   private final case class ErrorMatcher(
                                          descr: String,
                                          private val line: Int = -1,
@@ -145,6 +200,9 @@ class TypeCheckerTests {
         && err.compilationStep == compilationStep
         && err.getClass == errorClass
     }
+
+    def details: String = s"$descr ($line:$col)"
+
   }
 
   private def runAndExpectErrors(srcFileName: String)(errorsMatchers: ErrorMatcher*): Unit = {
@@ -173,7 +231,7 @@ class TypeCheckerTests {
     } catch case ExitException(code) => ()
     if (remainingErrorMatchers.nonEmpty) {
       val msg =
-        remainingErrorMatchers.map(_.descr).mkString("no error found that matches the following matchers: \n", "\n", "")
+        remainingErrorMatchers.map(_.details).mkString("no error found that matches the following matchers: \n", "\n", "")
           ++ "\n\nThe following errors were reported by typechecking:\n"
           ++ allEncounteredErrors.mkString("\n") ++ "\n"
       fail(msg)
