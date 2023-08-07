@@ -1,3 +1,2 @@
 
-TODO update doc in readme
 TODO warnings for unused functions/structs (?)
