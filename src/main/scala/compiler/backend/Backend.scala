@@ -309,6 +309,10 @@ final class Backend[V <: ClassVisitor](
       case UnaryOp(operator, operand) =>
         generateCode(operand, ctx)
         operator match {
+          case Minus if operand.getType == IntType =>
+            mv.visitInsn(Opcodes.INEG)
+          case Minus if operand.getType == DoubleType =>
+            mv.visitInsn(Opcodes.DNEG)
           case Sharp if operand.getType.isInstanceOf[ArrayType] =>
             mv.visitInsn(Opcodes.ARRAYLENGTH)
           case Sharp if operand.getType == StringType =>

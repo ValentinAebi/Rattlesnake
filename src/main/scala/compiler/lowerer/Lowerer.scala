@@ -116,8 +116,6 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
       case UnaryOp(operator, operand) =>
         val loweredOperand = lower(operand)
         operator match {
-          case Minus if operand.getType == IntType => BinaryOp(IntLit(0), Minus, loweredOperand)
-          case Minus if operand.getType == DoubleType => BinaryOp(DoubleLit(0.0), Minus, loweredOperand)
           case ExclamationMark => Ternary(loweredOperand, BoolLit(false), BoolLit(true))
           case _ => UnaryOp(operator, loweredOperand)
         }

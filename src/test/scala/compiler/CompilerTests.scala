@@ -283,6 +283,12 @@ class CompilerTests {
     assertArrayEquals(expected, array)
   }
 
+  @Test def physicsComputationTest(): Unit = {
+    val array = new Array[Double](1)
+    compileAndExecOneIter("physics", "testF", array)
+    assertEquals(-359359.498166, array(0), 1e-5)
+  }
+
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
     compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
   }
