@@ -1,2 +1,6 @@
 
 TODO warnings for unused functions/structs (?)
+TODO interfaces
+TODO null pointer and nullable types
+TODO generics (?)
+
