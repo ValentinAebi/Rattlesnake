@@ -273,7 +273,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
             checkSubtypingConstraint(inPlaceModifiedFieldType, operatorRetType, varModif.getPosition, "")
             select.setType(inPlaceModifiedFieldType)
           case _ =>
-            reportError("syntax error: only variables and array elements can be assigned", varModif.getPosition)
+            reportError("syntax error: only variables, struct fields and array elements can be assigned", varModif.getPosition)
         }
         VoidType
 
