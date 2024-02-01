@@ -192,7 +192,7 @@ Terminates the program with an exception:
 
 The compiler replaces calls to these functions with special instructions.
 
-- `print(s: String)`: display `s` on the console
+- `print(s: String)`: displays `s` on the console
 - `?ToString(...)` with `?` one of `int`, `double`, `char`, `bool`, and the corresponding parameter type (e.g. `intToString(Int) -> String`): conversion to a string
 - `toCharArray(s: String)`: converts a string into an array of all its characters (the returned array is mutable)
 
