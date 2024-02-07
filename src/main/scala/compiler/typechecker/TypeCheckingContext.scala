@@ -106,7 +106,7 @@ final case class TypeCheckingContext(
       } else if (isReassignable && !local.reassigned){
         errorReporter.push(Warning(TypeChecking, s"value declared as variable: '$name' could be a ${Keyword.Val}", defPos))
       }
-      if (tpe.isModifiable && !local.mutUsed && declHasTypeAnnot){
+      if (tpe.maybeModifiable && !local.mutUsed && declHasTypeAnnot){
         errorReporter.push(Warning(TypeChecking, s"unused modification privilege: '$name' could have type '${tpe.unmodifiable}'", defPos))
       }
     }

@@ -44,12 +44,22 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         }
         addAst(body)
 
-      case StructDef(structName, fields) =>
+      case StructDef(structName, fields, directSupertypes, isInterface) =>
         pps
-          .add(Struct.str)
+          .add(if isInterface then Interface.str else Struct.str)
           .addSpace()
           .add(structName)
           .addSpace()
+        if (directSupertypes.nonEmpty){
+          pps.add(": ")
+          val iter = directSupertypes.iterator
+          while (iter.hasNext){
+            pps.add(iter.next())
+            if (iter.hasNext){
+              pps.add(", ")
+            }
+          }
+        }
         addBracesList(fields, ",", onMultipleLines = true)
 
       case TestDef(testName, body) =>

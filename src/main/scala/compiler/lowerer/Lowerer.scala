@@ -48,7 +48,12 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
   }
 
   private def lower(structDef: StructDef): StructDef = {
-    StructDef(structDef.structName, structDef.fields.map(lower))
+    StructDef(
+      structDef.structName,
+      structDef.fields.map(lower),
+      structDef.directSupertypes,
+      structDef.isInterface
+    )
   }
   
   private def lower(testDef: TestDef): TestDef = {

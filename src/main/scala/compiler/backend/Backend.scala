@@ -7,11 +7,12 @@ import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType
 import compiler.backend.TypesConverter.{convertToAsmType, convertToAsmTypeCode, internalNameOf, opcodeFor}
 import compiler.irs.Asts.*
 import compiler.{AnalysisContext, CompilerStep, FileExtensions, GenFilesNames}
-import identifiers.BackendGeneratedVarId
+import lang.SubtypeRelation.subtypeOf
+import identifiers.{BackendGeneratedVarId, FunOrVarId, TypeIdentifier}
 import lang.Operator.*
 import lang.Types.PrimitiveType.*
-import lang.Types.{ArrayType, PrimitiveType, StructType}
-import lang.{BuiltInFunctions, TypeConversion, Types}
+import lang.Types.{ArrayType, PrimitiveType, StructType, UnionType}
+import lang.{BuiltInFunctions, FunctionSignature, StructSignature, TypeConversion, Types}
 import org.objectweb.asm
 import org.objectweb.asm.*
 import org.objectweb.asm.Opcodes.*
@@ -21,6 +22,7 @@ import java.io.{File, FileOutputStream, FileWriter, PrintWriter}
 import java.nio.file.{Files, Path}
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.immutable.{Nil, StringOps}
+import scala.collection.mutable
 import scala.util.{Failure, Success, Try, Using}
 
 /**
@@ -70,7 +72,7 @@ final class Backend[V <: ClassVisitor](
       val outputDir = outputDirBase.resolve("out")
       Files.createDirectories(outputDir)
 
-      val structFilesPaths = generateStructs(structs, outputDir)
+      val structFilesPaths = generateStructs(structs, outputDir, analysisContext)
 
       val coreFilePath = outputDir.resolve(mode.withExtension(outputName))
       generateCoreFile(analysisContext, functions, coreFilePath)
@@ -133,13 +135,13 @@ final class Backend[V <: ClassVisitor](
     mode.terminate(cv, coreFilePath, errorReporter)
   }
 
-  private def generateStructs(structs: List[StructDef], outputDir: Path) = {
+  private def generateStructs(structs: List[StructDef], outputDir: Path, ctx: AnalysisContext) = {
     val structFilesPaths = {
       for struct <- structs yield {
         val structFilePath = outputDir.resolve(mode.withExtension(struct.structName.stringId))
         val cv = mode.createVisitor(structFilePath)
         cv.visit(javaVersionCode, ACC_PUBLIC, struct.structName.stringId, null, objectTypeStr, null)
-        generateStruct(struct, cv)
+        generateStruct(struct, cv, ctx)
         cv.visitEnd()
         mode.terminate(cv, structFilePath, errorReporter)
         structFilePath
@@ -148,18 +150,60 @@ final class Backend[V <: ClassVisitor](
     structFilesPaths
   }
 
-  private def generateStruct(structDef: StructDef, cv: ClassVisitor): Unit = {
-    for field <- structDef.fields do {
-      val fieldVisitor = cv.visitField(Opcodes.ACC_PUBLIC, field.paramNameOpt.get.stringId, descriptorForType(field.tpe), null, null)
-      fieldVisitor.visitEnd()
+  private def generateStruct(structDef: StructDef, cv: ClassVisitor, ctx: AnalysisContext): Unit = {
+    addFields(structDef, cv)
+    addConstructor(cv)
+    val structName = structDef.structName
+    val structSig = ctx.structs(structName)
+    val interfaceFields = getInterfaceFields(structName, ctx.structs)
+    for (fld <- interfaceFields) {
+      val fldType = structSig.fields.apply(fld).tpe
+      val fieldDescr = descriptorForType(fldType)
+      generateGetter(structName, fld, fldType, fieldDescr, cv)
+      if (structSig.fields.apply(fld).isReassignable) {
+        generateSetter(structName, fld, fldType, fieldDescr, cv)
+      }
     }
+  }
+
+  private def generateGetter(structName: TypeIdentifier, fld: FunOrVarId, fldType: Types.Type, fieldDescr: String, cv: ClassVisitor): Unit = {
+    val getterDescriptor = descriptorForType(StructType(structName, modifiable = true))
+    val getterVisitor = cv.visitMethod(Opcodes.ACC_PUBLIC, fld.stringId,
+      descriptorForFunc(FunctionSignature(fld, List.empty, fldType)), null, null)
+    getterVisitor.visitCode()
+    getterVisitor.visitFieldInsn(Opcodes.GETFIELD, getterDescriptor,
+      fld.stringId, fieldDescr)
+    getterVisitor.visitInsn(Opcodes.ARETURN)
+    getterVisitor.visitMaxs(0, 0) // parameters are ignored because mode is COMPUTE_FRAMES
+    getterVisitor.visitEnd()
+  }
+
+  private def generateSetter(structName: TypeIdentifier, fld: FunOrVarId, fldType: Types.Type, fieldDescr: String, cv: ClassVisitor): Unit = {
+    val setterDescriptor = descriptorForFunc(FunctionSignature(fld, List(fldType), PrimitiveType.VoidType))
+    val setterVisitor = cv.visitMethod(Opcodes.ACC_PUBLIC, fld.stringId, setterDescriptor, null, null)
+    setterVisitor.visitCode()
+    setterVisitor.visitVarInsn(Opcodes.ALOAD, 0)
+    setterVisitor.visitFieldInsn(Opcodes.PUTFIELD, structName.stringId, fld.stringId, fieldDescr)
+    setterVisitor.visitInsn(Opcodes.RETURN)
+    setterVisitor.visitMaxs(0, 0) // parameters are ignored because mode is COMPUTE_FRAMES
+    setterVisitor.visitEnd()
+  }
+
+  private def addConstructor(cv: ClassVisitor): Unit = {
     val constructorVisitor = cv.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null)
     constructorVisitor.visitCode()
     constructorVisitor.visitVarInsn(Opcodes.ALOAD, 0)
     constructorVisitor.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false)
     constructorVisitor.visitInsn(Opcodes.RETURN)
-    constructorVisitor.visitMaxs(0, 0)  // parameters are ignored because mode is COMPUTE_FRAMES
+    constructorVisitor.visitMaxs(0, 0) // parameters are ignored because mode is COMPUTE_FRAMES
     constructorVisitor.visitEnd()
+  }
+
+  private def addFields(structDef: StructDef, cv: ClassVisitor): Unit = {
+    for field <- structDef.fields do {
+      val fieldVisitor = cv.visitField(Opcodes.ACC_PUBLIC, field.paramNameOpt.get.stringId, descriptorForType(field.tpe), null, null)
+      fieldVisitor.visitEnd()
+    }
   }
 
   private def generateFunction(funDef: FunDef, mv: MethodVisitor, analysisContext: AnalysisContext, outputName: String): Unit = {
@@ -212,6 +256,24 @@ final class Backend[V <: ClassVisitor](
 
   private def printCallFor(msgParts: Expr*): Call = {
     Call(VariableRef(BuiltInFunctions.print), List(msgParts.reduceLeft(BinaryOp(_, Plus, _).setType(StringType))))
+  }
+
+  private def getInterfaceFields(structId: TypeIdentifier, structs: Map[TypeIdentifier, StructSignature]): Set[FunOrVarId] = {
+    // BFS
+
+    val fields = mutable.Set.empty[FunOrVarId]
+    val workList = mutable.Queue.empty[TypeIdentifier]
+    val alreadyAdded = mutable.Set.empty[TypeIdentifier]
+
+    workList.addAll(structs.apply(structId).directSupertypes)
+    while (workList.nonEmpty){
+      val curr = structs(workList.dequeue())
+      fields.addAll(curr.fields.keys)
+      val toAdd = curr.directSupertypes.filterNot(alreadyAdded.contains)
+      workList.addAll(toAdd)
+      alreadyAdded.addAll(toAdd)
+    }
+    fields.toSet
   }
 
   private def generateCode(ast: Ast, ctx: CodeGenerationContext)(implicit mv: MethodVisitor, outputName: String): Unit = {
@@ -279,7 +341,7 @@ final class Backend[V <: ClassVisitor](
       case ArrayInit(elemType, size) =>
         generateCode(size, ctx)
         elemType match {
-          case _: (PrimitiveType.StringType.type | StructType | ArrayType) =>
+          case _: (PrimitiveType.StringType.type | StructType | ArrayType | UnionType) =>
             mv.visitTypeInsn(Opcodes.ANEWARRAY, internalNameOf(elemType))
           case _: Types.PrimitiveType =>
             val elemTypeCode = convertToAsmTypeCode(elemType).get
@@ -417,7 +479,12 @@ final class Backend[V <: ClassVisitor](
         generateCode(lhs, ctx)
         val structName = lhs.getType.asInstanceOf[StructType].typeName
         val fieldInfo = analysisContext.structs.apply(structName).fields.apply(selected)
-        mv.visitFieldInsn(Opcodes.GETFIELD, structName.stringId, selected.stringId, descriptorForType(fieldInfo.tpe))
+        if (ctx.structs.apply(structName).isInterface){
+          val getterDescriptor = descriptorForFunc(FunctionSignature(selected, List.empty, fieldInfo.tpe))
+          mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, structName.stringId, selected.stringId, getterDescriptor, true)
+        } else {
+          mv.visitFieldInsn(Opcodes.GETFIELD, structName.stringId, selected.stringId, descriptorForType(fieldInfo.tpe))
+        }
 
       case VarAssig(lhs, rhs) =>
         lhs match {
@@ -441,8 +508,15 @@ final class Backend[V <: ClassVisitor](
           case Select(ownerStruct, fieldName) =>
             generateCode(ownerStruct, ctx)
             generateCode(rhs, ctx)
-            val ownerName = ownerStruct.getType.asInstanceOf[StructType].typeName
-            mv.visitFieldInsn(Opcodes.PUTFIELD, ownerName.stringId, fieldName.stringId, descriptorForType(rhs.getType))
+            val ownerTypeName = ownerStruct.getType.asInstanceOf[StructType].typeName
+            val fieldType = ctx.structs(ownerTypeName).fields(fieldName).tpe
+            if (ctx.structs.apply(ownerTypeName).isInterface){
+              val setterSig = FunctionSignature(fieldName, List(fieldType), PrimitiveType.VoidType)
+              val setterDescriptor = descriptorForFunc(setterSig)
+              mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, ownerTypeName.stringId, fieldName.stringId, setterDescriptor, true)
+            } else {
+              mv.visitFieldInsn(Opcodes.PUTFIELD, ownerTypeName.stringId, fieldName.stringId, descriptorForType(fieldType))
+            }
 
           case _ => shouldNotHappen()
         }
@@ -488,7 +562,7 @@ final class Backend[V <: ClassVisitor](
 
       case Cast(expr, tpe) => {
         generateCode(expr, ctx)
-        if (!expr.getType.subtypeOf(tpe)){
+        if (!expr.getType.subtypeOf(tpe)(using ctx.structs)){
           // typechecker checked that it is defined, so .get without check
           TypeConversion.conversionFor(expr.getType, tpe).get match
             case TypeConversion.Int2Double => mv.visitInsn(Opcodes.I2D)

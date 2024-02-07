@@ -120,9 +120,14 @@ object Asts {
   }
 
   /**
-   * Structure (`struct`) definition
+   * Structure (`struct`) or interface definition
    */
-  final case class StructDef(structName: TypeIdentifier, fields: List[Param]) extends TopLevelDef {
+  final case class StructDef(
+                              structName: TypeIdentifier,
+                              fields: List[Param],
+                              directSupertypes: Seq[TypeIdentifier],
+                              isInterface: Boolean
+                            ) extends TopLevelDef {
     override def children: List[Ast] = fields
   }
   

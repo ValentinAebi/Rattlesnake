@@ -19,6 +19,8 @@ object DescriptorsCreator {
       case PrimitiveType.NothingType => "V"
       case Types.StructType(typeName, _) => s"L$typeName;"
       case Types.ArrayType(elemType, _) => s"[${descriptorForType(elemType)}"
+      // TODO (maybe) optimization with a main supertype compiled to an abstract class
+      case Types.UnionType(unitedTypes) => "Ljava/lang/Object;"
       case Types.UndefinedType => assert(false)
   }
 

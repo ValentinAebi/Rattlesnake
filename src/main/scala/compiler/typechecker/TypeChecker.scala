@@ -3,14 +3,15 @@ package compiler.typechecker
 import compiler.CompilationStep.TypeChecking
 import compiler.Errors.{CompilationError, Err, ErrorReporter, Warning}
 import compiler.irs.Asts.*
+import lang.SubtypeRelation.subtypeOf
 import compiler.typechecker.TypeCheckingContext.LocalInfo
 import compiler.{AnalysisContext, CompilerStep, Position}
 import identifiers.{FunOrVarId, TypeIdentifier}
 import lang.Operator.{Equality, Inequality, Sharp}
 import lang.StructSignature.FieldInfo
-import lang.{Keyword, Operator, Operators, StructSignature, TypeConversion}
 import lang.Types.*
 import lang.Types.PrimitiveType.*
+import lang.*
 
 final class TypeChecker(errorReporter: ErrorReporter)
   extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
@@ -26,6 +27,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def check(ast: Ast, ctx: TypeCheckingContext): Type = {
+    given Map[TypeIdentifier, StructSignature] = ctx.structs
     val tpe: Type = ast match {
 
       case Source(defs) =>
@@ -42,7 +44,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         newCtx.writeLocalsRelatedWarnings(errorReporter)
         VoidType
 
-      case StructDef(_, fields) =>
+      case StructDef(_, fields, _, _) =>
         for param@Param(_, tpe, _) <- fields do {
           typeMustBeKnown(tpe, ctx, param.getPosition)
         }
@@ -157,19 +159,19 @@ final class TypeChecker(errorReporter: ErrorReporter)
         ArrayType(elemType, modifiable = true)
 
       case filledArrayInit@FilledArrayInit(Nil, _) =>
-        reportError("cannot infer type of empty array, use 'arr <type>[<size>]' instead", filledArrayInit.getPosition)
+        reportError("cannot infer type of empty array, use 'arr <type>[0]' instead", filledArrayInit.getPosition)
 
       case filledArrayInit@FilledArrayInit(arrayElems, modifiable) =>
         val types = arrayElems.map(check(_, ctx))
-        types.find(tpe => types.forall(_.subtypeOf(tpe))) match {
-          case Some(inferredElemType) =>
+        computeJoinOf(types.toSet) match {
+          case Some(elemsJoin) =>
             for arrayElem <- arrayElems do {
-              markMutPropagation(inferredElemType, arrayElem, ctx)
+              markMutPropagation(elemsJoin, arrayElem, ctx)
             }
-            ArrayType(inferredElemType, modifiable)
+            ArrayType(elemsJoin, modifiable)
           case None =>
             arrayElems.foreach {
-              case VariableRef(name) => ctx.mutIsUsed(name)   // avoid false positives
+              case VariableRef(name) => ctx.mutIsUsed(name) // avoid false positives
               case _ => ()
             }
             reportError("cannot infer array type", filledArrayInit.getPosition)
@@ -177,6 +179,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case structInit@StructInit(structName, args, modifiable) =>
         ctx.structs.get(structName) match {
+          case Some(structSig: StructSignature) if structSig.isInterface =>
+            reportError(
+              s"cannot instantiate interface $structName",
+              structInit.getPosition
+            )
           case Some(structSig: StructSignature) =>
             checkCallArgs(structSig.fields.values.map(_.tpe).toList, args, ctx, structInit.getPosition)
             if (modifiable && !structSig.fields.exists(_._2.isReassignable)){
@@ -291,18 +298,16 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val elseType = check(elseBr, ctx)
         val thenIsSupertype = elseType.subtypeOf(thenType)
         val thenIsSubtype = thenType.subtypeOf(elseType)
-        val ternaryType = {
-          if (thenIsSupertype) {
-            thenType
-          } else if (thenIsSubtype) {
-            elseType
-          } else {
-            reportError(s"type mismatch in ternary operator: first branch has type $thenType, second has type $elseType", ternary.getPosition)
-          }
+        computeJoinOf(Set(thenType, elseType)) match {
+          case Some(ternaryType) =>
+            markMutPropagation(ternaryType, thenBr, ctx)
+            markMutPropagation(ternaryType, elseBr, ctx)
+            ternaryType
+          case None =>
+            reportError(s"cannot infer type of ternary operator: then branch has type '$thenType," +
+              s"else branch has type '$elseType'", ternary.getPosition)
         }
-        markMutPropagation(ternaryType, thenBr, ctx)
-        markMutPropagation(ternaryType, elseBr, ctx)
-        ternaryType
+        
 
       case whileLoop@WhileLoop(cond, body) =>
         val condType = check(cond, ctx)
@@ -324,7 +329,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         valueOpt.foreach { value =>
           check(value, ctx)
           value match {
-            case VariableRef(name) if ctx.expectedRetType.isModifiable =>
+            case VariableRef(name) if ctx.expectedRetType.maybeModifiable =>
               ctx.mutIsUsed(name)
             case _ => ()
           }
@@ -357,7 +362,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
     tpe
   }
 
-  private def checkCallArgs(expTypes: List[Type], args: List[Expr], ctx: TypeCheckingContext, callPos: Option[Position]): Unit = {
+  private def checkCallArgs(expTypes: List[Type], args: List[Expr], ctx: TypeCheckingContext, callPos: Option[Position])
+                           (using Map[TypeIdentifier, StructSignature]): Unit = {
     val expTypesIter = expTypes.iterator
     val argsIter = args.iterator
     var errorFound = false
@@ -407,31 +413,25 @@ final class TypeChecker(errorReporter: ErrorReporter)
         EndStatus(Set.empty, false)
 
       case Block(stats) =>
+        var alreadyReportedDeadCode = false
         var endStatus = EndStatus(Set.empty, false)
         for stat <- stats do {
-          if (endStatus.alwaysStopped) {
+          if (endStatus.alwaysStopped && !alreadyReportedDeadCode) {
             reportError("dead code", stat.getPosition)
-          } else {
-            endStatus = checkReturns(stat)
+            alreadyReportedDeadCode = true
           }
+          val statEndStatus = checkReturns(stat)
+          endStatus = EndStatus(
+            endStatus.returned ++ statEndStatus.returned,
+            endStatus.alwaysStopped || statEndStatus.alwaysStopped
+          )
         }
         endStatus
 
       case ifThenElse@IfThenElse(_, thenBr, elseBrOpt) =>
         val thenEndStatus = checkReturns(thenBr)
-        elseBrOpt match {
-          case Some(elseBr) =>
-            val elseEndStatus = checkReturns(elseBr)
-            if (thenEndStatus.returned.size == 1 && elseEndStatus.returned.size == 1) {
-              val thenRet = thenEndStatus.returned.head
-              val elseRet = elseEndStatus.returned.head
-              if (!thenRet.subtypeOrSupertype(elseRet)) {
-                reportError(s"branches of if lead to different return types: '$thenRet', '$elseRet'", ifThenElse.getPosition)
-              }
-            }
-            EndStatus(thenEndStatus.returned ++ elseEndStatus.returned, thenEndStatus.alwaysStopped && elseEndStatus.alwaysStopped)
-          case None => thenEndStatus.copy(alwaysStopped = false)
-        }
+        val elseEndStatus = elseBrOpt.map(checkReturns).getOrElse(EndStatus(Set.empty, alwaysStopped = false))
+        EndStatus(thenEndStatus.returned ++ elseEndStatus.returned, thenEndStatus.alwaysStopped && elseEndStatus.alwaysStopped)
 
       case _: Ternary => EndStatus(Set.empty, false)
 
@@ -440,14 +440,14 @@ final class TypeChecker(errorReporter: ErrorReporter)
         if (bodyEndStatus.alwaysStopped) {
           reportError("while should be replaced by if", whileLoop.getPosition, isWarning = true)
         }
-        EndStatus(bodyEndStatus.returned, false)
+        bodyEndStatus
 
       case forLoop@ForLoop(_, _, _, body) =>
         val bodyEndStatus = checkReturns(body)
         if (bodyEndStatus.alwaysStopped) {
           reportError("for should be replaced by if", forLoop.getPosition, isWarning = true)
         }
-        EndStatus(bodyEndStatus.returned, false)
+        bodyEndStatus
 
       case retStat: ReturnStat =>
         val retType = retStat.getRetType
@@ -515,7 +515,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
     exprType match {
       case StructType(typeName, modifiable) =>
         ctx.structs.apply(typeName) match {
-          case StructSignature(_, fields) if fields.contains(fieldName) =>
+          case StructSignature(_, fields, _, _) if fields.contains(fieldName) =>
             val FieldInfo(fieldType, fieldIsReassig) = fields.apply(fieldName)
             val missingModifPrivilege = mustUpdateField && !modifiable
             if (missingModifPrivilege){
@@ -534,7 +534,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
   }
 
-  private def checkSubtypingConstraint(expected: Type, actual: Type, posOpt: Option[Position], msgPrefix: String): Unit = {
+  private def checkSubtypingConstraint(expected: Type, actual: Type, posOpt: Option[Position], msgPrefix: String)
+                                      (using Map[TypeIdentifier, StructSignature]): Unit = {
     if (expected != UndefinedType && actual != UndefinedType && !actual.subtypeOf(expected)){
       val fullprefix = if msgPrefix == "" then "" else (msgPrefix ++ ": ")
       reportError(fullprefix ++ s"expected '$expected', found '$actual'", posOpt)
@@ -548,6 +549,17 @@ final class TypeChecker(errorReporter: ErrorReporter)
       reportError(s"unknown type: '$tpe'", posOpt)
     }
   }
+  
+  private def computeJoinOf(types: Set[Type]): Option[Type] = {
+    if (types.filter(_.isInstanceOf[PrimitiveType]).forall(tpe => tpe == NothingType || tpe == StringType)) {
+      Some(
+        if types.size == 1 then types.head
+        else UnionType(types)
+      )
+    } else {
+      None
+    }
+  }
 
   private def reportError(msg: String, pos: Option[Position], isWarning: Boolean = false): UndefinedType.type = {
     errorReporter.push(if isWarning then Warning(TypeChecking, msg, pos) else Err(TypeChecking, msg, pos))
@@ -556,14 +568,14 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
   private def markMutPropagation(assignedLocalName: FunOrVarId, rhs: Expr, ctx: TypeCheckingContext): Unit = {
     rhs match
-      case VariableRef(name) if ctx.get(assignedLocalName).exists(_.tpe.isModifiable) =>
+      case VariableRef(name) if ctx.get(assignedLocalName).exists(_.tpe.maybeModifiable) =>
         ctx.mutIsUsed(name)
       case _ => ()
   }
 
   private def markMutPropagation(expectedType: Type, rhs: Expr, ctx: TypeCheckingContext): Unit = {
     rhs match
-      case VariableRef(name) if expectedType.isModifiable =>
+      case VariableRef(name) if expectedType.maybeModifiable =>
         ctx.mutIsUsed(name)
       case _ => ()
   }

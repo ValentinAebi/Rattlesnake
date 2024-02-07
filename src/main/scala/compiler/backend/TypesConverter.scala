@@ -1,7 +1,7 @@
 package compiler.backend
 
 import lang.Types
-import lang.Types.{ArrayType, PrimitiveType, StructType}
+import lang.Types.{ArrayType, PrimitiveType, StructType, UnionType}
 import org.objectweb.asm
 import org.objectweb.asm.{Opcodes, Type}
 import org.objectweb.asm.Type.*
@@ -28,7 +28,7 @@ object TypesConverter {
       case PrimitiveType.BoolType => BOOLEAN_TYPE.toSome
       case PrimitiveType.VoidType => VOID_TYPE.toSome
       case PrimitiveType.NothingType => VOID_TYPE.toSome
-      case _: (PrimitiveType.StringType.type | StructType | ArrayType) => None
+      case _: (PrimitiveType.StringType.type | StructType | ArrayType | UnionType) => None
       case Types.UndefinedType => assert(false)
   }
 
@@ -52,6 +52,7 @@ object TypesConverter {
       case PrimitiveType.NothingType => "V"
       case Types.StructType(typeName, _) => s"$typeName"
       case Types.ArrayType(elemType, _) => s"[${descriptorForType(elemType)}"
+      case UnionType(_) => "java/lang/Object"
       case Types.UndefinedType => assert(false)
   }
 
