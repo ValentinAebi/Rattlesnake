@@ -304,7 +304,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
             markMutPropagation(ternaryType, elseBr, ctx)
             ternaryType
           case None =>
-            reportError(s"cannot infer type of ternary operator: then branch has type '$thenType," +
+            reportError(s"cannot infer type of ternary operator: then branch has type '$thenType', " +
               s"else branch has type '$elseType'", ternary.getPosition)
         }
         
@@ -550,14 +550,16 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
   }
   
-  private def computeJoinOf(types: Set[Type]): Option[Type] = {
-    if (types.filter(_.isInstanceOf[PrimitiveType]).forall(tpe => tpe == NothingType || tpe == StringType)) {
-      Some(
-        if types.size == 1 then types.head
-        else UnionType(types)
-      )
+  private def computeJoinOf(types: Set[Type])(using Map[TypeIdentifier, StructSignature]): Option[Type] = {
+    if types.size == 1 then Some(types.head)
+    else if (types.forall(_.isInstanceOf[StructType])) {
+      Some(UnionType(types))
     } else {
-      None
+      // type Nothing should be accepted
+      // e.g. in 'when ... then 0 else panic "" '
+      types.find { commonSuper =>
+        types.forall(_.subtypeOf(commonSuper))
+      }
     }
   }
 
