@@ -1,12 +1,13 @@
 package compiler.backend
 
-import lang.Types
-import lang.Types.{ArrayType, PrimitiveType, StructType, UnionType}
+import lang.{StructSignature, Types}
+import lang.Types.{ArrayType, PrimitiveType, StructType, UndefinedType, UnionType}
 import org.objectweb.asm
 import org.objectweb.asm.{Opcodes, Type}
 import org.objectweb.asm.Type.*
 import Opcodes.*
 import DescriptorsCreator.descriptorForType
+import identifiers.TypeIdentifier
 
 object TypesConverter {
 
@@ -41,7 +42,7 @@ object TypesConverter {
       case _ => None
   }
   
-  def internalNameOf(tpe: Types.Type): String = {
+  def internalNameOf(tpe: Types.Type)(using structs: Map[TypeIdentifier, StructSignature]): String = {
     tpe match
       case PrimitiveType.IntType => "I"
       case PrimitiveType.DoubleType => "D"
@@ -50,10 +51,10 @@ object TypesConverter {
       case PrimitiveType.StringType => "java/lang/String"
       case PrimitiveType.VoidType => "V"
       case PrimitiveType.NothingType => "V"
-      case Types.StructType(typeName, _) => s"$typeName"
-      case Types.ArrayType(elemType, _) => s"[${descriptorForType(elemType)}"
-      case UnionType(_) => "java/lang/Object"
-      case Types.UndefinedType => assert(false)
+      case StructType(typeName, _) if !structs.apply(typeName).isInterface => s"$typeName"
+      case ArrayType(elemType, _) => s"[${descriptorForType(elemType)}"
+      case StructType(_, _) | UnionType(_) => "java/lang/Object"
+      case UndefinedType => assert(false)
   }
 
   extension[T] (t: T) private def toSome = Some(t)

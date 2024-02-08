@@ -2,8 +2,9 @@ package compiler.backend
 
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
 import compiler.irs.Asts.Expr
+import identifiers.TypeIdentifier
 import lang.Types.PrimitiveType.*
-import lang.BuiltInFunctions
+import lang.{BuiltInFunctions, StructSignature}
 import org.objectweb.asm.{MethodVisitor, Opcodes}
 
 object BuiltinFunctionsImpl {
@@ -14,19 +15,27 @@ object BuiltinFunctionsImpl {
     mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/io/PrintStream", "print", "(Ljava/lang/String;)V", false)
   }
 
-  def generateIntToString(generateArg: () => Unit)(implicit mv: MethodVisitor): Unit = {
+  def generateIntToString(generateArg: () => Unit)
+                         (using Map[TypeIdentifier, StructSignature])
+                         (implicit mv: MethodVisitor): Unit = {
     generateToStringFor("Integer", descriptorForType(IntType), mv, generateArg)
   }
 
-  def generateDoubleToString(generateArg: () => Unit)(implicit mv: MethodVisitor): Unit = {
+  def generateDoubleToString(generateArg: () => Unit)
+                            (using Map[TypeIdentifier, StructSignature])
+                            (implicit mv: MethodVisitor): Unit = {
     generateToStringFor("Double", descriptorForType(DoubleType), mv, generateArg)
   }
 
-  def generateCharToString(generateArg: () => Unit)(implicit mv: MethodVisitor): Unit = {
+  def generateCharToString(generateArg: () => Unit)
+                          (using Map[TypeIdentifier, StructSignature])
+                          (implicit mv: MethodVisitor): Unit = {
     generateToStringFor("Character", descriptorForType(CharType), mv, generateArg)
   }
 
-  def generateBoolToString(generateArg: () => Unit)(implicit mv: MethodVisitor): Unit = {
+  def generateBoolToString(generateArg: () => Unit)
+                          (using Map[TypeIdentifier, StructSignature])
+                          (implicit mv: MethodVisitor): Unit = {
     generateToStringFor("Boolean", descriptorForType(BoolType), mv, generateArg)
   }
 

@@ -556,7 +556,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       Some(UnionType(types))
     } else {
       // type Nothing should be accepted
-      // e.g. in 'when ... then 0 else panic "" '
+      // e.g. in 'when ... then 0 else (panic "")'
       types.find { commonSuper =>
         types.forall(_.subtypeOf(commonSuper))
       }
