@@ -288,6 +288,19 @@ class CompilerTests {
     compileAndExecOneIter("physics", "testF", array)
     assertEquals(-359359.498166, array(0), 1e-5)
   }
+  
+  @Test def simpleInterfaceTest(): Unit = {
+    
+    def f(i: Int, j: Int): Int = 9*i - j*j
+    
+    val inOuts = List(Array(true) -> f(15, 5), Array(false) -> f(955, 7))
+    val act = compileAndExecSeveralIter("simple_interface", "testF", inOuts.map(_._1))
+    assertEquals(2, act.size)
+    assertTrue(act.forall(_.isInstanceOf[Int]))
+    val actInts = act.map(_.asInstanceOf[Int])
+    assertEquals(inOuts.head._2, actInts.head)
+    assertEquals(inOuts(1)._2, actInts(1))
+  }
 
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
     compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
