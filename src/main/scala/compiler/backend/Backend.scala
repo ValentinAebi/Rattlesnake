@@ -43,9 +43,8 @@ final class Backend[V <: ClassVisitor](
                                         generateTests: Boolean
                                       ) extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
 
-  private val objectTypeStr = "java/lang/Object"
-  private val stringTypeStr = "java/lang/String"
-
+  import Backend.*
+  
   override def apply(input: (List[Source], AnalysisContext)): List[Path] = {
     val (sources, analysisContext) = input
     if (sources.isEmpty) {
@@ -199,6 +198,7 @@ final class Backend[V <: ClassVisitor](
       getterDescriptor, null, null)
     if (genImplementation) {
       getterVisitor.visitCode()
+      getterVisitor.visitVarInsn(Opcodes.ALOAD, 0)
       getterVisitor.visitFieldInsn(Opcodes.GETFIELD, structName.stringId, fld.stringId, fieldDescr)
       getterVisitor.visitInsn(opcodeFor(fldType, Opcodes.IRETURN, Opcodes.ARETURN))
       getterVisitor.visitMaxs(0, 0) // parameters are ignored because mode is COMPUTE_FRAMES
@@ -677,6 +677,9 @@ final class Backend[V <: ClassVisitor](
 
 object Backend {
 
+  private val objectTypeStr = "java/lang/Object"
+  private val stringTypeStr = "java/lang/String"
+
   /**
    * Each mode injects specific behavior into the Backend where it differs between binary generation and textual bytecode generation
    */
@@ -698,7 +701,9 @@ object Backend {
     override val extension: String = FileExtensions.binary
 
     override def createVisitor(path: Path): ClassWriter = {
-      new ClassWriter(ClassWriter.COMPUTE_FRAMES)
+      new ClassWriter(ClassWriter.COMPUTE_FRAMES){
+        override def getCommonSuperClass(type1: String, type2: String): String = objectTypeStr
+      }
     }
 
     override def terminate(visitor: ClassWriter, path: Path, errorReporter: ErrorReporter): Unit = {
