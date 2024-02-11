@@ -1,0 +1,16 @@
+
+interface A : B {}
+
+interface B : D {}
+
+interface C : B {}
+
+interface D : E {}
+
+interface E : A {}
+
+interface F {}
+
+interface G: F, A {}
+
+// cycle: A, B, D, E, A

@@ -2,6 +2,7 @@ package compiler
 
 import org.junit.Test
 import Errors.*
+import compiler.CompilationStep.ContextCreation
 import compiler.io.SourceFile
 import compiler.typechecker.TypeChecker
 import org.junit.Assert.{assertEquals, fail}
@@ -182,6 +183,16 @@ class TypeCheckerTests {
         line = 8, col = 5,
         msgMatcher = _.contains("cannot update immutable field"),
         errorClass = classOf[Err]
+      )
+    }
+  }
+
+  @Test def shouldRejectCyclicSubtyping(): Unit = {
+    runAndExpectErrors("cyclic_subtyping"){
+      ErrorMatcher("should reject cycle in subtyping relation",
+        msgMatcher = _.contains("cyclic subtyping"),
+        errorClass = classOf[Err],
+        compilationStep = ContextCreation
       )
     }
   }

@@ -29,6 +29,7 @@ final case class AnalysisContext(
       case _: Types.PrimitiveType => true
       case Types.StructType(typeName, _) => structs.contains(typeName)
       case Types.ArrayType(elemType, _) => knowsType(elemType)
+      case Types.UnionType(unitedTypes) => unitedTypes.forall(knowsType)
       case Types.UndefinedType => true
     }
   }
@@ -101,6 +102,7 @@ object AnalysisContext {
     def build(): AnalysisContext = {
       val builtStructsMap = structs.map((tid, sigAndPos) => (tid, sigAndPos._1)).toMap
       checkSubtyping(builtStructsMap)
+      checkSubtypingCycles(builtStructsMap)
       functions.addAll(BuiltInFunctions.builtInFunctions)
       new AnalysisContext(
         functions.toMap,
@@ -153,6 +155,32 @@ object AnalysisContext {
       } else if (!superFldInfo.isReassignable && !subFieldInfo.tpe.subtypeOf(superFldInfo.tpe)(using builtStructMap)) {
         errorReporter.push(Err(ContextCreation,
           s"subtyping error: type of $fldName in $structId should be a subtype of its type in $directSupertypeId", posOpt))
+      }
+    }
+
+    private def checkSubtypingCycles(builtStructMap: Map[TypeIdentifier, StructSignature]): Unit = {
+
+      // DFS
+
+      val maxDepth = builtStructMap.size
+      var found = false
+      val iter = structs.iterator
+      while (iter.hasNext && !found){
+
+        val (currId, (_, posOpt)) = iter.next()
+
+        def findCycleFrom(start: TypeIdentifier, target: TypeIdentifier, depth: Int): Unit = {
+          if (start == target && depth > 0){
+            errorReporter.push(Err(ContextCreation, s"cyclic subtyping: cycle involves $start", posOpt))
+            found = true
+          } else if (depth < maxDepth) {
+            for (child <- builtStructMap.apply(start).directSupertypes){
+              findCycleFrom(child, target, depth + 1)
+            }
+          }
+        }
+
+        findCycleFrom(currId, currId, depth = 0)
       }
     }
 
