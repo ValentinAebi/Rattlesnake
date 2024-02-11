@@ -66,7 +66,8 @@ final class Backend[V <: ClassVisitor](
           case constDef: ConstDef => constsBuilder.addOne(constDef)
       }
       val functions = functionsBuilder.result()
-      val structs = structsBuilder.result()
+      // sort the structs so that no class is loaded before its super-interfaces
+      val structs = sortStructs(structsBuilder.result())
       val tests = testsBuilder.result()
       val consts = constsBuilder.result()
 
@@ -91,6 +92,20 @@ final class Backend[V <: ClassVisitor](
       (if generateTests then List(testFilePath) else Nil) ++ (coreFilePath :: constantsFilePath :: structFilesPaths)
     }
 
+  }
+
+  /**
+   * Topological sort on the subtyping relation: each supertype appears before its subtypes
+   */
+  private def sortStructs(structs: List[StructDef]): List[StructDef] = {
+    val remStructs = mutable.Queue.from(structs)
+    val sortedList = new mutable.LinkedHashMap[TypeIdentifier, StructDef]
+    while (remStructs.nonEmpty){
+      // get is safe here because the subtyping relation admits no cycles (checked by ContextCreation phase)
+      val curr = remStructs.removeFirst(_.directSupertypes.forall(sortedList.contains)).get
+      sortedList.addOne(curr.structName -> curr)
+    }
+    sortedList.toList.map(_._2)
   }
 
   private def generateTestsFile(analysisContext: AnalysisContext, tests: List[TestDef], testFilePath: Path)
