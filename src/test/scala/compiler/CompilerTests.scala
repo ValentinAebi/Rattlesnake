@@ -289,12 +289,12 @@ class CompilerTests {
     assertEquals(-359359.498166, array(0), 1e-5)
   }
   
-  @Test def simpleInterfaceTest(): Unit = {
+  @Test def simpleInterfaceWithAnnotTest(): Unit = {
     
     def f(i: Int, j: Int): Int = 9*i - j*j
     
-    val inOuts = List(Array(true) -> f(15, 5), Array(false) -> f(955, 7))
-    val act = compileAndExecSeveralIter("simple_interface", "testF", inOuts.map(_._1))
+    val inOuts = List(Array(Array(true)) -> f(15, 5), Array(Array(false)) -> f(955, 7))
+    val act = compileAndExecSeveralIter("simple_interface_with_annot", "testF", inOuts.map(_._1))
     assertEquals(2, act.size)
     assertTrue(act.forall(_.isInstanceOf[Int]))
     val actInts = act.map(_.asInstanceOf[Int])
