@@ -301,6 +301,13 @@ class CompilerTests {
     assertEquals(inOuts.head._2, actInts.head)
     assertEquals(inOuts(1)._2, actInts(1))
   }
+  
+  @Test def interfaceWriteTest(): Unit = {
+    val act = compileAndExecOneIter("interface_write", "testF")
+    val exp = -31 * 25
+    assertTrue(act.isInstanceOf[Int])
+    assertEquals(exp, act)
+  }
 
   private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
     compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
