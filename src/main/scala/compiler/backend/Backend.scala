@@ -218,6 +218,7 @@ final class Backend[V <: ClassVisitor](
     if (genImplementation) {
       setterVisitor.visitCode()
       setterVisitor.visitVarInsn(Opcodes.ALOAD, 0)
+      setterVisitor.visitVarInsn(opcodeFor(fldType, Opcodes.ILOAD, Opcodes.ALOAD), 1)
       setterVisitor.visitFieldInsn(Opcodes.PUTFIELD, structName.stringId, fld.stringId, fieldDescr)
       setterVisitor.visitInsn(Opcodes.RETURN)
       setterVisitor.visitMaxs(0, 0) // parameters are ignored because mode is COMPUTE_FRAMES
