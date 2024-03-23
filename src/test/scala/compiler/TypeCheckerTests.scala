@@ -104,7 +104,7 @@ class TypeCheckerTests {
 
   @Test def expectErrorWhenMutLeakOnFieldGet(): Unit = {
     runAndExpectErrors("mut_leak_fld_get"){
-      ErrorMatcher("modifying an unmodifiable struct gotten as a field should be rejected",
+      ErrorMatcher("modification an unmodifiable struct accessed as a field should be rejected",
         line = 12, col = 5,
         msgMatcher = _.contains("cannot update field 'x': missing modification privileges on owner struct"),
         errorClass = classOf[Err]
