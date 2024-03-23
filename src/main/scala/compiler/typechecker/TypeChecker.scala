@@ -103,7 +103,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
           val checkedType = typeMustBeKnown(expType, ctx, localDef.getPosition)
           checkSubtypingConstraint(checkedType, inferredType, localDef.getPosition, "local definition")
         }
-        val actualType = optType.getOrElse(inferredType)
+        val requestExplicitType = optType.isEmpty && inferredType.isInstanceOf[UnionType]
+        if (requestExplicitType){
+          reportError(s"Please provide an explicit type for $localName", localDef.getPosition)
+        }
+        val actualType = if requestExplicitType then UndefinedType else optType.getOrElse(inferredType)
         localDef.optType = Some(actualType)
         ctx.addLocal(localName, actualType, localDef.getPosition, isReassignable, declHasTypeAnnot = optType.isDefined,
           duplicateVarCallback = { () =>
@@ -204,7 +208,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
           if (operandType.isInstanceOf[ArrayType] || operandType == StringType) {
             IntType
           } else {
-            reportError("operator # can only be applied to arrays and strings", unaryOp.getPosition)
+            reportError(s"operator # can only be applied to arrays and strings, found '$operandType'", unaryOp.getPosition)
           }
         } else {
           Operators.unaryOperatorSignatureFor(operator, operandType) match {
@@ -307,7 +311,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
             reportError(s"cannot infer type of ternary operator: then branch has type '$thenType', " +
               s"else branch has type '$elseType'", ternary.getPosition)
         }
-        
 
       case whileLoop@WhileLoop(cond, body) =>
         val condType = check(cond, ctx)
@@ -549,11 +552,21 @@ final class TypeChecker(errorReporter: ErrorReporter)
       reportError(s"unknown type: '$tpe'", posOpt)
     }
   }
-  
-  private def computeJoinOf(types: Set[Type])(using Map[TypeIdentifier, StructSignature]): Option[Type] = {
+
+  private def computeJoinOf(types: Set[Type])(using structs: Map[TypeIdentifier, StructSignature]): Option[Type] = {
+    require(types.nonEmpty)
     if types.size == 1 then Some(types.head)
     else if (types.forall(_.isInstanceOf[StructType])) {
-      Some(UnionType(types))
+      // if the structs have exactly 1 direct supertype in common, infer it as the result type
+      val directSupertypesSets = types.map { tpe =>
+        structs.apply(tpe.asInstanceOf[StructType].typeName).directSupertypes.toSet
+      }
+      val commonDirectSupertypes = directSupertypesSets.reduceLeft(_.intersect(_))
+      Some(
+        if commonDirectSupertypes.size == 1
+        then StructType(commonDirectSupertypes.head, modifiable = types.forall(_.isModifiableForSure))
+        else UnionType(types)
+      )
     } else {
       // type Nothing should be accepted
       // e.g. in 'when ... then 0 else (panic "")'

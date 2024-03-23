@@ -9,6 +9,7 @@ object Types {
   sealed trait Type {
     
     def maybeModifiable: Boolean
+    def isModifiableForSure: Boolean
     
     def unmodifiable: Type
 
@@ -25,6 +26,8 @@ object Types {
     case NothingType extends PrimitiveType("Nothing")
 
     override def maybeModifiable: Boolean = false
+
+    override def isModifiableForSure: Boolean = false
     override def unmodifiable: Type = this
 
     override def toString: String = str
@@ -42,6 +45,8 @@ object Types {
 
     override def maybeModifiable: Boolean = modifiable
 
+    override def isModifiableForSure: Boolean = modifiable
+
     override def unmodifiable: Type = copy(modifiable = false)
 
     override def toString: String = {
@@ -57,6 +62,8 @@ object Types {
   final case class ArrayType(elemType: Type, modifiable: Boolean) extends Type {
 
     override def maybeModifiable: Boolean = modifiable
+
+    override def isModifiableForSure: Boolean = modifiable
     override def unmodifiable: Type = copy(modifiable = false)
 
     override def toString: String = {
@@ -66,6 +73,7 @@ object Types {
   
   final case class UnionType(unitedTypes: Set[Type]) extends Type {
     override def maybeModifiable: Boolean = unitedTypes.exists(_.maybeModifiable)
+    override def isModifiableForSure: Boolean = unitedTypes.forall(_.isModifiableForSure)
     override def unmodifiable: Type = UnionType(unitedTypes.map(_.unmodifiable))
 
     override def toString: String = unitedTypes.toSeq.sortBy(_.toString).mkString(" | ")
@@ -77,6 +85,8 @@ object Types {
   case object UndefinedType extends Type {
 
     override def maybeModifiable: Boolean = true  // to avoid false positives with warnings for useless mut
+
+    override def isModifiableForSure: Boolean = false
     override def unmodifiable: Type = this
 
     override def toString: String = "[undefined type]"
