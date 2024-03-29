@@ -66,11 +66,28 @@ Statements are separated with `;`. `;` may be omitted after the last statement.
   
   Creating a mutable structure: `new mut Abc { 10, 15 }`
 
+- Interfaces, e.g. `interface I { x: Int, var s: String }`
+
+  The subtyping relation between structures and interfaces must be declared explicitely: `struct A : I { x: Int, y: Double, var s: String }`.
+  The structure must then provide at least the fields declared by the interface. If a field is declared reassignable in an interface (`var` keyword),
+  then it must be reassignable in the structure as well. If a structure `A` is a subtype of an interface `I`, then the non-reassignable fields of `A` declared in `I`
+  must declare a type that is a subtype of their type in `I`. If a field is reassignable, then it must declare the exact same type as in `I`. E.g.,
+  assuming the existence of an interface `Z` and a struct `U` that is a subtype of `Z` (denoted `U <: Z` in the following snippet):
+  ```
+  // We assume the existence of U and Z such that U <: Z
+  interface I { f: Z, var g: Z }
+  struct A : I { f: U, var g: Z }    // valid, U <: Z and f is not reassignable
+  struct B : I { f: U, var g: U }    // not valid, as U != Z and g is reassignable
+  struct C : I { f: Z, g: Z }        // not valid, as g is not reassignable in C
+  ```
+  
+
 ### Subtyping
 
 - `Nothing` is a subtype of all other types
 - `mut X` is a subtype of `X` (but not the other way around)
 - arrays are covariant iff they are immutable (e.g. `arr mut Foo` is a subtype of `arr Foo` but `mut arr mut Foo` is not a subtype of `mut arr Foo`)
+- the subtyping relation between structures and interfaces is declared explicitely
 
 ### Functions
 
@@ -102,7 +119,7 @@ fn main(arr String){
 ```
 val <name>: <type> = ...
 ```
-Type may be omitted. `var`s are defined similarly.
+Type may be omitted in almost all cases, except if the right hand-side is a ternary operation involving a complex hierarchy of structures and interfaces. `var`s are defined similarly.
 E.g.:
 ```
 val x: Int = 0;
