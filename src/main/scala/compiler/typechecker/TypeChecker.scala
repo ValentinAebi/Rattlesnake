@@ -223,7 +223,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val lhsType = check(lhs, ctx)
         val rhsType = check(rhs, ctx)
         if (operator == Equality || operator == Inequality) {
-          if (lhsType != rhsType) {
+          val isSubOrSupertype = lhsType.subtypeOf(rhsType) || rhsType.subtypeOf(lhsType)
+          if (!isSubOrSupertype) {
             reportError(s"cannot compare '$lhsType' and '$rhsType' using ${Equality.str} or ${Inequality.str}", binOp.getPosition)
           }
           BoolType

@@ -197,6 +197,26 @@ class TypeCheckerTests {
     }
   }
 
+  @Test def shouldRejectUnrelatedEqualities(): Unit = {
+    runAndExpectErrors("subtype_equality_check")(
+      ErrorMatcher("should reject second argument in test1",
+        line = 3, col = 37,
+        msgMatcher = _.contains("expected 'S', found 'I'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("should reject first argument in test2",
+        line = 7, col = 26,
+        msgMatcher = _.contains("expected 'S', found 'I'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("should reject first argument in test3 (second argument is thus ignored)",
+        line = 11, col = 26,
+        msgMatcher = _.contains("expected 'S', found 'I'"),
+        errorClass = classOf[Err]
+      )
+    )
+  }
+
   private final case class ErrorMatcher(
                                          descr: String,
                                          private val line: Int = -1,

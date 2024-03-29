@@ -322,13 +322,27 @@ class CompilerTests {
     assertEquals(exp, act)
   }
 
-  private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
-    compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
+  @Test def subtypeEqualityCheckTest(): Unit = {
+    val classes = compileAndLoadClasses("subtype_equality_check")
+    val coreClass = findCoreClass(classes)
+    val sInstance = coreClass.getMethod("createI").invoke(null)
+    val sClass = sInstance.getClass
+    assertTrue(sClass.getName == "S")
+    val iVal = sClass.getMethod("i").invoke(sInstance)
+    assertEquals(42, iVal)
+    for (method <- coreClass.getDeclaredMethods if method.getName.startsWith("test")){
+      val res = method.invoke(null)
+      assertEquals(s"failed on ${method.getName}", false, res)
+    }
   }
 
   private def failExit(exitCode: ExitCode): Nothing = {
     fail(s"exit called, exit code: $exitCode")
     throw new AssertionError("cannot happen")
+  }
+
+  private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
+    compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
   }
 
   /**
@@ -338,6 +352,19 @@ class CompilerTests {
    * @return the values returnes by each iteration
    */
   private def compileAndExecSeveralIter(srcFileName: String, testedMethodName: String, argsPerIter: List[Array[_]]): List[Any] = {
+    val classes = compileAndLoadClasses(srcFileName)
+    val coreClass = findCoreClass(classes)
+    val method = coreClass.getDeclaredMethods.find(_.getName == testedMethodName).get
+    for args <- argsPerIter yield {
+      method.invoke(null, args: _*)
+    }
+  }
+
+  private def findCoreClass(classes: Seq[Class[_]]) = {
+    classes.find(_.getName.endsWith(GenFilesNames.coreFilePostfix)).get
+  }
+
+  private def compileAndLoadClasses(srcFileName: String): Seq[Class[?]] = {
     val tmpDir = Path.of(tmpTestDir, srcFileName)
     val outputName = srcFileName.withHeadUppercase + GenFilesNames.coreFilePostfix
     val errorReporter = new ErrorReporter(errorsConsumer = System.err.print, exit = failExit)
@@ -351,11 +378,7 @@ class CompilerTests {
         Loader.load(className, bytes)
       }
     }
-    val coreClass = classes.find(_.getName.endsWith(GenFilesNames.coreFilePostfix)).get
-    val method = coreClass.getDeclaredMethods.find(_.getName == testedMethodName).get
-    for args <- argsPerIter yield {
-      method.invoke(null, args: _*)
-    }
+    classes
   }
 
   private object Loader extends ClassLoader(Thread.currentThread().getContextClassLoader) {
