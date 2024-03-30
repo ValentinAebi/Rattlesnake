@@ -137,7 +137,9 @@ final class TypeChecker(errorReporter: ErrorReporter)
                 checkCallArgs(funSig.argTypes, args, ctx, call.getPosition)
                 funSig.retType
 
-              case None => reportError(s"not found: $name", call.getPosition)
+              case None =>
+                args.foreach(check(_, ctx))
+                reportError(s"not found: $name", call.getPosition)
             }
           case _ => reportError("syntax error, only functions can be called", call.getPosition)
         }
