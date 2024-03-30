@@ -217,6 +217,56 @@ class TypeCheckerTests {
     )
   }
 
+  @Test def explicitCastTest(): Unit = {
+    runAndExpectErrors("explicit_cast")(
+      ErrorMatcher("should reject setXSub on non mutable struct",
+        line = 26, col = 13,
+        msgMatcher = _.contains("expected 'mut Sub', found 'Sub'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("should reject cast from Super to mut Sub",
+        line = 27, col = 13,
+        msgMatcher = _.contains("cannot cast 'Super' to 'mut Sub'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("should reject unrelated cast to String",
+        line = 29, col = 13,
+        msgMatcher = _.contains("cannot cast 'mut Sub' to 'String'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("should warn on cast to supertype",
+        line = 31, col = 13,
+        msgMatcher = _.contains("useless conversion: 'mut Sub' --> 'Super'"),
+        errorClass = classOf[Warning]
+      ),
+      ErrorMatcher("should reject missing modification permission on arg f passed to setX",
+        line = 32, col = 10,
+        msgMatcher = _.contains("expected 'mut Super', found 'Super'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("should reject unrelated cast of struct to struct",
+        line = 35, col = 13,
+        msgMatcher = _.contains("cannot cast 'Sub' to 'Indep'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("should reject unrelated cast of interface to struct",
+        line = 36, col = 13,
+        msgMatcher = _.contains("cannot cast 'Super' to 'Indep'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("should reject unrelated cast of struct to interface",
+        line = 38, col = 13,
+        msgMatcher = _.contains("cannot cast 'Sub' to 'I'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("should reject unrelated cast of interface to interface",
+        line = 39, col = 13,
+        msgMatcher = _.contains("cannot cast 'Super' to 'I'"),
+        errorClass = classOf[Err]
+      )
+    )
+  }
+
   private final case class ErrorMatcher(
                                          descr: String,
                                          private val line: Int = -1,

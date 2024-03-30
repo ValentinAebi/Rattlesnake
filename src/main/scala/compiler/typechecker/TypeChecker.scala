@@ -343,14 +343,20 @@ final class TypeChecker(errorReporter: ErrorReporter)
         VoidType
 
       case cast@Cast(expr, tpe) =>
-        val exprTpe = check(expr, ctx)
-        if (exprTpe.subtypeOf(tpe)) {
-          reportError(s"useless conversion: '$exprTpe' --> '$tpe'", cast.getPosition, isWarning = true)
+        val exprType = check(expr, ctx)
+        if (exprType.subtypeOf(tpe)) {
+          reportError(s"useless conversion: '$exprType' --> '$tpe'", cast.getPosition, isWarning = true)
           tpe
-        } else if (TypeConversion.conversionFor(exprTpe, tpe).isDefined) {
+        } else if (TypeConversion.conversionFor(exprType, tpe).isDefined) {
           tpe
         } else {
-          reportError(s"cannot cast ${expr.getType} to $tpe", cast.getPosition)
+          structCastResult(exprType, tpe)
+            .map { tpe =>
+              markMutPropagation(tpe, expr, ctx)
+              tpe
+            }.getOrElse {
+              reportError(s"cannot cast '${expr.getType}' to '$tpe'", cast.getPosition)
+            }
         }
 
       case panicStat@PanicStat(msg) =>
@@ -366,6 +372,16 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case _ => ()
     }
     tpe
+  }
+
+  private def structCastResult(srcType: Type, destType: Type)
+                              (using Map[TypeIdentifier, StructSignature]): Option[StructType] = {
+    (srcType, destType) match {
+      case (StructType(_, srcIsModifiable), StructType(destTypeName, destIsModifiable))
+        if destType.subtypeOf(srcType.unmodifiable) && logicalImplies(destIsModifiable, srcIsModifiable)
+      => Some(StructType(destTypeName, srcIsModifiable))
+      case _ => None
+    }
   }
 
   private def checkCallArgs(expTypes: List[Type], args: List[Expr], ctx: TypeCheckingContext, callPos: Option[Position])
@@ -597,6 +613,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
         ctx.mutIsUsed(name)
       case _ => ()
   }
+
+  private def logicalImplies(p: Boolean, q: Boolean): Boolean = !p || q
 
   private def shouldNotHappen(): Nothing = {
     throw new AssertionError("should not happen")

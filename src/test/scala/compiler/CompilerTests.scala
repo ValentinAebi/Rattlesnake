@@ -336,6 +336,11 @@ class CompilerTests {
     }
   }
 
+  @Test def explicitCastTest(): Unit = {
+    val act = compileAndExecOneIter("explicit_cast", "testFunc")
+    assertEquals("Hello Hello 42", act)
+  }
+
   private def failExit(exitCode: ExitCode): Nothing = {
     fail(s"exit called, exit code: $exitCode")
     throw new AssertionError("cannot happen")
@@ -354,9 +359,13 @@ class CompilerTests {
   private def compileAndExecSeveralIter(srcFileName: String, testedMethodName: String, argsPerIter: List[Array[_]]): List[Any] = {
     val classes = compileAndLoadClasses(srcFileName)
     val coreClass = findCoreClass(classes)
-    val method = coreClass.getDeclaredMethods.find(_.getName == testedMethodName).get
-    for args <- argsPerIter yield {
-      method.invoke(null, args: _*)
+    coreClass.getDeclaredMethods.find(_.getName == testedMethodName) match {
+      case None => throw AssertionError(s"specified test method '$testedMethodName' does not exist")
+      case Some(method) => {
+        for args <- argsPerIter yield {
+          method.invoke(null, args: _*)
+        }
+      }
     }
   }
 
