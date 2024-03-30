@@ -8,11 +8,11 @@ import compiler.backend.TypesConverter.{convertToAsmType, convertToAsmTypeCode, 
 import compiler.irs.Asts.*
 import compiler.{AnalysisContext, CompilerStep, FileExtensions, GenFilesNames}
 import identifiers.{BackendGeneratedVarId, FunOrVarId, TypeIdentifier}
+import lang.*
 import lang.Operator.*
 import lang.SubtypeRelation.subtypeOf
 import lang.Types.PrimitiveType.*
 import lang.Types.{ArrayType, PrimitiveType, StructType, UnionType}
-import lang.*
 import org.objectweb.asm
 import org.objectweb.asm.*
 import org.objectweb.asm.Opcodes.*
@@ -578,7 +578,7 @@ final class Backend[V <: ClassVisitor](
           case _ => shouldNotHappen()
         }
 
-      case IfThenElse(cond, thenBr, elseBrOpt) =>
+      case ite@IfThenElse(cond, thenBr, elseBrOpt) =>
         /*
          *   if !cond goto falseLabel
          *   <thenBr>
@@ -587,12 +587,12 @@ final class Backend[V <: ClassVisitor](
          *   <elseBr>
          * endLabel:
          */
-        generateIfThenElse(ctx, cond, thenBr, elseBrOpt)
+        generateIfThenElse(ite, ctx)
 
-      case Ternary(cond, thenBr, elseBr) =>
-        generateIfThenElse(ctx, cond, thenBr, Some(elseBr))
+      case ternary@Ternary(cond, thenBr, elseBr) =>
+        generateIfThenElse(ternary, ctx)
 
-      case WhileLoop(cond, body) =>
+      case whileLoop@WhileLoop(cond, body) =>
         /*
          * loopLabel:
          *   if !cond goto endLabel
@@ -605,6 +605,7 @@ final class Backend[V <: ClassVisitor](
         mv.visitLabel(loopLabel)
         generateCode(cond, ctx)
         mv.visitJumpInsn(Opcodes.IFLE, endLabel)
+        generateSmartCasts(whileLoop.getSmartCasts, ctx)
         generateCode(body, ctx)
         mv.visitJumpInsn(Opcodes.GOTO, loopLabel)
         mv.visitLabel(endLabel)
@@ -627,6 +628,11 @@ final class Backend[V <: ClassVisitor](
             case Some(TypeConversion.CharToInt) => ()
             case None => mv.visitTypeInsn(Opcodes.CHECKCAST, internalNameOf(tpe))
         }
+      }
+
+      case TypeTest(expr, tpe) => {
+        generateCode(expr, ctx)
+        mv.visitTypeInsn(Opcodes.INSTANCEOF, internalNameOf(tpe))
       }
 
       case PanicStat(msg) =>
@@ -661,10 +667,8 @@ final class Backend[V <: ClassVisitor](
   }
 
   private def generateIfThenElse(
-                                  ctx: CodeGenerationContext,
-                                  cond: Expr,
-                                  thenBr: Statement,
-                                  elseBrOpt: Option[Statement]
+                                  conditional: Conditional,
+                                  ctx: CodeGenerationContext
                                 )
                                 (using Map[TypeIdentifier, StructSignature])
                                 (implicit mv: MethodVisitor, outputName: String): Unit = {
@@ -676,15 +680,28 @@ final class Backend[V <: ClassVisitor](
     *    <elseBranch>
     * endLabel:
     */
-    generateCode(cond, ctx)
+    generateCode(conditional.cond, ctx)
     val falseLabel = new Label()
     val endLabel = new Label()
     mv.visitJumpInsn(Opcodes.IFLE, falseLabel)
-    generateCode(thenBr, ctx)
+    generateSmartCasts(conditional.getSmartCasts, ctx)
+    generateCode(conditional.thenBr, ctx)
     mv.visitJumpInsn(Opcodes.GOTO, endLabel)
     mv.visitLabel(falseLabel)
-    elseBrOpt.foreach(generateCode(_, ctx))
+    conditional.elseBrOpt.foreach(generateCode(_, ctx))
     mv.visitLabel(endLabel)
+  }
+
+  private def generateSmartCasts(smartCasts: Map[FunOrVarId, Types.Type], ctx: CodeGenerationContext)
+                                (using Map[TypeIdentifier, StructSignature])
+                                (implicit mv: MethodVisitor, outputName: String): Unit = {
+    for (varId, destType) <- smartCasts do {
+      // typechecker has already checked that varId is not a constant
+      val (originType, varIdx) = ctx.getLocal(varId).get
+      mv.visitIntInsn(Opcodes.ALOAD, varIdx)
+      mv.visitTypeInsn(Opcodes.CHECKCAST, internalNameOf(destType))
+      mv.visitIntInsn(Opcodes.ASTORE, varIdx)
+    }
   }
 
   private def shouldNotHappen(): Nothing = assert(false)

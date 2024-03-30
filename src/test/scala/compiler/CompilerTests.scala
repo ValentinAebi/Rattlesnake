@@ -341,6 +341,11 @@ class CompilerTests {
     assertEquals("Hello Hello 42", act)
   }
 
+  @Test def simpleSmartCastTest(): Unit = {
+    val act = compileAndExecOneIter("simple_smartcast", "testFunc")
+    assertEquals(1 + 2 + 3 + 4, act)
+  }
+
   private def failExit(exitCode: ExitCode): Nothing = {
     fail(s"exit called, exit code: $exitCode")
     throw new AssertionError("cannot happen")

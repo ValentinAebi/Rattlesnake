@@ -7,7 +7,7 @@ import lang.Types.PrimitiveType.{NothingType, VoidType}
 import lang.Types.Type
 import compiler.CompilationStep.TypeChecking
 import compiler.irs.Asts.{Expr, Indexing, Select, VariableRef}
-import compiler.typechecker.TypeCheckingContext.LocalInfo
+import compiler.typechecker.TypeCheckingContext.{LocalInfo, LocalUsesCollector}
 import lang.Keyword
 
 import scala.collection.mutable
@@ -35,6 +35,12 @@ final case class TypeCheckingContext(
    */
   def copied: TypeCheckingContext = {
     copy(locals = mutable.Map.from(locals))
+  }
+  
+  def copyWithSmartCasts(smartCasts: Map[FunOrVarId, Type]): TypeCheckingContext = {
+    copy(locals = locals.map {
+      case (id, info) => id -> info.copy(tpe = smartCasts.getOrElse(id, info.tpe))
+    })
   }
 
   /**
@@ -65,8 +71,10 @@ final case class TypeCheckingContext(
     }
   }
 
-  def get(name: FunOrVarId): Option[LocalInfo] = {
-    locals.get(name).orElse(
+  def getLocalOnly(name: FunOrVarId): Option[LocalInfo] = locals.get(name)
+
+  def getLocalOrConst(name: FunOrVarId): Option[LocalInfo] = {
+    getLocalOnly(name).orElse(
       analysisContext.constants
         .get(name)
         // defPos and declHasTypeAnnot are never used for constants, as long as constants can only be of primitive types
@@ -76,19 +84,19 @@ final case class TypeCheckingContext(
 
   def localIsQueried(localId: FunOrVarId): Unit = {
     locals.get(localId).foreach { l =>
-      l.queried = true
+      l.usesCollector.queried = true
     }
   }
 
   def varIsAssigned(varId: FunOrVarId): Unit = {
     locals.get(varId).foreach { l =>
-      l.reassigned = true
+      l.usesCollector.reassigned = true
     }
   }
 
   def mutIsUsed(localId: FunOrVarId): Unit = {
     locals.get(localId).foreach { l =>
-      l.mutUsed = true
+      l.usesCollector.mutUsed = true
     }
   }
 
@@ -100,13 +108,13 @@ final case class TypeCheckingContext(
   }
 
   def writeLocalsRelatedWarnings(errorReporter: ErrorReporter): Unit = {
-    for (_, local@LocalInfo(name, tpe, isReassignable, defPos, declHasTypeAnnot)) <- locals if ownedLocals.contains(name) do {
-      if (!local.queried){
+    for (_, LocalInfo(name, tpe, isReassignable, defPos, declHasTypeAnnot, usesCollector)) <- locals if ownedLocals.contains(name) do {
+      if (!usesCollector.queried){
         errorReporter.push(Warning(TypeChecking, s"unused local: '$name' is never queried", defPos))
-      } else if (isReassignable && !local.reassigned){
+      } else if (isReassignable && !usesCollector.reassigned){
         errorReporter.push(Warning(TypeChecking, s"value declared as variable: '$name' could be a ${Keyword.Val}", defPos))
       }
-      if (tpe.maybeModifiable && !local.mutUsed && declHasTypeAnnot){
+      if (tpe.maybeModifiable && !usesCollector.mutUsed && declHasTypeAnnot){
         errorReporter.push(Warning(TypeChecking, s"unused modification privilege: '$name' could have type '${tpe.unmodifiable}'", defPos))
       }
     }
@@ -118,16 +126,40 @@ final case class TypeCheckingContext(
 
 object TypeCheckingContext {
 
-  final case class LocalInfo(
-                              name: FunOrVarId,
-                              tpe: Type,
-                              isReassignable: Boolean,
-                              defPos: Option[Position],
-                              declHasTypeAnnot: Boolean
-                            ){
-    private[TypeCheckingContext] var queried = false
-    private[TypeCheckingContext] var reassigned = false
-    private[TypeCheckingContext] var mutUsed = false
+  final case class LocalInfo private(
+                                      name: FunOrVarId,
+                                      tpe: Type,
+                                      isReassignable: Boolean,
+                                      defPos: Option[Position],
+                                      declHasTypeAnnot: Boolean,
+                                      usesCollector: LocalUsesCollector
+                                    ){
+    def copy(
+              name: FunOrVarId = name,
+              tpe: Type = tpe,
+              isReassignable: Boolean = isReassignable,
+              defPos: Option[Position] = defPos,
+              declHasTypeAnnot: Boolean = declHasTypeAnnot,
+              usesCollector: LocalUsesCollector = usesCollector
+            ): LocalInfo = {
+      LocalInfo(name, tpe, isReassignable, defPos, declHasTypeAnnot, usesCollector)
+    }
+  }
+
+  object LocalInfo {
+    def apply(name: FunOrVarId,
+              tpe: Type,
+              isReassignable: Boolean,
+              defPos: Option[Position],
+              declHasTypeAnnot: Boolean): LocalInfo = {
+      LocalInfo(name, tpe, isReassignable, defPos, declHasTypeAnnot, new LocalUsesCollector())
+    }
+  }
+
+  final class LocalUsesCollector {
+    var queried = false
+    var reassigned = false
+    var mutUsed = false
   }
 
 }

@@ -9,6 +9,7 @@ enum Keyword(val str: String) {
   case For extends Keyword("for")
   case If extends Keyword("if")
   case Interface extends Keyword("interface")
+  case Is extends Keyword("is")
   case Mut extends Keyword("mut")
   case New extends Keyword("new")
   case Panic extends Keyword("panic")

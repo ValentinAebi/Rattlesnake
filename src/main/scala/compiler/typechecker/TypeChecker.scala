@@ -294,14 +294,18 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case ifThenElse@IfThenElse(cond, thenBr, elseBrOpt) =>
         val condType = check(cond, ctx)
         checkSubtypingConstraint(BoolType, condType, ifThenElse.getPosition, "if condition")
-        check(thenBr, ctx)
+        val smartCasts = detectSmartCasts(cond, ctx)
+        ifThenElse.setSmartCasts(smartCasts)
+        check(thenBr, ctx.copyWithSmartCasts(smartCasts))
         elseBrOpt.foreach(check(_, ctx))
         VoidType
 
       case ternary@Ternary(cond, thenBr, elseBr) =>
         val condType = check(cond, ctx)
         checkSubtypingConstraint(BoolType, condType, ternary.getPosition, "ternary operator condition")
-        val thenType = check(thenBr, ctx)
+        val smartCasts = detectSmartCasts(cond, ctx)
+        ternary.setSmartCasts(smartCasts)
+        val thenType = check(thenBr, ctx.copyWithSmartCasts(smartCasts))
         val elseType = check(elseBr, ctx)
         val thenIsSupertype = elseType.subtypeOf(thenType)
         val thenIsSubtype = thenType.subtypeOf(elseType)
@@ -318,7 +322,9 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case whileLoop@WhileLoop(cond, body) =>
         val condType = check(cond, ctx)
         checkSubtypingConstraint(BoolType, condType, whileLoop.getPosition, "while condition")
-        check(body, ctx)
+        val smartCasts = detectSmartCasts(cond, ctx)
+        whileLoop.setSmartCasts(smartCasts)
+        check(body, ctx.copyWithSmartCasts(smartCasts))
         VoidType
 
       case forLoop@ForLoop(initStats, cond, stepStats, body) =>
@@ -326,8 +332,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
         initStats.foreach(check(_, newCtx))
         val condType = check(cond, newCtx)
         checkSubtypingConstraint(BoolType, condType, forLoop.getPosition, "for loop condition")
-        stepStats.foreach(check(_, newCtx))
-        check(body, newCtx)
+        val smartCasts = detectSmartCasts(cond, ctx)
+        forLoop.setSmartCasts(smartCasts)
+        val smartCastsAwareCtx = newCtx.copyWithSmartCasts(smartCasts)
+        stepStats.foreach(check(_, smartCastsAwareCtx))
+        check(body, smartCastsAwareCtx)
         newCtx.writeLocalsRelatedWarnings(errorReporter)
         VoidType
 
@@ -358,6 +367,15 @@ final class TypeChecker(errorReporter: ErrorReporter)
               reportError(s"cannot cast '${expr.getType}' to '$tpe'", cast.getPosition)
             }
         }
+
+      case typeTest@TypeTest(expr, tpe) =>
+        val exprType = check(expr, ctx)
+        if (exprType.subtypeOf(tpe)){
+          reportError(s"test will always be true, as '$exprType' is a subtype of '$tpe'", typeTest.getPosition, isWarning = true)
+        } else if (structCastResult(exprType, tpe).isEmpty) {
+          reportError(s"cannot check expression of type '$exprType' against type '$tpe'", typeTest.getPosition)
+        }
+        BoolType
 
       case panicStat@PanicStat(msg) =>
         val msgType = check(msg, ctx)
@@ -412,6 +430,17 @@ final class TypeChecker(errorReporter: ErrorReporter)
       for arg <- argsIter do {
         check(arg, ctx)
       }
+    }
+  }
+  
+  private def detectSmartCasts(expr: Expr, ctx: TypeCheckingContext): Map[FunOrVarId, Type] = {
+    expr match {
+      case BinaryOp(lhs, Operator.And, rhs) =>
+        // concat order is reversed because we want to keep the leftmost type test in case of conflict
+        detectSmartCasts(rhs, ctx) ++ detectSmartCasts(lhs, ctx)
+      case TypeTest(VariableRef(varName), tpe) if ctx.getLocalOnly(varName).exists(!_.isReassignable) =>
+        Map(varName -> tpe)
+      case _ => Map.empty
     }
   }
 
@@ -490,7 +519,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def mustBeKnown(name: FunOrVarId, ctx: TypeCheckingContext, posOpt: Option[Position]): Type = {
-    ctx.get(name) match
+    ctx.getLocalOrConst(name) match
       case None =>
         reportError(s"unknown: $name", posOpt)
       case Some(localInfo: LocalInfo) =>
@@ -498,10 +527,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def mustBeReassignable(name: FunOrVarId, ctx: TypeCheckingContext, posOpt: Option[Position]): Type = {
-    ctx.get(name) match
+    ctx.getLocalOrConst(name) match
       case None =>
         reportError(s"unknown: $name", posOpt)
-      case Some(LocalInfo(_, tpe, isReassignable, _, _)) =>
+      case Some(LocalInfo(_, tpe, isReassignable, _, _, _)) =>
         if (!isReassignable){
           reportError(s"$name is not reassignable", posOpt)
         }
@@ -602,7 +631,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
   private def markMutPropagation(assignedLocalName: FunOrVarId, rhs: Expr, ctx: TypeCheckingContext): Unit = {
     rhs match
-      case VariableRef(name) if ctx.get(assignedLocalName).exists(_.tpe.maybeModifiable) =>
+      case VariableRef(name) if ctx.getLocalOrConst(assignedLocalName).exists(_.tpe.maybeModifiable) =>
         ctx.mutIsUsed(name)
       case _ => ()
   }

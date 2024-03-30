@@ -198,9 +198,12 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "expr"
 
   private lazy val noTernaryExpr: P[Expr] = recursive {
-    BinaryOperatorsParser.buildFrom(Operator.operatorsByPriorityDecreasing, binopArg) ::: opt(kw(As).ignored ::: tpe) map {
+    BinaryOperatorsParser.buildFrom(Operator.operatorsByPriorityDecreasing, binopArg)
+      ::: opt((kw(As) OR kw(Is)) ::: tpe) map {
       case expression ^: None => expression
-      case expression ^: Some(tp) => Cast(expression, tp)
+      case expression ^: Some(As ^: tp) => Cast(expression, tp)
+      case expression ^: Some(Is ^: tp) => TypeTest(expression, tp)
+      case _ => assert(false)
     }
   } setName "noTernaryExpr"
 
