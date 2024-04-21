@@ -30,7 +30,7 @@ import scala.util.{Failure, Success, Try, Using}
  *
  * @param mode          cf nested class [[Backend.Mode]]
  * @param outputDirBase output directory path (will be extended with `/out`)
- * @param outputName    name of the output file
+ * @param mainClassFileName name of the class file containing the main program class
  * @tparam V depends on the mode
  */
 final class Backend[V <: ClassVisitor](
@@ -38,7 +38,7 @@ final class Backend[V <: ClassVisitor](
                                         errorReporter: ErrorReporter,
                                         outputDirBase: Path,
                                         javaVersionCode: Int,
-                                        outputName: String,
+                                        mainClassFileName: String,
                                         functionsToInject: List[FunDef],
                                         generateTests: Boolean
                                       ) extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
@@ -77,7 +77,7 @@ final class Backend[V <: ClassVisitor](
 
       val structFilesPaths = generateStructs(structs, outputDir, analysisContext)
 
-      val coreFilePath = outputDir.resolve(mode.withExtension(outputName))
+      val coreFilePath = outputDir.resolve(mode.withExtension(mainClassFileName))
       generateCoreFile(analysisContext, functions, coreFilePath)
 
       val constantsFilePath = outputDir.resolve(mode.withExtension(GenFilesNames.constantsFileName))
@@ -108,8 +108,7 @@ final class Backend[V <: ClassVisitor](
     sortedList.toList.map(_._2)
   }
 
-  private def generateTestsFile(analysisContext: AnalysisContext, tests: List[TestDef], testFilePath: Path)
-                               (using Map[TypeIdentifier, StructSignature]): Unit = {
+  private def generateTestsFile(analysisContext: AnalysisContext, tests: List[TestDef], testFilePath: Path): Unit = {
     val tv: V = mode.createVisitor(testFilePath)
     tv.visit(javaVersionCode, ACC_PUBLIC, GenFilesNames.testFileName, null, objectTypeStr, null)
     for test <- tests do {
@@ -120,7 +119,7 @@ final class Backend[V <: ClassVisitor](
         null,
         null
       )
-      generateTest(test, mv, analysisContext, outputName)
+      generateTest(test, mv, analysisContext, mainClassFileName)
     }
     tv.visitEnd()
     mode.terminate(tv, testFilePath, errorReporter)
@@ -143,20 +142,19 @@ final class Backend[V <: ClassVisitor](
     mode.terminate(ccv, constantsFilePath, errorReporter)
   }
 
-  private def generateCoreFile(analysisContext: AnalysisContext, functions: List[FunDef], coreFilePath: Path)
-                              (using Map[TypeIdentifier, StructSignature]): Unit = {
+  private def generateCoreFile(analysisContext: AnalysisContext, functions: List[FunDef], coreFilePath: Path): Unit = {
     val cv: V = mode.createVisitor(coreFilePath)
-    cv.visit(javaVersionCode, ACC_PUBLIC, outputName, null, objectTypeStr, null)
+    cv.visit(javaVersionCode, ACC_PUBLIC, mainClassFileName, null, objectTypeStr, null)
     for function <- (functions ++ functionsToInject) do {
-      val mv = cv.visitMethod(ACC_PUBLIC | ACC_STATIC, function.funName.stringId, descriptorForFunc(function.signature), null, null)
-      generateFunction(function, mv, analysisContext, outputName)
+      val descriptor = descriptorForFunc(function.signature)(using analysisContext.structs)
+      val mv = cv.visitMethod(ACC_PUBLIC | ACC_STATIC, function.funName.stringId, descriptor, null, null)
+      generateFunction(function, mv, analysisContext)
     }
     cv.visitEnd()
     mode.terminate(cv, coreFilePath, errorReporter)
   }
 
-  private def generateStructs(structs: List[StructDef], outputDir: Path, ctx: AnalysisContext)
-                             (using Map[TypeIdentifier, StructSignature]): List[Path] = {
+  private def generateStructs(structs: List[StructDef], outputDir: Path, ctx: AnalysisContext): List[Path] = {
     val structFilesPaths = {
       for struct <- structs yield {
         val structFilePath = outputDir.resolve(mode.withExtension(struct.structName.stringId))
@@ -169,10 +167,12 @@ final class Backend[V <: ClassVisitor](
   }
 
   private def generateStruct(structDef: StructDef, superInterfaces: Array[String],
-                             structFilePath: Path, ctx: AnalysisContext)
-                            (using structs: Map[TypeIdentifier, StructSignature]): Unit = {
+                             structFilePath: Path, ctx: AnalysisContext): Unit = {
+    
+    given Map[TypeIdentifier, StructSignature] = ctx.structs
+    
     val structName = structDef.structName
-    val sig = structs.apply(structName)
+    val sig = ctx.structs.apply(structName)
     val isInterface = sig.isInterface
     val cv = mode.createVisitor(structFilePath)
     var classMods = ACC_PUBLIC
@@ -187,13 +187,12 @@ final class Backend[V <: ClassVisitor](
       addFields(structDef, cv)
       addConstructor(cv)
     }
-    val structSig = ctx.structs(structName)
     val fieldsWithAccessors = if isInterface then sig.fields.keySet else getInterfaceFieldsForStruct(structName, ctx.structs)
     for (fld <- fieldsWithAccessors) {
-      val fldType = structSig.fields.apply(fld).tpe
+      val fldType = sig.fields.apply(fld).tpe
       val fieldDescr = descriptorForType(fldType)
       generateGetter(structName, fld, fldType, fieldDescr, cv, genImplementation = !isInterface)
-      if (structSig.fields.apply(fld).isReassignable) {
+      if (sig.fields.apply(fld).isReassignable) {
         generateSetter(structName, fld, fldType, fieldDescr, cv, genImplementation = !isInterface)
       }
     }
@@ -259,8 +258,7 @@ final class Backend[V <: ClassVisitor](
     }
   }
 
-  private def generateFunction(funDef: FunDef, mv: MethodVisitor, analysisContext: AnalysisContext, outputName: String)
-                              (using Map[TypeIdentifier, StructSignature]): Unit = {
+  private def generateFunction(funDef: FunDef, mv: MethodVisitor, analysisContext: AnalysisContext): Unit = {
     val ctx = CodeGenerationContext.from(analysisContext)
     val unnamedParamIdx = new AtomicInteger(0)
     for param <- funDef.params do {
@@ -272,7 +270,7 @@ final class Backend[V <: ClassVisitor](
       }
     }
     mv.visitCode()
-    generateCode(funDef.body, ctx)(mv, outputName)
+    generateCode(funDef.body, ctx)(using mv)
     if (ctx.analysisContext.functions.apply(funDef.funName).retType == VoidType) {
       mv.visitInsn(Opcodes.RETURN)
     }
@@ -280,8 +278,10 @@ final class Backend[V <: ClassVisitor](
     mv.visitEnd()
   }
 
-  private def generateTest(testDef: TestDef, mv: MethodVisitor, analysisContext: AnalysisContext, outputName: String)
-                          (using Map[TypeIdentifier, StructSignature]): Unit = {
+  private def generateTest(testDef: TestDef, mv: MethodVisitor, analysisContext: AnalysisContext, outputName: String): Unit = {
+    
+    given MethodVisitor = mv
+    
     val ctx = CodeGenerationContext.from(analysisContext)
     val start = new Label()
     val end = new Label()
@@ -289,8 +289,8 @@ final class Backend[V <: ClassVisitor](
     mv.visitCode()
     mv.visitTryCatchBlock(start, end, handler, null)
     mv.visitLabel(start)
-    generateCode(testDef.body, ctx)(mv, outputName)
-    generateCode(printCallFor(StringLit(s"    Test ${testDef.testName} PASSED\n")), ctx)(mv, outputName)
+    generateCode(testDef.body, ctx)
+    generateCode(printCallFor(StringLit(s"    Test ${testDef.testName} PASSED\n")), ctx)
     mv.visitLdcInsn(true)
     mv.visitInsn(Opcodes.IRETURN)
     mv.visitLabel(end)
@@ -302,7 +302,7 @@ final class Backend[V <: ClassVisitor](
     generateCode(
       printCallFor(StringLit("/!\\ Test "), StringLit(testDef.testName.stringId), StringLit(" FAILED: "), VariableRef(msgVarName), StringLit("\n")),
       ctx
-    )(mv, outputName)
+    )
     mv.visitLdcInsn(false)
     mv.visitInsn(Opcodes.IRETURN)
     mv.visitMaxs(0, 0) // parameters are ignored because mode is COMPUTE_FRAMES
@@ -332,8 +332,10 @@ final class Backend[V <: ClassVisitor](
   }
 
   private def generateCode(ast: Ast, ctx: CodeGenerationContext)
-                          (using Map[TypeIdentifier, StructSignature])
-                          (implicit mv: MethodVisitor, outputName: String): Unit = { // TODO move to using
+                          (using mv: MethodVisitor): Unit = {
+    
+    given Map[TypeIdentifier, StructSignature] = ctx.structs
+    
     val analysisContext = ctx.analysisContext
     ast match {
 
@@ -384,7 +386,7 @@ final class Backend[V <: ClassVisitor](
         } else {
           generateArgs()
           val descriptor = descriptorForFunc(analysisContext.functions.apply(name))
-          mv.visitMethodInsn(Opcodes.INVOKESTATIC, outputName, name.stringId, descriptor, false)
+          mv.visitMethodInsn(Opcodes.INVOKESTATIC, mainClassFileName, name.stringId, descriptor, false)
         }
       }
 
@@ -649,8 +651,7 @@ final class Backend[V <: ClassVisitor](
   }
 
   private def generateSequence(ctx: CodeGenerationContext, stats: List[Statement], optFinalExpr: Option[Expr])
-                              (using Map[TypeIdentifier, StructSignature])
-                              (implicit mv: MethodVisitor, outputName: String): Unit = {
+                              (using mv: MethodVisitor): Unit = {
     val newCtx = ctx.withNewLocalsFrame
     for stat <- stats do {
       generateCode(stat, newCtx)
@@ -669,15 +670,13 @@ final class Backend[V <: ClassVisitor](
   private def generateIfThenElse(
                                   conditional: Conditional,
                                   ctx: CodeGenerationContext
-                                )
-                                (using Map[TypeIdentifier, StructSignature])
-                                (implicit mv: MethodVisitor, outputName: String): Unit = {
+                                )(using mv: MethodVisitor): Unit = {
     /*
     * if !cond then goto falseLabel
     *    <then branch>
     *    goto endLabel
     * falseLabel:
-    *    <elseBranch>
+    *    <else branch>
     * endLabel:
     */
     generateCode(conditional.cond, ctx)
@@ -693,13 +692,12 @@ final class Backend[V <: ClassVisitor](
   }
 
   private def generateSmartCasts(smartCasts: Map[FunOrVarId, Types.Type], ctx: CodeGenerationContext)
-                                (using Map[TypeIdentifier, StructSignature])
-                                (implicit mv: MethodVisitor, outputName: String): Unit = {
+                                (using mv: MethodVisitor): Unit = {
     for (varId, destType) <- smartCasts do {
       // typechecker has already checked that varId is not a constant
       val (originType, varIdx) = ctx.getLocal(varId).get
       mv.visitIntInsn(Opcodes.ALOAD, varIdx)
-      mv.visitTypeInsn(Opcodes.CHECKCAST, internalNameOf(destType))
+      mv.visitTypeInsn(Opcodes.CHECKCAST, internalNameOf(destType)(using ctx.structs))
       mv.visitIntInsn(Opcodes.ASTORE, varIdx)
     }
   }
