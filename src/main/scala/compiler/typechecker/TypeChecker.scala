@@ -505,7 +505,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         if (retType.isEmpty) {
           reportError("could not infer type of returned value", retStat.getPosition)
         }
-        EndStatus(Set(retType.getOrElse(VoidType)), true)
+        EndStatus(Set(retType.getOrElse(NothingType)), true)
 
       case _: PanicStat =>
         EndStatus(Set(NothingType), true)

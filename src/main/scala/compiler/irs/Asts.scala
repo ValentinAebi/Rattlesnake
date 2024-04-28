@@ -48,7 +48,7 @@ object Asts {
     /**
      * Set the type that has been inferred for this expression
      *
-     * WARNING: since subclasses are allowed to overrid [[getTypeOpt]], setting a type might have no effect
+     * WARNING: since subclasses are allowed to override [[getTypeOpt]], setting a type might have no effect
      */
     def setTypeOpt(tpe: Option[Type]): Expr = {
       tpeOpt = tpe
