@@ -1,0 +1,86 @@
+
+interface Tree {
+    var value: Int
+}
+
+struct Fork : Tree {
+    var left: mut Tree,
+    value: Int,         // ERROR: overrides a var field
+    var right: mut Tree
+}
+
+struct Leaf : Tree {
+    var value: Int
+}
+
+interface Cell {
+    var value: Int
+}
+
+interface MemoInit {
+    initValue: Int
+}
+
+interface MemoLast {
+    var lastValue: Int
+}
+
+interface MemoLastAndInit : MemoLast, MemoInit {
+    var initValue: Int,     // OK
+    var lastValue: Int
+}
+
+interface CellWithMemoLastAndInit : Cell, MemoLastAndInit {
+    var value: Int,
+    var initValue: Int,
+    var lastValue: Int
+}
+
+struct Message {
+    text: String
+}
+
+interface Messageable1 {
+    msg: mut Message
+}
+
+interface Messageable2 {
+    msg: Message
+}
+
+struct MessageableImpl : Messageable2 {
+    msg: Message
+}
+
+struct MessageableImplWrong : Messageable2 {
+    msg: String     // ERROR: wrong type
+}
+
+interface TreeCell {
+    tree: Tree
+}
+
+struct SimpleCell : Cell {
+    var value: Int
+}
+
+struct CellWithMemoLastInitAndMsg : CellWithMemoLastAndInit, Messageable1 {
+    value: Int,     // ERROR: overrides a var field
+    var initValue: Int,
+    var lastValue: Int,
+    var msg: Message    // ERROR, should be mutable
+}
+
+struct CellWithTree : Cell, TreeCell {
+    var value: Int,
+    var tree: Leaf
+}
+
+interface TreeContainer {
+    var tree: Tree,
+    versionId: Int
+}
+
+struct TreeContainerImpl : TreeContainer {
+    var tree: Fork
+}
