@@ -13,7 +13,7 @@ import lang.Keyword
 import scala.collection.mutable
 
 /**
- * Mutabble context for type checking
+ * Mutable context for type checking
  */
 final case class TypeCheckingContext(
                                       private val analysisContext: AnalysisContext,
