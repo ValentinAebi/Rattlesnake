@@ -346,6 +346,14 @@ class CompilerTests {
     assertEquals(1 + 2 + 3 + 4, act)
   }
 
+  @Test def complexHierarchyTest(): Unit = {
+    val actRaw = compileAndExecOneIter("complex_hierarchy", "testF")
+    assertTrue(actRaw.isInstanceOf[Array[Int]])
+    val act = actRaw.asInstanceOf[Array[Int]]
+    val exp = Array(42*42, 75, -1, 8, 9, 42, 27)
+    assertArrayEquals(exp, act)
+  }
+
   private def failExit(exitCode: ExitCode): Nothing = {
     fail(s"exit called, exit code: $exitCode")
     throw new AssertionError("cannot happen")
