@@ -1,6 +1,6 @@
 
 struct Foo {
-    x: Int
+    var x: Int
 }
 
 struct Bar {
