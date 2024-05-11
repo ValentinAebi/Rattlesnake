@@ -20,7 +20,7 @@ final case class TypeCheckingContext(
                                       private val locals: mutable.Map[FunOrVarId, LocalInfo] = mutable.Map.empty,
                                       expectedRetType: Type
                                     ) {
-  // Locals that have been created by this context and not obtained via copied
+  // Locals that have been created by this context (i.e. not obtained via copied)
   private val ownedLocals: mutable.Set[FunOrVarId] = mutable.Set.empty
 
   /**
@@ -36,7 +36,8 @@ final case class TypeCheckingContext(
   def copied: TypeCheckingContext = {
     copy(locals = mutable.Map.from(locals))
   }
-  
+
+  // TODO keep smartcasts on vars, until reassignment (currently practically unusable on loops)
   def copyWithSmartCasts(smartCasts: Map[FunOrVarId, Type]): TypeCheckingContext = {
     copy(locals = locals.map {
       case (id, info) => id -> info.copy(tpe = smartCasts.getOrElse(id, info.tpe))
