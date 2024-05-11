@@ -127,11 +127,11 @@ object AnalysisContext {
                       checkFieldVariance(structId, directSupertypeId, fldName, subFieldInfo, superFldInfo, builtStructMap, posOpt)
                     } else {
                       errorReporter.push(Err(ContextCreation,
-                        s"subtyping error: $fldName needs to be reassignable in subtypes of $superFldInfo", posOpt))
+                        s"subtyping error: $fldName needs to be reassignable in subtypes of $directSupertypeId", posOpt))
                     }
                   case None =>
                     errorReporter.push(Err(ContextCreation,
-                      s"$structId cannot extend $directSupertypeId: missing field $fldName", posOpt))
+                      s"$structId cannot subtype $directSupertypeId: missing field $fldName", posOpt))
               }
             } else {
               errorReporter.push(Err(ContextCreation, s"struct $directSupertypeId is not an interface", posOpt))
