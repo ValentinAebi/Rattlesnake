@@ -199,12 +199,6 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   private lazy val noTernaryExpr: P[Expr] = recursive {
     BinaryOperatorsParser.buildFrom(Operator.operatorsByPriorityDecreasing, binopArg)
-      ::: opt((kw(As) OR kw(Is)) ::: tpe) map {
-      case expression ^: None => expression
-      case expression ^: Some(As ^: tp) => Cast(expression, tp)
-      case expression ^: Some(Is ^: tp) => TypeTest(expression, tp)
-      case _ => assert(false)
-    }
   } setName "noTernaryExpr"
 
   private lazy val noBinopExpr = recursive {
@@ -217,7 +211,12 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "noBinopExpr"
 
   private lazy val binopArg = recursive {
-    noBinopExpr OR mutPossiblyFilledArrayInit OR arrayInit OR structInit
+    (noBinopExpr OR mutPossiblyFilledArrayInit OR arrayInit OR structInit) ::: opt((kw(As) OR kw(Is)) ::: tpe) map {
+      case expression ^: None => expression
+      case expression ^: Some(As ^: tp) => Cast(expression, tp)
+      case expression ^: Some(Is ^: tp) => TypeTest(expression, tp)
+      case _ => assert(false)
+    }
   } setName "binopArg"
 
   private lazy val callArgs = recursive {
