@@ -9,7 +9,12 @@ import scala.collection.mutable
 
 final case class FunctionSignature(name: FunOrVarId, argTypes: List[Type], retType: Type)
 
-final case class StructSignature(name: TypeIdentifier, fields: mutable.LinkedHashMap[FunOrVarId, FieldInfo])
+final case class StructSignature(
+                                  name: TypeIdentifier,
+                                  fields: mutable.LinkedHashMap[FunOrVarId, FieldInfo],
+                                  directSupertypes: Seq[TypeIdentifier],
+                                  isInterface: Boolean
+                                )
 
 object StructSignature {
   final case class FieldInfo(tpe: Type, isReassignable: Boolean)

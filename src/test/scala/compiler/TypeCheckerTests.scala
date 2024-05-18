@@ -2,6 +2,7 @@ package compiler
 
 import org.junit.Test
 import Errors.*
+import compiler.CompilationStep.ContextCreation
 import compiler.io.SourceFile
 import compiler.typechecker.TypeChecker
 import org.junit.Assert.{assertEquals, fail}
@@ -14,23 +15,27 @@ class TypeCheckerTests {
   private val srcDir = "src/test/res/typechecker-tests"
 
   @Test def modifiableArrayShouldNotBeCovariant(): Unit = {
-    runAndExpectErrors("mut_covariance") {
+    runAndExpectErrors("mut_covariance")(
       ErrorMatcher("modifiable array should not be covariant",
         line = 8, col = 9,
         msgMatcher = _.contains("expected 'mut arr arr Int', found 'mut arr mut arr Int'"),
         errorClass = classOf[Err]
-      )
-    }
+      ),
+      warningMatcher(7, "mut is redundant"),
+      warningMatcher(6, "unused local")
+    )
   }
 
   @Test def shouldNotAssignNonModifToArrayOfModif(): Unit = {
-    runAndExpectErrors("array_of_mut") {
+    runAndExpectErrors("array_of_mut")(
       ErrorMatcher("array of modifiable array should not accept unmodifiable array",
         line = 6, col = 5,
         msgMatcher = _.contains("expected 'mut arr Y', found 'arr Y'"),
         errorClass = classOf[Err]
-      )
-    }
+      ),
+      warningMatcher(4, "unused local"),
+      warningMatcher(5, "mut is redundant")
+    )
   }
 
   @Test def expectWarningForUnusedLocal(): Unit = {
@@ -72,13 +77,15 @@ class TypeCheckerTests {
   }
 
   @Test def expectErrorWhenMutLeakOnLocal(): Unit = {
-    runAndExpectErrors("mut_leak_local"){
+    runAndExpectErrors("mut_leak_local")(
       ErrorMatcher("local with mut type should be rejected when no mut permission",
         line = 3, col = 5,
         msgMatcher = _.contains("expected 'mut arr Int', found 'arr Int'"),
         errorClass = classOf[Err]
-      )
-    }
+      ),
+      warningMatcher(3, "unused modification privilege"),
+      warningMatcher(3, "unused local")
+    )
   }
 
   @Test def expectErrorWhenMutLeakOnParam(): Unit = {
@@ -92,18 +99,19 @@ class TypeCheckerTests {
   }
 
   @Test def expectErrorWhenMutLeakOnRet(): Unit = {
-    runAndExpectErrors("mut_leak_ret"){
+    runAndExpectErrors("mut_leak_ret")(
       ErrorMatcher("mutation on returned unmodifiable array should be rejected",
         line = 8, col = 5,
         msgMatcher = _.contains("update impossible: missing modification privileges on array"),
         errorClass = classOf[Err]
-      )
-    }
+      ),
+      warningMatcher(6, "unused local")
+    )
   }
 
   @Test def expectErrorWhenMutLeakOnFieldGet(): Unit = {
     runAndExpectErrors("mut_leak_fld_get"){
-      ErrorMatcher("modifying an unmodifiable struct gotten as a field should be rejected",
+      ErrorMatcher("modification an unmodifiable struct accessed as a field should be rejected",
         line = 12, col = 5,
         msgMatcher = _.contains("cannot update field 'x': missing modification privileges on owner struct"),
         errorClass = classOf[Err]
@@ -112,17 +120,18 @@ class TypeCheckerTests {
   }
 
   @Test def expectErrorWhenMutLeakOnFieldInit(): Unit = {
-    runAndExpectErrors("mut_leak_fld_init"){
+    runAndExpectErrors("mut_leak_fld_init")(
       ErrorMatcher("passing an unmodifiable struct as a mut field of another struct should result in an error",
         line = 8, col = 23,
         msgMatcher = _.contains("expected 'mut arr Int', found 'arr Int'"),
         errorClass = classOf[Err]
-      )
-    }
+      ),
+      warningMatcher(8, "unused local")
+    )
   }
 
   @Test def typingErrorsInSortingProgram(): Unit = {
-    runAndExpectErrors("sorting_bad_types")(
+    runAndExpectErrors("sorting_bad_types", matchersListShouldBeComplete = false)(
       ErrorMatcher("i2 is String",
         line = 4, col = 17,
         msgMatcher = _.contains("expected 'Int', found 'String'"),
@@ -186,6 +195,142 @@ class TypeCheckerTests {
     }
   }
 
+  @Test def shouldRejectCyclicSubtyping(): Unit = {
+    runAndExpectErrors("cyclic_subtyping"){
+      ErrorMatcher("should reject cycle in subtyping relation",
+        msgMatcher = _.contains("cyclic subtyping"),
+        errorClass = classOf[Err],
+        compilationStep = ContextCreation
+      )
+    }
+  }
+
+  @Test def shouldRejectUnrelatedEqualities(): Unit = {
+    runAndExpectErrors("subtype_equality_check")(
+      ErrorMatcher("should reject second argument in test1",
+        line = 3, col = 37,
+        msgMatcher = _.contains("expected 'S', found 'I'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("should reject first argument in test2",
+        line = 7, col = 26,
+        msgMatcher = _.contains("expected 'S', found 'I'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("should reject first argument in test3 (second argument is thus ignored)",
+        line = 11, col = 26,
+        msgMatcher = _.contains("expected 'S', found 'I'"),
+        errorClass = classOf[Err]
+      )
+    )
+  }
+
+  @Test def explicitCastTest(): Unit = {
+    runAndExpectErrors("explicit_cast")(
+      ErrorMatcher("should reject setXSub on non mutable struct",
+        line = 26, col = 13,
+        msgMatcher = _.contains("expected 'mut Sub', found 'Sub'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("should reject cast from Super to mut Sub",
+        line = 27, col = 13,
+        msgMatcher = _.contains("cannot cast 'Super' to 'mut Sub'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("should reject unrelated cast to String",
+        line = 29, col = 13,
+        msgMatcher = _.contains("cannot cast 'mut Sub' to 'String'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("should warn on cast to supertype",
+        line = 31, col = 13,
+        msgMatcher = _.contains("useless conversion: 'mut Sub' --> 'Super'"),
+        errorClass = classOf[Warning]
+      ),
+      ErrorMatcher("should reject missing modification permission on arg f passed to setX",
+        line = 32, col = 10,
+        msgMatcher = _.contains("expected 'mut Super', found 'Super'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("should reject unrelated cast of struct to struct",
+        line = 35, col = 13,
+        msgMatcher = _.contains("cannot cast 'Sub' to 'Indep'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("should reject unrelated cast of interface to struct",
+        line = 36, col = 13,
+        msgMatcher = _.contains("cannot cast 'Super' to 'Indep'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("should reject unrelated cast of struct to interface",
+        line = 38, col = 13,
+        msgMatcher = _.contains("cannot cast 'Sub' to 'I'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("should reject unrelated cast of interface to interface",
+        line = 39, col = 13,
+        msgMatcher = _.contains("cannot cast 'Super' to 'I'"),
+        errorClass = classOf[Err]
+      )
+    )
+  }
+
+  @Test def complexHierarchyTest(): Unit = {
+    runAndExpectErrors("complex_hierarchy")(
+      ErrorMatcher("should reject non-var field overriding var field (1)",
+        line = 6, col = 1,
+        msgMatcher = _.contains("subtyping error: value needs to be reassignable in subtypes of Tree"),
+        errorClass = classOf[Err],
+        compilationStep = ContextCreation
+      ),
+      ErrorMatcher("should reject field override with unrelated types",
+        line = 55, col = 1,
+        msgMatcher = _.contains("subtyping error: type of msg in MessageableImplWrong should be a subtype of its type in Messageable2"),
+        errorClass = classOf[Err],
+        compilationStep = ContextCreation
+      ),
+      ErrorMatcher("should reject non-var field overriding var field (2)",
+        line = 67, col = 1,
+        msgMatcher = _.contains("subtyping error: value needs to be reassignable in subtypes of CellWithMemoLastAndInit"),
+        errorClass = classOf[Err],
+        compilationStep = ContextCreation
+      ),
+      ErrorMatcher("should reject non-mutable field overriding mutable field",
+        line = 67, col = 1,
+        msgMatcher = _.contains("subtyping error: type of msg in CellWithMemoLastInitAndMsg should be a subtype of its type in Messageable1"),
+        errorClass = classOf[Err],
+        compilationStep = ContextCreation
+      ),
+      ErrorMatcher("should reject covariant var field with covariant types",
+        line = 84, col = 1,
+        msgMatcher = _.contains("subtyping error: type of tree is not the same in TreeContainerImpl and TreeContainer"),
+        errorClass = classOf[Err],
+        compilationStep = ContextCreation
+      ),
+      ErrorMatcher("should reject subtyping with missing field",
+        line = 84, col = 1,
+        msgMatcher = _.contains("missing field versionId"),
+        errorClass = classOf[Err],
+        compilationStep = ContextCreation
+      )
+    )
+  }
+  
+  @Test def smartcastAnd(): Unit = {
+    runAndExpectErrors("smartcast_and")(
+      ErrorMatcher("access to possibly missing field should be rejected",
+        line = 5, col = 9,
+        msgMatcher = _.contains("struct 'Option' has no field named 'value'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("access to value on value smartcasted to None should be rejected",
+        line = 6, col = 24,
+        msgMatcher = _.contains("struct 'None' has no field named 'value'"),
+        errorClass = classOf[Err]
+      )
+    )
+  }
+
   private final case class ErrorMatcher(
                                          descr: String,
                                          private val line: Int = -1,
@@ -201,13 +346,15 @@ class TypeCheckerTests {
 
     private def _msgMatcher: Option[String => Boolean] = Some(msgMatcher).filter(_ != null)
 
+    private def _compilationStep: Option[CompilationStep] = Some(compilationStep).filter(_ != null)
+
     require(_line.isDefined || _col.isDefined || _msgMatcher.isDefined, "no criterion defined apart from compilation step")
 
     def doesMatch(err: CompilationError): Boolean = {
       _line.forall { l => err.posOpt.exists(_.line == l) }
         && _col.forall { c => err.posOpt.exists(_.col == c) }
         && _msgMatcher.forall { matcher => matcher(err.msg) }
-        && err.compilationStep == compilationStep
+        && _compilationStep.forall(_ == err.compilationStep)
         && err.getClass == errorClass
     }
 
@@ -215,9 +362,19 @@ class TypeCheckerTests {
 
   }
 
-  private def runAndExpectErrors(srcFileName: String)(errorsMatchers: ErrorMatcher*): Unit = {
+  /**
+   * Quick matcher for warnings due to the artificial nature of test programs
+   */
+  private def warningMatcher(line: Int, keywords: String*): ErrorMatcher = ErrorMatcher(
+    "warning matcher with keyword(s) " ++ keywords.map("'" + _ + "'").mkString(", "),
+    line = line, errorClass = classOf[Warning], msgMatcher = msg => keywords.forall(msg.contains(_)),
+    compilationStep = null
+  )
+
+  private def runAndExpectErrors(srcFileName: String, matchersListShouldBeComplete: Boolean = true)(errorsMatchers: ErrorMatcher*): Unit = {
 
     val allEncounteredErrors = ListBuffer.empty[CompilationError]
+    val unmatchedErrors = ListBuffer.empty[CompilationError]
     val remainingErrorMatchers = ListBuffer.from(errorsMatchers)
 
     val errorsConsumer: ErrorsConsumer = {
@@ -226,7 +383,10 @@ class TypeCheckerTests {
         allEncounteredErrors.addOne(err)
         remainingErrorMatchers.zipWithIndex
           .find { (matcher, _) => matcher.doesMatch(err) }
-          .foreach { (_, idx) =>
+          .orElse {
+            unmatchedErrors.addOne(err)
+            None
+          }.foreach { (_, idx) =>
             remainingErrorMatchers.remove(idx)
           }
     }
@@ -239,11 +399,18 @@ class TypeCheckerTests {
     try {
       tc.apply(List(testFile))
     } catch case ExitException(code) => ()
+
     if (remainingErrorMatchers.nonEmpty) {
       val msg =
-        remainingErrorMatchers.map(_.details).mkString("no error found that matches the following matchers: \n", "\n", "")
+        "No error found that matches the following matchers:\n"
+          ++ remainingErrorMatchers.map(_.details).mkString("\n")
           ++ "\n\nThe following errors were reported by typechecking:\n"
           ++ allEncounteredErrors.mkString("\n") ++ "\n"
+      fail(msg)
+    } else if (matchersListShouldBeComplete && unmatchedErrors.nonEmpty){
+      val msg =
+        "Errors have been found for all matchers, but there were additional one(s):\n"
+          ++ unmatchedErrors.mkString("\n")
       fail(msg)
     }
   }

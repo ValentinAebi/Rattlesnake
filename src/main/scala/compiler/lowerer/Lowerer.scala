@@ -2,11 +2,11 @@ package compiler.lowerer
 
 import compiler.irs.Asts.*
 import compiler.{AnalysisContext, CompilerStep, FunctionsToInject}
+import identifiers.{FunOrVarId, StringEqualityFunId}
 import lang.Operator.*
 import lang.Operators
 import lang.Types.PrimitiveType.*
-import lang.Types.{ArrayType, UndefinedType}
-import identifiers.StringEqualityFunId
+import lang.Types.{ArrayType, Type, UndefinedType}
 
 /**
  * Lowering replaces:
@@ -48,7 +48,12 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
   }
 
   private def lower(structDef: StructDef): StructDef = {
-    StructDef(structDef.structName, structDef.fields.map(lower))
+    StructDef(
+      structDef.structName,
+      structDef.fields.map(lower),
+      structDef.directSupertypes,
+      structDef.isInterface
+    )
   }
   
   private def lower(testDef: TestDef): TestDef = {
@@ -72,18 +77,24 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
   }
 
   private def lower(ifThenElse: IfThenElse): IfThenElse = {
-    IfThenElse(lower(ifThenElse.cond), lower(ifThenElse.thenBr), ifThenElse.elseBrOpt.map(lower))
+    val lowered = IfThenElse(lower(ifThenElse.cond), lower(ifThenElse.thenBr), ifThenElse.elseBrOpt.map(lower))
+    lowered.setSmartCasts(ifThenElse.getSmartCasts)
+    lowered
   }
 
   private def lower(whileLoop: WhileLoop): WhileLoop = {
-    WhileLoop(lower(whileLoop.cond), lower(whileLoop.body))
+    val lowered = WhileLoop(lower(whileLoop.cond), lower(whileLoop.body))
+    lowered.setSmartCasts(whileLoop.getSmartCasts)
+    lowered
   }
 
   private def lower(forLoop: ForLoop): Block = {
     val body = Block(
       forLoop.body.stats ++ forLoop.stepStats
     )
-    val stats: List[Statement] = forLoop.initStats :+ WhileLoop(forLoop.cond, body)
+    val whileLoop = WhileLoop(forLoop.cond, body)
+    whileLoop.setSmartCasts(forLoop.getSmartCasts)
+    val stats: List[Statement] = forLoop.initStats :+ whileLoop
     lower(Block(stats))
   }
 
@@ -152,7 +163,10 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
             ).setType(BoolType))
             
           // x && y ---> when x then y else false
-          case And => lower(Ternary(loweredLhs, loweredRhs, BoolLit(false)))
+          case And =>
+            val ternary = Ternary(loweredLhs, loweredRhs, BoolLit(false))
+            ternary.setSmartCasts(binaryOp.getSmartCasts)
+            lower(ternary)
           
           // x || y ---> when x then true else y
           case Or => lower(Ternary(loweredLhs, BoolLit(true), loweredRhs))
@@ -164,18 +178,23 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
       case select: Select => Select(lower(select.lhs), select.selected)
 
       // need to treat separately the case where one of the branches does not return (o.w. Java ASM crashes)
-      case Ternary(cond, thenBr, elseBr) if thenBr.getType == NothingType || elseBr.getType == NothingType => {
+      case ternary@Ternary(cond, thenBr, elseBr) if thenBr.getType == NothingType || elseBr.getType == NothingType => {
         val valName = uniqueIdGenerator.next()
         if (thenBr.getType == NothingType){
           val ifStat = IfThenElse(cond, thenBr, None)
+          ifStat.setSmartCasts(ternary.getSmartCasts)
           lower(Sequence(List(ifStat), elseBr))
         } else {
           val ifStat = IfThenElse(UnaryOp(ExclamationMark, cond).setType(BoolType), elseBr, None)
           lower(Sequence(List(ifStat), thenBr))
         }
       }
-      case Ternary(cond, thenBr, elseBr) => Ternary(lower(cond), lower(thenBr), lower(elseBr))
+      case ternary@Ternary(cond, thenBr, elseBr) =>
+        val loweredTernary = Ternary(lower(cond), lower(thenBr), lower(elseBr))
+        loweredTernary.setSmartCasts(ternary.getSmartCasts)
+        loweredTernary
       case Cast(expr, tpe) => Cast(lower(expr), tpe)
+      case TypeTest(expr, tpe) => TypeTest(lower(expr), tpe)
       case Sequence(stats, expr) => Sequence(stats.map(lower), lower(expr))
     }
     lowered.setTypeOpt(expr.getTypeOpt)

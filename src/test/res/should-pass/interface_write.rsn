@@ -1,0 +1,25 @@
+
+struct A : I {
+    var x: Int,
+    y: Double
+}
+
+struct B : I {
+    var x: Int
+}
+
+interface I {
+   var x: Int
+}
+
+fn mulX(z: mut I, factor: Int){
+    z.x *= factor;
+}
+
+fn testF() -> Int {
+    val a = new mut A { 25, 12.5 };
+    var t = a.x;
+    mulX(a, 32);
+    t -= a.x;
+    return t;
+}

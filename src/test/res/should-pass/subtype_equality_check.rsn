@@ -1,0 +1,50 @@
+
+fn testSupSup() -> Bool {
+    return compareSupSup(createI(), createI());
+}
+
+fn testSubAsSupSup() -> Bool {
+    return compareSupSup(createS(), createI());
+}
+
+fn testSupSub() -> Bool {
+    return compareSupSub(createI(), createS());
+}
+
+fn testSubSup() -> Bool {
+    return compareSubSup(createS(), createI());
+}
+
+fn testSubSub() -> Bool {
+    return compareSubSub(createS(), createS());
+}
+
+interface I { i: Int }
+
+struct S : I { i: Int }
+
+fn createI() -> I {
+    val s1 = createS();
+    val s2: I = new S { s1.i };
+    return new S { s2.i };
+}
+
+fn createS() -> S {
+    return new S { 42 };
+}
+
+fn compareSupSup(a: I, b: I) -> Bool {
+    return a == b;
+}
+
+fn compareSupSub(a: I, b: S) -> Bool {
+    return a == b;
+}
+
+fn compareSubSup(a: S, b: I) -> Bool {
+    return a == b;
+}
+
+fn compareSubSub(a: S, b: S) -> Bool {
+    return a == b;
+}

@@ -1,0 +1,28 @@
+
+fn testFunc() -> arr Bool {
+    val opt = optionOf(42);
+    return [
+        opt.value > 10,  // wrong
+        opt is None && opt.value > 50,  // wrong
+        isEmpty(opt),
+        isEmpty(new None {})
+    ];
+}
+
+fn optionOf(i: Int) -> Option {
+    return new Some { i };
+}
+
+fn isEmpty(opt: Option) -> Bool {
+    return opt is None;
+}
+
+interface Option {
+}
+
+struct Some : Option {
+    value: Int
+}
+
+struct None : Option {
+}

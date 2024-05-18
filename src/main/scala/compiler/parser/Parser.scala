@@ -1,5 +1,6 @@
 package compiler.parser
 
+import compiler.CompilationStep.Parsing
 import compiler.Errors.{ErrorReporter, Fatal, errorsExitCode}
 import compiler.irs.Asts.*
 import compiler.irs.Tokens.*
@@ -7,12 +8,11 @@ import compiler.parser.ParseTree.^:
 import compiler.parser.TreeParsers.*
 import compiler.prettyprinter.PrettyPrinter
 import compiler.{CompilerStep, Errors, Position}
+import identifiers.*
 import lang.Keyword.*
 import lang.Operator.*
 import lang.Types.{ArrayType, StructType, Type}
 import lang.{Keyword, Operator, Operators, Types}
-import identifiers.*
-import compiler.CompilationStep.Parsing
 
 import scala.util.Try
 
@@ -40,12 +40,12 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     case FirstUppercaseIdentifierToken(strValue) => NormalTypeId(strValue)
   }
 
-  private val numericLiteralValue: FinalTreeParser[NumericLiteral] = treeParser("int or double"){
+  private val numericLiteralValue: FinalTreeParser[NumericLiteral] = treeParser("int or double") {
     case IntLitToken(value) => IntLit(value)
     case DoubleLitToken(value) => DoubleLit(value)
   }
 
-  private val nonNumericLiteralValue: FinalTreeParser[NonNumericLiteral] = treeParser("bool or char or string"){
+  private val nonNumericLiteralValue: FinalTreeParser[NonNumericLiteral] = treeParser("bool or char or string") {
     case BoolLitToken(value) => BoolLit(value)
     case CharLitToken(value) => CharLit(value)
     case StringLitToken(value) => StringLit(value)
@@ -110,11 +110,13 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "param"
 
   private lazy val structDef = {
-    kw(Struct).ignored ::: highName ::: openBrace ::: repeatWithSep(param, comma) ::: closeBrace map {
-      case name ^: fields => StructDef(name, fields)
+    (kw(Struct) OR kw(Interface)) ::: highName ::: opt(colon ::: repeatWithSep(highName, comma))
+      ::: openBrace ::: repeatWithSep(param, comma) ::: closeBrace map {
+      case structOrInterface ^: name ^: supertypesOpt ^: fields =>
+        StructDef(name, fields, supertypesOpt.getOrElse(Seq.empty), structOrInterface == Interface)
     }
   } setName "structDef"
-  
+
   private lazy val testDef = {
     kw(Test).ignored ::: lowName ::: block map {
       case name ^: body => TestDef(name, body)
@@ -152,7 +154,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
       case StructType(typeName, _) => StructType(typeName, modifiable = true)
       case ArrayType(elemType, _) => ArrayType(elemType, modifiable = true)
       case tpe =>
-        val pos = ll1Iterator.current.position  // imprecise (takes the position on the next token)
+        val pos = ll1Iterator.current.position // imprecise (takes the position on the next token)
         errorReporter.push(Errors.Err(Parsing, s"$tpe is never modifiable", Some(pos)))
         tpe
     }
@@ -196,10 +198,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "expr"
 
   private lazy val noTernaryExpr: P[Expr] = recursive {
-    BinaryOperatorsParser.buildFrom(Operator.operatorsByPriorityDecreasing, binopArg) ::: opt(kw(As).ignored ::: tpe) map {
-      case expression ^: None => expression
-      case expression ^: Some(tp) => Cast(expression, tp)
-    }
+    BinaryOperatorsParser.buildFrom(Operator.operatorsByPriorityDecreasing, binopArg)
   } setName "noTernaryExpr"
 
   private lazy val noBinopExpr = recursive {
@@ -212,7 +211,12 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "noBinopExpr"
 
   private lazy val binopArg = recursive {
-    noBinopExpr OR mutPossiblyFilledArrayInit OR arrayInit OR structInit
+    (noBinopExpr OR mutPossiblyFilledArrayInit OR arrayInit OR structInit) ::: opt((kw(As) OR kw(Is)) ::: tpe) map {
+      case expression ^: None => expression
+      case expression ^: Some(As ^: tp) => Cast(expression, tp)
+      case expression ^: Some(Is ^: tp) => TypeTest(expression, tp)
+      case _ => assert(false)
+    }
   } setName "binopArg"
 
   private lazy val callArgs = recursive {
@@ -239,7 +243,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val selectOrIndexingChain = recursive {
     atomicExpr ::: repeat((dot ::: lowName) OR indexing) map {
       case atExpr ^: selOrInds =>
-        selOrInds.foldLeft(atExpr){ (acc, curr) =>
+        selOrInds.foldLeft(atExpr) { (acc, curr) =>
           curr match
             case field: NormalFunOrVarId => Select(acc, field)
             case idx: Expr => Indexing(acc, idx)

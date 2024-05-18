@@ -1,0 +1,106 @@
+
+interface Tree {
+    var value: Int
+}
+
+struct Fork : Tree {
+    var left: mut Tree,
+    var value: Int,
+    var right: mut Tree
+}
+
+struct Leaf : Tree {
+    var value: Int
+}
+
+interface Cell {
+    var value: Int
+}
+
+interface MemoInit {
+    initValue: Int
+}
+
+interface MemoLast {
+    var lastValue: Int
+}
+
+interface MemoLastAndInit : MemoLast, MemoInit {
+    initValue: Int,
+    var lastValue: Int
+}
+
+interface CellWithMemoLastAndInit : Cell, MemoLastAndInit {
+    var value: Int,
+    initValue: Int,
+    var lastValue: Int
+}
+
+interface Messageable {
+    msg: String
+}
+
+interface TreeCell {
+    tree: Tree
+}
+
+struct SimpleCell : Cell {
+    var value: Int
+}
+
+struct CellWithMemoLastInitAndMsg : CellWithMemoLastAndInit, Messageable {
+    var value: Int,
+    initValue: Int,
+    var lastValue: Int,
+    var msg: String
+}
+
+struct CellWithTree : Cell, TreeCell {
+    var value: Int,
+    var tree: Leaf
+}
+
+fn testF() -> arr Int {
+    val c1 = new mut CellWithMemoLastInitAndMsg { 42, 9, 42, "Hello world" };
+    val c2: mut Cell = c1;
+    val x = c2.value * c2.value;
+    c2.value = -1;
+    val c3 = new SimpleCell { c1.value + c1.initValue };
+    val t = new mut Fork { new mut Leaf { c2.value }, c3.value, new mut Fork { new mut Leaf { c1.initValue }, c1.lastValue, new mut Leaf { 74 } } };
+    setRightmost(t, 27);
+    t.left = new mut Fork { new mut Leaf { x }, (new SimpleCell { 75 }).value, t.left };
+    return toArray(t);  // expected: [42*42, 75, -1, 8, 9, 42, 27]
+}
+
+fn treeSize(tree: Tree) -> Int {
+    return when tree is Fork
+    then 1 + treeSize(tree.left) + treeSize(tree.right)
+    else 1;
+}
+
+fn toArray(t: Tree) -> arr Int {
+    val size = treeSize(t);
+    val array = arr Int[size];
+    populateArray(t, array, 0);
+    return array;
+}
+
+fn populateArray(t: Tree, array: mut arr Int, var idx: Int) -> Int {
+    if (t is Fork){
+        idx = populateArray(t.left, array, idx);
+    };
+    array[idx] = t.value;
+    idx += 1;
+    if (t is Fork){
+        idx = populateArray(t.right, array, idx);
+    };
+    return idx;
+}
+
+fn setRightmost(t: mut Tree, n: Int){
+    if (t is Fork){
+        setRightmost(t.right, n);
+    } else {
+        t.value = n;
+    }
+}

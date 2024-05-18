@@ -288,14 +288,88 @@ class CompilerTests {
     compileAndExecOneIter("physics", "testF", array)
     assertEquals(-359359.498166, array(0), 1e-5)
   }
+  
+  @Test def simpleInterfaceWithAnnotTest(): Unit = {
+    
+    def f(i: Int, j: Int): Int = 9*i - j*j
+    
+    val inOuts = List(Array(Array(true)) -> f(15, 5), Array(Array(false)) -> f(955, 7))
+    val act = compileAndExecSeveralIter("simple_interface_with_annot", "testF", inOuts.map(_._1))
+    assertEquals(2, act.size)
+    assertTrue(act.forall(_.isInstanceOf[Int]))
+    val actInts = act.map(_.asInstanceOf[Int])
+    assertEquals(inOuts.head._2, actInts.head)
+    assertEquals(inOuts(1)._2, actInts(1))
+  }
 
-  private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
-    compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
+  @Test def simpleInterfaceWithoutAnnotTest(): Unit = {
+
+    def f(i: Int, j: Int): Int = 9 * i - j * j
+
+    val inOuts = List(Array(Array(true)) -> f(15, 5), Array(Array(false)) -> f(955, 7))
+    val act = compileAndExecSeveralIter("simple_interface_without_annot", "testF", inOuts.map(_._1))
+    assertEquals(2, act.size)
+    assertTrue(act.forall(_.isInstanceOf[Int]))
+    val actInts = act.map(_.asInstanceOf[Int])
+    assertEquals(inOuts.head._2, actInts.head)
+    assertEquals(inOuts(1)._2, actInts(1))
+  }
+  
+  @Test def interfaceWriteTest(): Unit = {
+    val act = compileAndExecOneIter("interface_write", "testF")
+    val exp = -31 * 25
+    assertTrue(act.isInstanceOf[Int])
+    assertEquals(exp, act)
+  }
+
+  @Test def subtypeEqualityCheckTest(): Unit = {
+    val classes = compileAndLoadClasses("subtype_equality_check")
+    val coreClass = findCoreClass(classes)
+    val sInstance = coreClass.getMethod("createI").invoke(null)
+    val sClass = sInstance.getClass
+    assertTrue(sClass.getName == "S")
+    val iVal = sClass.getMethod("i").invoke(sInstance)
+    assertEquals(42, iVal)
+    for (method <- coreClass.getDeclaredMethods if method.getName.startsWith("test")){
+      val res = method.invoke(null)
+      assertEquals(s"failed on ${method.getName}", false, res)
+    }
+  }
+
+  @Test def explicitCastTest(): Unit = {
+    val act = compileAndExecOneIter("explicit_cast", "testFunc")
+    assertEquals("Hello Hello 42", act)
+  }
+
+  @Test def simpleSmartCastTest(): Unit = {
+    val act = compileAndExecOneIter("simple_smartcast", "testFunc")
+    assertEquals(1 + 2 + 3 + 4, act)
+  }
+
+  @Test def complexHierarchyTest(): Unit = {
+    val actRaw = compileAndExecOneIter("complex_hierarchy", "testF")
+    assertTrue(actRaw.isInstanceOf[Array[Int]])
+    val act = actRaw.asInstanceOf[Array[Int]]
+    val exp = Array(42*42, 75, -1, 8, 9, 42, 27)
+    assertArrayEquals(exp, act)
+  }
+
+  @Test def smartCastAndTest(): Unit = {
+    val actRaw = compileAndExecOneIter("smartcast_and", "testFunc")
+    assertTrue(actRaw.isInstanceOf[Array[Boolean]])
+    val act = actRaw.asInstanceOf[Array[Boolean]]
+    val exp = Array(true, false, false, true)
+    def convert(b: Boolean) = if b then 1 else 0
+    assertArrayEquals(exp.map(convert), act.map(convert))
   }
 
   private def failExit(exitCode: ExitCode): Nothing = {
     fail(s"exit called, exit code: $exitCode")
     throw new AssertionError("cannot happen")
+  }
+
+  private def compileAndExecOneIter(srcFileName: String, testedMethodName: String, args: Any*): Any = {
+    compileAndExecSeveralIter(srcFileName, testedMethodName, List(args.toArray)).head
   }
 
   /**
@@ -305,6 +379,23 @@ class CompilerTests {
    * @return the values returnes by each iteration
    */
   private def compileAndExecSeveralIter(srcFileName: String, testedMethodName: String, argsPerIter: List[Array[_]]): List[Any] = {
+    val classes = compileAndLoadClasses(srcFileName)
+    val coreClass = findCoreClass(classes)
+    coreClass.getDeclaredMethods.find(_.getName == testedMethodName) match {
+      case None => throw AssertionError(s"specified test method '$testedMethodName' does not exist")
+      case Some(method) => {
+        for args <- argsPerIter yield {
+          method.invoke(null, args: _*)
+        }
+      }
+    }
+  }
+
+  private def findCoreClass(classes: Seq[Class[_]]) = {
+    classes.find(_.getName.endsWith(GenFilesNames.coreFilePostfix)).get
+  }
+
+  private def compileAndLoadClasses(srcFileName: String): Seq[Class[?]] = {
     val tmpDir = Path.of(tmpTestDir, srcFileName)
     val outputName = srcFileName.withHeadUppercase + GenFilesNames.coreFilePostfix
     val errorReporter = new ErrorReporter(errorsConsumer = System.err.print, exit = failExit)
@@ -318,11 +409,7 @@ class CompilerTests {
         Loader.load(className, bytes)
       }
     }
-    val coreClass = classes.find(_.getName.endsWith(GenFilesNames.coreFilePostfix)).get
-    val method = coreClass.getDeclaredMethods.find(_.getName == testedMethodName).get
-    for args <- argsPerIter yield {
-      method.invoke(null, args: _*)
-    }
+    classes
   }
 
   private object Loader extends ClassLoader(Thread.currentThread().getContextClassLoader) {

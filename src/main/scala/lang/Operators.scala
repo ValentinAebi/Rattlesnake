@@ -1,12 +1,17 @@
 package lang
 
+import identifiers.TypeIdentifier
 import lang.Operator.*
 import lang.Types.PrimitiveType.*
 import lang.Types.Type
+import lang.SubtypeRelation.subtypeOf
 
 import scala.annotation.targetName
 
 object Operators {
+  
+  // Operators do not work on structs, hence the empty struct mapping
+  private given Map[TypeIdentifier, StructSignature] = Map.empty
 
   /**
    * Signature of an unary operator

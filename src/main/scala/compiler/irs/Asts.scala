@@ -48,7 +48,7 @@ object Asts {
     /**
      * Set the type that has been inferred for this expression
      *
-     * WARNING: since subclasses are allowed to overrid [[getTypeOpt]], setting a type might have no effect
+     * WARNING: since subclasses are allowed to override [[getTypeOpt]], setting a type might have no effect
      */
     def setTypeOpt(tpe: Option[Type]): Expr = {
       tpeOpt = tpe
@@ -120,9 +120,14 @@ object Asts {
   }
 
   /**
-   * Structure (`struct`) definition
+   * Structure (`struct`) or interface definition
    */
-  final case class StructDef(structName: TypeIdentifier, fields: List[Param]) extends TopLevelDef {
+  final case class StructDef(
+                              structName: TypeIdentifier,
+                              fields: List[Param],
+                              directSupertypes: Seq[TypeIdentifier],
+                              isInterface: Boolean
+                            ) extends TopLevelDef {
     override def children: List[Ast] = fields
   }
   
@@ -261,7 +266,12 @@ object Asts {
   /**
    * Binary operator
    */
-  final case class BinaryOp(lhs: Expr, operator: Operator, rhs: Expr) extends Expr {
+  final case class BinaryOp(lhs: Expr, operator: Operator, rhs: Expr) extends Expr with SmartCastsAware {
+
+    override def cond: Expr = lhs
+
+    override def thenBr: Statement = rhs
+    
     override def children: List[Ast] = List(lhs, rhs)
   }
 
@@ -300,7 +310,7 @@ object Asts {
    *   }
    * }}}
    */
-  final case class IfThenElse(cond: Expr, thenBr: Statement, elseBrOpt: Option[Statement]) extends Statement {
+  final case class IfThenElse(cond: Expr, thenBr: Statement, elseBrOpt: Option[Statement]) extends Statement with Conditional {
     override def children: List[Ast] = List(cond, thenBr) ++ elseBrOpt
   }
 
@@ -310,8 +320,9 @@ object Asts {
    *   when cond then thenBr else elseBr
    * }}}
    */
-  final case class Ternary(cond: Expr, thenBr: Expr, elseBr: Expr) extends Expr {
+  final case class Ternary(cond: Expr, thenBr: Expr, elseBr: Expr) extends Expr with Conditional {
     override def children: List[Ast] = List(cond, thenBr, elseBr)
+    override def elseBrOpt: Option[Statement] = Some(elseBr)
   }
 
   /**
@@ -322,7 +333,9 @@ object Asts {
    *   }
    * }}}
    */
-  final case class WhileLoop(cond: Expr, body: Statement) extends Statement {
+  final case class WhileLoop(cond: Expr, body: Statement) extends Statement with SmartCastsAware {
+    override def thenBr: Statement = body
+
     override def children: List[Ast] = List(cond, body)
   }
 
@@ -339,7 +352,8 @@ object Asts {
                             cond: Expr,
                             stepStats: List[Assignment],
                             body: Block
-                          ) extends Statement {
+                          ) extends Statement with SmartCastsAware {
+    override def thenBr: Statement = body
     override def children: List[Ast] = initStats ++ List(cond) ++ stepStats :+ body
   }
 
@@ -360,6 +374,13 @@ object Asts {
   }
 
   /**
+   * Type test, e.g. `x is Foo`
+   */
+  final case class TypeTest(expr: Expr, tpe: Type) extends Expr {
+    override def children: List[Ast] = List(expr)
+  }
+
+  /**
    * `panic` statement
    */
   final case class PanicStat(msg: Expr) extends Statement {
@@ -376,6 +397,26 @@ object Asts {
     override def children: List[Ast] = stats :+ expr
 
     override def getTypeOpt: Option[Type] = expr.getTypeOpt
+  }
+
+  // TODO record smart casts in Block instead of in loop/conditional (WARNING step statements in for loops)
+  trait SmartCastsAware extends Ast {
+    private var smartCasts: Map[FunOrVarId, Type] = Map.empty
+
+    def cond: Expr
+    def thenBr: Statement
+    
+    def setSmartCasts(smartcasts: Map[FunOrVarId, Type]): Unit = {
+      this.smartCasts = smartcasts
+    }
+
+    def getSmartCasts: Map[FunOrVarId, Type] = smartCasts
+  }
+  
+  trait Conditional extends SmartCastsAware {
+    def cond: Expr
+    def thenBr: Statement
+    def elseBrOpt: Option[Statement]
   }
 
 }
