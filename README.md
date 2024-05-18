@@ -201,7 +201,7 @@ Additionaly to casts, the following conversions can be performed:
 
 Syntax: `<expr> as <type>`, e.g. `10 as Double`, `x as Foo`
 
-### Type tests and smartcasts
+#### Type tests and smartcasts
 
 Syntax: `<expr> is <type>`
 
