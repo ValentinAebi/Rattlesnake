@@ -195,11 +195,27 @@ when <cond> then <expr1> else <expr2>
 ```
 
 #### Cast/type conversion
-The following conversions can be performed:
+Additionaly to casts, the following conversions can be performed:
 - `Int` <-> `Char`
 - `Int` <-> `Double`
 
-Syntax: `<expr> as <type>`, e.g. `10 as Double`
+Syntax: `<expr> as <type>`, e.g. `10 as Double`, `x as Foo`
+
+### Type tests and smartcasts
+
+Syntax: `<expr> is <type>`
+
+E.g.:
+```
+interface Foo {}
+struct Bar : Foo { x: Int }
+...
+val t = when f is Foo then f.x else 0;    // smartcast on ternary operator
+val condition = f is Foo && f.x == 42;    // smartcast on &&
+if (f is Foo){                            // smartcast on if statement
+    ... = f.x;
+}
+```
 
 #### Panic
 Terminates the program with an exception:
