@@ -223,7 +223,9 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case binOp@BinaryOp(lhs, operator, rhs) =>
         // no check for unused mut because no binary operator requires mutability on its arguments
         val lhsType = check(lhs, ctx)
-        val rhsType = check(rhs, ctx)
+        val smartCasts = if operator == Operator.And then detectSmartCasts(lhs, ctx) else Map.empty
+        val rhsType = check(rhs, ctx.copyWithSmartCasts(smartCasts))
+        binOp.setSmartCasts(smartCasts)
         if (operator == Equality || operator == Inequality) {
           val isSubOrSupertype = lhsType.subtypeOf(rhsType) || rhsType.subtypeOf(lhsType)
           if (!isSubOrSupertype) {

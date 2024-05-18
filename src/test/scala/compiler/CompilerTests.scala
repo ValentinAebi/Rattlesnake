@@ -354,6 +354,15 @@ class CompilerTests {
     assertArrayEquals(exp, act)
   }
 
+  @Test def smartCastAndTest(): Unit = {
+    val actRaw = compileAndExecOneIter("smartcast_and", "testFunc")
+    assertTrue(actRaw.isInstanceOf[Array[Boolean]])
+    val act = actRaw.asInstanceOf[Array[Boolean]]
+    val exp = Array(true, false, false, true)
+    def convert(b: Boolean) = if b then 1 else 0
+    assertArrayEquals(exp.map(convert), act.map(convert))
+  }
+
   private def failExit(exitCode: ExitCode): Nothing = {
     fail(s"exit called, exit code: $exitCode")
     throw new AssertionError("cannot happen")

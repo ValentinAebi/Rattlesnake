@@ -315,6 +315,21 @@ class TypeCheckerTests {
       )
     )
   }
+  
+  @Test def smartcastAnd(): Unit = {
+    runAndExpectErrors("smartcast_and")(
+      ErrorMatcher("access to possibly missing field should be rejected",
+        line = 5, col = 9,
+        msgMatcher = _.contains("struct 'Option' has no field named 'value'"),
+        errorClass = classOf[Err]
+      ),
+      ErrorMatcher("access to value on value smartcasted to None should be rejected",
+        line = 6, col = 24,
+        msgMatcher = _.contains("struct 'None' has no field named 'value'"),
+        errorClass = classOf[Err]
+      )
+    )
+  }
 
   private final case class ErrorMatcher(
                                          descr: String,

@@ -266,7 +266,12 @@ object Asts {
   /**
    * Binary operator
    */
-  final case class BinaryOp(lhs: Expr, operator: Operator, rhs: Expr) extends Expr {
+  final case class BinaryOp(lhs: Expr, operator: Operator, rhs: Expr) extends Expr with SmartCastsAware {
+
+    override def cond: Expr = lhs
+
+    override def thenBr: Statement = rhs
+    
     override def children: List[Ast] = List(lhs, rhs)
   }
 

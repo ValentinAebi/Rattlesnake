@@ -163,7 +163,10 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
             ).setType(BoolType))
             
           // x && y ---> when x then y else false
-          case And => lower(Ternary(loweredLhs, loweredRhs, BoolLit(false)))
+          case And =>
+            val ternary = Ternary(loweredLhs, loweredRhs, BoolLit(false))
+            ternary.setSmartCasts(binaryOp.getSmartCasts)
+            lower(ternary)
           
           // x || y ---> when x then true else y
           case Or => lower(Ternary(loweredLhs, BoolLit(true), loweredRhs))
