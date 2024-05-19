@@ -48,5 +48,6 @@ bin/
 
 *.asm
 coverage/
+testout/
 
 *.pptx
