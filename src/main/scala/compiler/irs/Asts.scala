@@ -333,9 +333,7 @@ object Asts {
    *   }
    * }}}
    */
-  final case class WhileLoop(cond: Expr, body: Statement) extends Statement with SmartCastsAware {
-    override def thenBr: Statement = body
-
+  final case class WhileLoop(cond: Expr, body: Statement) extends Statement {
     override def children: List[Ast] = List(cond, body)
   }
 
@@ -352,8 +350,7 @@ object Asts {
                             cond: Expr,
                             stepStats: List[Assignment],
                             body: Block
-                          ) extends Statement with SmartCastsAware {
-    override def thenBr: Statement = body
+                          ) extends Statement {
     override def children: List[Ast] = initStats ++ List(cond) ++ stepStats :+ body
   }
 
@@ -398,8 +395,7 @@ object Asts {
 
     override def getTypeOpt: Option[Type] = expr.getTypeOpt
   }
-
-  // TODO record smart casts in Block instead of in loop/conditional (WARNING step statements in for loops)
+  
   trait SmartCastsAware extends Ast {
     private var smartCasts: Map[FunOrVarId, Type] = Map.empty
 

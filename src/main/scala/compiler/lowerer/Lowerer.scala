@@ -83,18 +83,14 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
   }
 
   private def lower(whileLoop: WhileLoop): WhileLoop = {
-    val lowered = WhileLoop(lower(whileLoop.cond), lower(whileLoop.body))
-    lowered.setSmartCasts(whileLoop.getSmartCasts)
-    lowered
+    WhileLoop(lower(whileLoop.cond), lower(whileLoop.body))
   }
 
   private def lower(forLoop: ForLoop): Block = {
     val body = Block(
       forLoop.body.stats ++ forLoop.stepStats
     )
-    val whileLoop = WhileLoop(forLoop.cond, body)
-    whileLoop.setSmartCasts(forLoop.getSmartCasts)
-    val stats: List[Statement] = forLoop.initStats :+ whileLoop
+    val stats: List[Statement] = forLoop.initStats :+ WhileLoop(forLoop.cond, body)
     lower(Block(stats))
   }
 

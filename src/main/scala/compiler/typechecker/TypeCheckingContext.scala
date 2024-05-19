@@ -37,7 +37,7 @@ final case class TypeCheckingContext(
     copy(locals = mutable.Map.from(locals))
   }
 
-  // TODO keep smartcasts on vars, until reassignment (currently practically unusable on loops)
+  // TODO keep smartcasts on vars, until reassignment, and re-enable them on loops
   def copyWithSmartCasts(smartCasts: Map[FunOrVarId, Type]): TypeCheckingContext = {
     copy(locals = locals.map {
       case (id, info) => id -> info.copy(tpe = smartCasts.getOrElse(id, info.tpe))

@@ -607,7 +607,6 @@ final class Backend[V <: ClassVisitor](
         mv.visitLabel(loopLabel)
         generateCode(cond, ctx)
         mv.visitJumpInsn(Opcodes.IFLE, endLabel)
-        generateSmartCasts(whileLoop.getSmartCasts, ctx)
         generateCode(body, ctx)
         mv.visitJumpInsn(Opcodes.GOTO, loopLabel)
         mv.visitLabel(endLabel)
