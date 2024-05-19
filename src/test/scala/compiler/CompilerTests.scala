@@ -363,6 +363,23 @@ class CompilerTests {
     assertArrayEquals(exp.map(convert), act.map(convert))
   }
 
+  @Test def tailrecTest(): Unit = {
+    val input = List((25, 2), (32, 2), (37, 11), (21, 7),
+      (774522397, 2)) // this one causes a stack overflow in the absence of tailrec optimization
+    val actRaw = compileAndExecSeveralIter("tailrec", "isDivisibleBy", input.map(Array(_, _).map(Integer.valueOf)))
+    assertTrue(actRaw.forall(_.isInstanceOf[Boolean]))
+    val act = actRaw.map(_.asInstanceOf[Boolean])
+    val exp = input.map(_ % _ == 0)
+    assertEquals(exp, act)
+  }
+  
+  @Test def tailrecMaxTest(): Unit = {
+    val actRaw = compileAndExecOneIter("tailrec_max", "testF")
+    assertTrue(actRaw.isInstanceOf[Int])
+    val act = actRaw.asInstanceOf[Int]
+    assertEquals(1065, act)
+  }
+
   private def failExit(exitCode: ExitCode): Nothing = {
     fail(s"exit called, exit code: $exitCode")
     throw new AssertionError("cannot happen")

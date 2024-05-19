@@ -5,6 +5,7 @@ import compiler.backend.CodeGenerationContext.from
 import identifiers.FunOrVarId
 import lang.Types.PrimitiveType.*
 import lang.Types.{PrimitiveType, Type}
+import org.objectweb.asm.Label
 
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -12,14 +13,20 @@ import scala.collection.mutable
 final class CodeGenerationContext(
                                    val analysisContext: AnalysisContext,
                                    locals: List[mutable.Map[FunOrVarId, (Type, Int)]],
-                                   var currLocalIdx: Int
+                                   var currLocalIdx: Int,
+                                   val functionStartLabel: Label
                                  ) {
 
   /**
    * @return a copy of this with a new empty local frame added on top of it
    */
   def withNewLocalsFrame: CodeGenerationContext = {
-    new CodeGenerationContext(analysisContext, mutable.Map.empty[FunOrVarId, (Type, Int)] :: locals, currLocalIdx)
+    new CodeGenerationContext(
+      analysisContext,
+      mutable.Map.empty[FunOrVarId, (Type, Int)] :: locals,
+      currLocalIdx,
+      functionStartLabel
+    )
   }
 
   /**
@@ -58,8 +65,8 @@ final class CodeGenerationContext(
 
 object CodeGenerationContext {
 
-  def from(analysisContext: AnalysisContext): CodeGenerationContext = {
-    new CodeGenerationContext(analysisContext, List(mutable.Map.empty[FunOrVarId, (Type, Int)]), 0)
+  def from(analysisContext: AnalysisContext, functionStartLabel: Label): CodeGenerationContext = {
+    new CodeGenerationContext(analysisContext, List(mutable.Map.empty[FunOrVarId, (Type, Int)]), 0, functionStartLabel)
   }
 
 }

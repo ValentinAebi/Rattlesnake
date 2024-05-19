@@ -175,6 +175,13 @@ for var i = 0; i < #array; i += 1 {
 }
 ```
 
+#### Tail calls
+
+Tail calls are eliminated only if explicitly requested. 
+This is done by adding `!` between the name of the called 
+function and the parameters list: `recurse!(arg1, arg2)`.
+
+
 ### Operators
 
 #### Unary operators

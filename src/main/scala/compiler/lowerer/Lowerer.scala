@@ -103,6 +103,11 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
       case literal: Literal => literal
       case varRef: VariableRef => varRef
       case call: Call => Call(lower(call.callee), call.args.map(lower))
+      case call: TailCall =>
+        val loweredCall = TailCall(call.funId, call.args.map(lower))
+        // important to propagate position here, as tail position check is performed in backend
+        loweredCall.setPosition(call.getPosition)
+        loweredCall
       case indexing: Indexing => Indexing(lower(indexing.indexed), lower(indexing.arg))
       case arrayInit: ArrayInit => ArrayInit(arrayInit.elemType, lower(arrayInit.size))
       case structInit: StructInit => StructInit(structInit.structName, structInit.args.map(lower), structInit.modifiable)

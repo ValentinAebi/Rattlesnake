@@ -228,11 +228,13 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "indexing"
 
   private lazy val varRefOrFunCall = recursive {
-    lowName ::: opt(callArgs) map {
-      case name ^: Some(args) =>
-        Call(VariableRef(name), args)
+    lowName ::: opt(opt(op(ExclamationMark)) ::: callArgs) map {
       case name ^: None =>
         VariableRef(name)
+      case name ^: Some(None ^: args) =>
+        Call(VariableRef(name), args)
+      case name ^: Some(Some(_) ^: args) =>
+        TailCall(name, args)
     }
   } setName "varRefOrCallArgs"
 

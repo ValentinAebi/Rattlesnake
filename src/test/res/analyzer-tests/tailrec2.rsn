@@ -1,0 +1,8 @@
+
+fn foo(){
+    return foo!();  // dumb, but correct
+}
+
+fn bar(){
+    return foo!();  // error: not referencing the enclosing function
+}

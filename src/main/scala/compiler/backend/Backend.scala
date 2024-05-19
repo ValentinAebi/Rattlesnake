@@ -259,7 +259,8 @@ final class Backend[V <: ClassVisitor](
   }
 
   private def generateFunction(funDef: FunDef, mv: MethodVisitor, analysisContext: AnalysisContext): Unit = {
-    val ctx = CodeGenerationContext.from(analysisContext)
+    val startLabel = new Label()
+    val ctx = CodeGenerationContext.from(analysisContext, startLabel)
     val unnamedParamIdx = new AtomicInteger(0)
     for param <- funDef.params do {
       param.paramNameOpt match {
@@ -270,6 +271,7 @@ final class Backend[V <: ClassVisitor](
       }
     }
     mv.visitCode()
+    mv.visitLabel(startLabel)
     generateCode(funDef.body, ctx)(using mv)
     if (ctx.analysisContext.functions.apply(funDef.funName).retType == VoidType) {
       mv.visitInsn(Opcodes.RETURN)
@@ -281,11 +283,11 @@ final class Backend[V <: ClassVisitor](
   private def generateTest(testDef: TestDef, mv: MethodVisitor, analysisContext: AnalysisContext, outputName: String): Unit = {
     
     given MethodVisitor = mv
-    
-    val ctx = CodeGenerationContext.from(analysisContext)
+
     val start = new Label()
     val end = new Label()
     val handler = new Label()
+    val ctx = CodeGenerationContext.from(analysisContext, start)
     mv.visitCode()
     mv.visitTryCatchBlock(start, end, handler, null)
     mv.visitLabel(start)
@@ -388,6 +390,17 @@ final class Backend[V <: ClassVisitor](
           val descriptor = descriptorForFunc(analysisContext.functions.apply(name))
           mv.visitMethodInsn(Opcodes.INVOKESTATIC, mainClassFileName, name.stringId, descriptor, false)
         }
+      }
+
+      case call@TailCall(funId, args) => {
+        for (arg <- args) {
+          generateCode(arg, ctx)
+        }
+        for ((arg, idx) <- args.zipWithIndex.reverse){
+          val opcode = opcodeFor(arg.getType, Opcodes.ISTORE, Opcodes.ASTORE)
+          mv.visitIntInsn(opcode, idx)
+        }
+        mv.visitJumpInsn(Opcodes.GOTO, ctx.functionStartLabel)
       }
 
       case Indexing(indexed, arg) =>
@@ -765,7 +778,6 @@ object Backend {
 
     override def terminate(visitor: TraceClassVisitor, path: Path, errorReporter: ErrorReporter): Unit = {
       // nothing to do
-      Success(())
     }
   }
 

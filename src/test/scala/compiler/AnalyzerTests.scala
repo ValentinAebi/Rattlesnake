@@ -2,17 +2,21 @@ package compiler
 
 import org.junit.Test
 import Errors.*
-import compiler.CompilationStep.ContextCreation
+import compiler.CompilationStep.{ContextCreation, TailrecChecking}
+import compiler.TasksPipelines.frontend
+import compiler.ctxcreator.ContextCreator
 import compiler.io.SourceFile
+import compiler.lowerer.Lowerer
+import compiler.tailrecchecker.TailrecChecker
 import compiler.typechecker.TypeChecker
 import org.junit.Assert.{assertEquals, fail}
 
 import scala.collection.mutable.ListBuffer
 
 
-class TypeCheckerTests {
+class AnalyzerTests {
 
-  private val srcDir = "src/test/res/typechecker-tests"
+  private val srcDir = "src/test/res/analyzer-tests"
 
   @Test def modifiableArrayShouldNotBeCovariant(): Unit = {
     runAndExpectErrors("mut_covariance")(
@@ -331,6 +335,27 @@ class TypeCheckerTests {
     )
   }
 
+  @Test def tailrec1Test(): Unit = {
+    runAndExpectErrors("tailrec1")(
+      ErrorMatcher("should detect tail call not in tail position",
+        line = 3, col = 44,
+        msgMatcher = _.contains("call to 'isDivisibleBy' is not in tail position"),
+        compilationStep = TailrecChecking,
+        errorClass = classOf[Err]
+      )
+    )
+  }
+
+  @Test def tailrec2Test(): Unit = {
+    runAndExpectErrors("tailrec2")(
+      ErrorMatcher("should detect tail call to other function",
+        line = 7, col = 12,
+        msgMatcher = _.contains("tail calls can only refer to the enclosing function"),
+        errorClass = classOf[Err]
+      )
+    )
+  }
+
   private final case class ErrorMatcher(
                                          descr: String,
                                          private val line: Int = -1,
@@ -394,10 +419,15 @@ class TypeCheckerTests {
     final case class ExitException(exitCode: ExitCode) extends Exception
 
     val er = new ErrorReporter(errorsConsumer, exit = code => throw ExitException(code))
-    val tc = TasksPipelines.typeChecker(er, okReporter = _ => ())
+    val pipeline =
+      MultiStep(frontend(er))
+        .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
+        .andThen(new TypeChecker(er))
+        .andThen(new Lowerer())
+        .andThen(new TailrecChecker(er))
     val testFile = SourceFile(s"$srcDir/$srcFileName.${FileExtensions.rattlesnake}")
     try {
-      tc.apply(List(testFile))
+      pipeline.apply(List(testFile))
     } catch case ExitException(code) => ()
 
     if (remainingErrorMatchers.nonEmpty) {

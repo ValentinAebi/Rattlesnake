@@ -18,7 +18,7 @@ import scala.collection.mutable
 final case class TypeCheckingContext(
                                       private val analysisContext: AnalysisContext,
                                       private val locals: mutable.Map[FunOrVarId, LocalInfo] = mutable.Map.empty,
-                                      expectedRetType: Type
+                                      currentFunctionName: Option[FunOrVarId]
                                     ) {
   // Locals that have been created by this context (i.e. not obtained via copied)
   private val ownedLocals: mutable.Set[FunOrVarId] = mutable.Set.empty
@@ -26,8 +26,8 @@ final case class TypeCheckingContext(
   /**
    * @return a copy of this with empty locals map
    */
-  def copyWithoutLocals(expectedRetType: Type): TypeCheckingContext = {
-    copy(locals = mutable.Map.empty, expectedRetType = expectedRetType)
+  def copyWithoutLocals(currentFunctionName: FunOrVarId): TypeCheckingContext = {
+    copy(locals = mutable.Map.empty, Some(currentFunctionName))
   }
 
   /**

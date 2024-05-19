@@ -1,0 +1,4 @@
+
+fn isDivisibleBy(n: Int, divisor: Int) -> Bool {
+    return divisor == n || (n > divisor && isDivisibleBy!(n-divisor, divisor));
+}

@@ -1,0 +1,12 @@
+
+fn isDivisibleBy(n: Int, divisor: Int) -> Bool {
+  return when divisor == n then true else when when divisor < n then isDivisibleBy!(n - divisor, divisor) else false then 0 < divisor else false
+}
+
+fn foo(){
+  return foo!()
+}
+
+fn bar(){
+  
+}

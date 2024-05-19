@@ -151,7 +151,7 @@ object Asts {
    * Constant definition
    */
   final case class ConstDef(constName: FunOrVarId, tpeOpt: Option[Type], value: Literal) extends TopLevelDef {
-    override def children: List[Ast] = Nil
+    override def children: List[Ast] = List(value)
   }
 
   /**
@@ -226,6 +226,10 @@ object Asts {
    */
   final case class Call(callee: Expr, args: List[Expr]) extends Expr {
     override def children: List[Ast] = callee :: args
+  }
+  
+  final case class TailCall(funId: FunOrVarId, args: List[Expr]) extends Expr {
+    override def children: List[Ast] = args
   }
 
   /**

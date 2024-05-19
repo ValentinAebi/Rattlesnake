@@ -134,6 +134,12 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         addAst(callee)
         addParenthList(args)
 
+      case TailCall(funId, args) =>
+        pps
+          .add(funId)
+          .add("!")
+        addParenthList(args)
+
       case Indexing(indexed, arg) =>
         addAst(indexed)
         pps.add("[")

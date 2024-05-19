@@ -1,0 +1,41 @@
+
+fn testF() -> Int {
+    val array = generateArray();
+    return max(array);
+}
+
+fn main(arr String){
+    val max = testF();
+    print(intToString(max));
+}
+
+fn max(array: arr Int) -> Int {
+    return maxSince(array[0], 1, array);
+}
+
+fn maxSince(max: Int, startIdx: Int, array: arr Int) -> Int {
+    if startIdx < #array {
+        val curr = array[startIdx];
+        return maxSince!(
+                when curr > max then curr else max,
+                startIdx + 1,
+                array
+        );
+    } else {
+        return max;
+    }
+}
+
+const c_array_size = 100000;
+
+fn generateArray() -> arr Int {
+    val array = arr Int[c_array_size];
+    var a = 278;
+    var b = -515;
+    for var i = 0; i < c_array_size; i += 1 {
+        a = (2*a + b + 315) % (((b-a) / 2 + 1278) % 9999);
+        b = ((a % 19) * (b % 11)) % 874;
+        array[i] = a;
+    };
+    return array;
+}

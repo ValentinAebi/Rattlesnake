@@ -19,7 +19,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   override def apply(input: (List[Source], AnalysisContext)): (List[Source], AnalysisContext) = {
     val (sources, analysisContext) = input
     for src <- sources do {
-      check(src, TypeCheckingContext(analysisContext, expectedRetType = VoidType))  // expectedRetType is be ignored here
+      check(src, TypeCheckingContext(analysisContext, currentFunctionName = None))  // expectedRetType is be ignored here
     }
     errorReporter.displayAndTerminateIfErrors()
     sources.foreach(_.assertAllTypesAreSet())
@@ -57,11 +57,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
           }
         }
         val expRetType = optRetType.getOrElse(VoidType)
-        val ctxWithParams = ctx.copyWithoutLocals(expRetType)
+        val bodyCtx = ctx.copyWithoutLocals(funName)
         for param <- params do {
           val paramType = typeMustBeKnown(param.tpe, ctx, param.getPosition)
           param.paramNameOpt.foreach { paramName =>
-            ctxWithParams.addLocal(paramName, paramType, param.getPosition, param.isReassignable, declHasTypeAnnot = true,
+            bodyCtx.addLocal(paramName, paramType, param.getPosition, param.isReassignable, declHasTypeAnnot = true,
               duplicateVarCallback = { () =>
                 reportError(s"identifier '${param.paramNameOpt}' is already used by another parameter of function '$funName'", param.getPosition)
               }, forbiddenTypeCallback = { () =>
@@ -69,7 +69,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
               })
           }
         }
-        check(body, ctxWithParams)
+        check(body, bodyCtx)
         val endStatus = checkReturns(body)
         if (!endStatus.alwaysStopped && !expRetType.subtypeOf(VoidType)) {
           reportError("missing return in non-Void function", funDef.getPosition)
@@ -82,7 +82,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         if (expRetType == NothingType && !endStatus.alwaysStopped) {
           reportError(s"cannot prove that function '$funName' with return type '$NothingType' cannot return", funDef.getPosition)
         }
-        ctxWithParams.writeLocalsRelatedWarnings(errorReporter)
+        bodyCtx.writeLocalsRelatedWarnings(errorReporter)
         VoidType
 
       case TestDef(_, body) =>
@@ -131,18 +131,20 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case call@Call(callee, args) =>
         callee match {
           case varRef@VariableRef(name) =>
-            ctx.functions.get(name) match {
-              case Some(funSig) =>
-                varRef.setType(UndefinedType) // useless but o.w. the check that all expressions have a type fails
-                checkCallArgs(funSig.argTypes, args, ctx, call.getPosition)
-                funSig.retType
-
-              case None =>
-                args.foreach(check(_, ctx))
-                reportError(s"not found: $name", call.getPosition)
-            }
+            varRef.setType(UndefinedType) // useless but o.w. the check that all expressions have a type fails
+            checkFunCall(name, args, call.getPosition, ctx)
           case _ => reportError("syntax error, only functions can be called", call.getPosition)
         }
+
+      case call@TailCall(funId, args) =>
+        if (funId != ctx.currentFunctionName.get){
+          reportError("tail calls can only refer to the enclosing function", call.getPosition)
+        }
+        if (BuiltInFunctions.builtInFunctions.contains(funId)){
+          reportError("built-in functions do not support tail calls", call.getPosition)
+        }
+        // the fact that the call is indeed in tail position is checked in the backend
+        checkFunCall(funId, args, call.getPosition, ctx)
 
       case indexing@Indexing(indexed, arg) =>
         val indexedType = check(indexed, ctx)
@@ -344,7 +346,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         valueOpt.foreach { value =>
           check(value, ctx)
           value match {
-            case VariableRef(name) if ctx.expectedRetType.maybeModifiable =>
+            case VariableRef(name) if ctx.functions.apply(ctx.currentFunctionName.get).retType.maybeModifiable =>
               ctx.mutIsUsed(name)
             case _ => ()
           }
@@ -390,6 +392,18 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case _ => ()
     }
     tpe
+  }
+
+  private def checkFunCall(name: FunOrVarId, args: List[Expr], pos: Option[Position], ctx: TypeCheckingContext)
+                          (using Map[TypeIdentifier, StructSignature]): Type = {
+    ctx.functions.get(name) match {
+      case Some(funSig) =>
+        checkCallArgs(funSig.argTypes, args, ctx, pos)
+        funSig.retType
+      case None =>
+        args.foreach(check(_, ctx))
+        reportError(s"not found: $name", pos)
+    }
   }
 
   private def structCastResult(srcType: Type, destType: Type)

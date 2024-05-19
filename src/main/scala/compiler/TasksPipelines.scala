@@ -9,6 +9,7 @@ import compiler.irs.Asts
 import compiler.lexer.Lexer
 import compiler.parser.Parser
 import compiler.prettyprinter.PrettyPrinter
+import compiler.tailrecchecker.TailrecChecker
 import compiler.typechecker.TypeChecker
 import org.objectweb.asm.ClassVisitor
 
@@ -102,13 +103,14 @@ object TasksPipelines {
       .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
       .andThen(new TypeChecker(er))
       .andThen(new Lowerer())
+      .andThen(new TailrecChecker(er))
       .andThen(new Backend(
           backendMode, er, outputDirectoryPath, javaVersionCode, outputName,
           FunctionsToInject.functionsToInject, generateTests
       ))
   }
 
-  private def frontend(er: ErrorReporter) = {
+  def frontend(er: ErrorReporter): CompilerStep[SourceCodeProvider, Asts.Source] = {
     new Lexer(er).andThen(new Parser(er))
   }
 
