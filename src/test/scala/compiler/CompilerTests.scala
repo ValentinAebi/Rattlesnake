@@ -381,6 +381,11 @@ class CompilerTests {
       assertEquals(exp, act)
     }
   }
+  
+  @Test def combinedSmartcastTest(): Unit = {
+    val act = compileAndExecOneIter("combined_smartcasts", "testF")
+    assertEquals(204, act)
+  }
 
   @Test def tailrecTest(): Unit = {
     val input = List((25, 2), (32, 2), (37, 11), (21, 7),

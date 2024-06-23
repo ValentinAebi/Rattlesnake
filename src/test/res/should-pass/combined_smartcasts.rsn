@@ -1,0 +1,31 @@
+
+interface Option {}
+struct Some : Option {
+    value: Int
+}
+struct None : Option {}
+
+
+fn sum1(a: Option, b: Option) -> Option {
+    if a is Some {
+        if b is Some {
+            return new Some { a.value + b.value }
+        };
+    };
+    return new None {};
+}
+
+fn sum2(a: Option, b: Option) -> Option {
+    return when a is Some && b is Some then new Some { a.value + b.value } else new None {};
+}
+
+fn testF() -> Int {
+    val x = new Some { 27 };
+    val y = new Some { 99 };
+    val z = new Some { 78 };
+    val res = sum1(x, sum2(y, z));
+    if res is Some {
+        return res.value;
+    };
+    panic "Test failed";
+}
