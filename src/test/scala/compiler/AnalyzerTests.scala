@@ -334,6 +334,16 @@ class AnalyzerTests {
       )
     )
   }
+  
+  @Test def smartcastLoop(): Unit = {
+    runAndExpectErrors("smartcast_loop")(
+      ErrorMatcher("smartcast should be invalidated on reassignment",
+        line = 24, col = 16,
+        msgMatcher = _.contains("struct 'List' has no field named 'head'"),
+        errorClass = classOf[Err]
+      )
+    )
+  }
 
   @Test def tailrec1Test(): Unit = {
     runAndExpectErrors("tailrec1")(

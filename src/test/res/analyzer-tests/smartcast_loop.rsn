@@ -1,0 +1,28 @@
+
+interface List {}
+
+struct NonEmpty : List {
+    head: Int,
+    tail: List
+}
+
+struct Empty : List {}
+
+
+fn arrayToList(a: arr Int) -> List {
+    var ls = new Empty {};
+    for var i = #a-1; i >= 0; i -= 1 {
+        ls = new NonEmpty { a[i], ls };
+    };
+    return ls;
+}
+
+fn listToString(ls: List) -> String {
+    var str = "[ ";
+    for var rem = ls; rem is NonEmpty; ls = ls.tail {
+        ls = new Empty {};  // invalidate smart cast
+        str += ls.head + " ";   // wrong
+    };
+    str += "]";
+    return str;
+}

@@ -354,13 +354,32 @@ class CompilerTests {
     assertArrayEquals(exp, act)
   }
 
-  @Test def smartCastAndTest(): Unit = {
+  @Test def smartcastAndTest(): Unit = {
     val actRaw = compileAndExecOneIter("smartcast_and", "testFunc")
     assertTrue(actRaw.isInstanceOf[Array[Boolean]])
     val act = actRaw.asInstanceOf[Array[Boolean]]
     val exp = Array(true, false, false, true)
     def convert(b: Boolean) = if b then 1 else 0
     assertArrayEquals(exp.map(convert), act.map(convert))
+  }
+  
+  @Test def smartcastLoopTest(): Unit = {
+    
+    def referenceImpl(xs: Array[Int]): String = xs.mkString("[ ", " ", " ]")
+    
+    val inputs = List(
+      Array(25, 59, 32, 76),
+      Array[Int](),
+      (-50 to 200).toArray
+    )
+    
+    val actRaw = compileAndExecSeveralIter("smartcast_loop", "testF", inputs)
+    assertTrue(actRaw.forall(_.isInstanceOf[String]))
+    val actualRes = actRaw.map(_.asInstanceOf[String])
+    inputs.zip(actualRes).foreach { (input, act) =>
+      val exp = referenceImpl(input)
+      assertEquals(exp, act)
+    }
   }
 
   @Test def tailrecTest(): Unit = {
