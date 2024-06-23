@@ -10,7 +10,7 @@ struct Empty : List {}
 
 
 fn arrayToList(a: arr Int) -> List {
-    var ls = new Empty {};
+    var ls: List = new Empty {};
     for var i = #a-1; i >= 0; i -= 1 {
         ls = new NonEmpty { a[i], ls };
     };
@@ -19,9 +19,9 @@ fn arrayToList(a: arr Int) -> List {
 
 fn listToString(ls: List) -> String {
     var str = "[ ";
-    for var rem = ls; rem is NonEmpty; ls = ls.tail {
-        ls = new Empty {};  // invalidate smart cast
-        str += ls.head + " ";   // wrong
+    for var rem = ls; rem is NonEmpty; rem = rem.tail {
+        rem = new Empty {};  // invalidate smart cast
+        str += rem.head + " ";   // wrong
     };
     str += "]";
     return str;
