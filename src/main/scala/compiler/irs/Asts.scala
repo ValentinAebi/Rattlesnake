@@ -273,8 +273,6 @@ object Asts {
   final case class BinaryOp(lhs: Expr, operator: Operator, rhs: Expr) extends Expr with SmartCastsAware {
 
     override def cond: Expr = lhs
-
-    override def thenBr: Statement = rhs
     
     override def children: List[Ast] = List(lhs, rhs)
   }
@@ -338,8 +336,6 @@ object Asts {
    * }}}
    */
   final case class WhileLoop(cond: Expr, body: Statement) extends Statement with SmartCastsAware {
-    override def thenBr: Statement = body
-
     override def children: List[Ast] = List(cond, body)
   }
 
@@ -357,7 +353,6 @@ object Asts {
                             stepStats: List[Assignment],
                             body: Block
                           ) extends Statement with SmartCastsAware {
-    override def thenBr: Statement = body
     override def children: List[Ast] = initStats ++ List(cond) ++ stepStats :+ body
   }
 
@@ -408,7 +403,6 @@ object Asts {
     private var smartCasts: Map[FunOrVarId, Type] = Map.empty
 
     def cond: Expr
-    def thenBr: Statement
     
     def setSmartCasts(smartcasts: Map[FunOrVarId, Type]): Unit = {
       this.smartCasts = smartcasts
