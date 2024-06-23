@@ -320,7 +320,7 @@ class AnalyzerTests {
     )
   }
   
-  @Test def smartcastAnd(): Unit = {
+  @Test def smartcastAndTest(): Unit = {
     runAndExpectErrors("smartcast_and")(
       ErrorMatcher("access to possibly missing field should be rejected",
         line = 5, col = 9,
@@ -335,7 +335,7 @@ class AnalyzerTests {
     )
   }
   
-  @Test def smartcastLoop(): Unit = {
+  @Test def smartcastLoopTest(): Unit = {
     runAndExpectErrors("smartcast_loop")(
       ErrorMatcher("smartcast should be invalidated on reassignment",
         line = 24, col = 16,
