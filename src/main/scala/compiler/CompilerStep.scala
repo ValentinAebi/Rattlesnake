@@ -5,7 +5,7 @@ trait CompilerStep[In, Out] {
 
   def apply(input: In): Out
 
-  final def andThen[NextIn >: Out, NextOut](nextStep: CompilerStep[NextIn, NextOut]): CompilerStep[In, NextOut] = {
+  final infix def andThen[NextIn >: Out, NextOut](nextStep: CompilerStep[NextIn, NextOut]): CompilerStep[In, NextOut] = {
     (input: In) => {
       val func = thisStep.apply.andThen(nextStep.apply)
       func.apply(input)

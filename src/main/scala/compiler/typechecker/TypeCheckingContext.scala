@@ -27,7 +27,7 @@ final case class TypeCheckingContext(
    * @return a copy of this with empty locals map
    */
   def copyWithoutLocals(currentFunctionName: FunOrVarId): TypeCheckingContext = {
-    copy(locals = mutable.Map.empty, Some(currentFunctionName))
+    copy(locals = mutable.Map.empty, currentFunctionName = Some(currentFunctionName))
   }
 
   /**

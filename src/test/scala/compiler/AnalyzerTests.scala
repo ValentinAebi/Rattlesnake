@@ -362,7 +362,7 @@ class AnalyzerTests {
                                          private val col: Int = -1,
                                          private val msgMatcher: String => Boolean = null,
                                          compilationStep: CompilationStep = CompilationStep.TypeChecking,
-                                         errorClass: Class[_ <: CompilationError]
+                                         errorClass: Class[? <: CompilationError]
                                        ) {
 
     private def _line: Option[Int] = Some(line).filter(_ >= 0)

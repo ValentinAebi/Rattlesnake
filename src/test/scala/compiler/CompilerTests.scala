@@ -33,8 +33,8 @@ class CompilerTests {
     val rectDims = Array(xs(0), ys(0), ws(0), hs(0), xs(1), ys(1), ws(1), hs(1), xs(2), ys(2), ws(2), hs(2))
     val areas = new Array[Double](3)
     val actualRes = compileAndExecOneIter("geometry", "createRectangles", rectDims, areas)
-    assertTrue(actualRes.isInstanceOf[Array[_]])
-    val actualResArray = actualRes.asInstanceOf[Array[_]]
+    assertTrue(actualRes.isInstanceOf[Array[?]])
+    val actualResArray = actualRes.asInstanceOf[Array[?]]
     assertEquals(3, actualResArray.length)
     val expectedAreas = Array(9.3 * 7.0, 7.9 * 6.9, 7.1 * 11.8)
     assertArrayEquals(expectedAreas, areas, 0.05)
@@ -246,8 +246,8 @@ class CompilerTests {
   @Test
   def multiDimArrayTest(): Unit = {
     val res = compileAndExecOneIter("muldimarray", "testF")
-    assertTrue(res.isInstanceOf[Array[Array[_]]])
-    val resArray = res.asInstanceOf[Array[Array[_]]]
+    assertTrue(res.isInstanceOf[Array[Array[?]]])
+    val resArray = res.asInstanceOf[Array[Array[?]]]
     assertEquals(1, resArray.length)
     assertEquals(1, resArray(0).length)
   }
@@ -395,20 +395,20 @@ class CompilerTests {
    * @param argsPerIter a list of arrays, each containing the arguments to be provided to the tested function during an iteration
    * @return the values returnes by each iteration
    */
-  private def compileAndExecSeveralIter(srcFileName: String, testedMethodName: String, argsPerIter: List[Array[_]]): List[Any] = {
+  private def compileAndExecSeveralIter(srcFileName: String, testedMethodName: String, argsPerIter: List[Array[?]]): List[Any] = {
     val classes = compileAndLoadClasses(srcFileName)
     val coreClass = findCoreClass(classes)
     coreClass.getDeclaredMethods.find(_.getName == testedMethodName) match {
       case None => throw AssertionError(s"specified test method '$testedMethodName' does not exist")
       case Some(method) => {
         for args <- argsPerIter yield {
-          method.invoke(null, args: _*)
+          method.invoke(null, args*)
         }
       }
     }
   }
 
-  private def findCoreClass(classes: Seq[Class[_]]) = {
+  private def findCoreClass(classes: Seq[Class[?]]) = {
     classes.find(_.getName.endsWith(GenFilesNames.coreFilePostfix)).get
   }
 
@@ -430,7 +430,7 @@ class CompilerTests {
   }
 
   private object Loader extends ClassLoader(Thread.currentThread().getContextClassLoader) {
-    def load(name: String, bytes: Array[Byte]): Class[_] = {
+    def load(name: String, bytes: Array[Byte]): Class[?] = {
       super.defineClass(name, bytes, 0, bytes.length)
     }
   }
