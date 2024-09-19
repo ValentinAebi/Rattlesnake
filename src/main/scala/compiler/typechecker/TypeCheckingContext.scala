@@ -1,14 +1,14 @@
 package compiler.typechecker
 
-import compiler.{AnalysisContext, Errors, Position}
-import compiler.Errors.{ErrorReporter, Warning, errorsExitCode}
-import identifiers.FunOrVarId
-import lang.Types.PrimitiveType.{NothingType, VoidType}
-import lang.Types.Type
 import compiler.CompilationStep.TypeChecking
+import compiler.Errors.{ErrorReporter, Warning}
 import compiler.irs.Asts.{Expr, Indexing, Select, VariableRef}
 import compiler.typechecker.TypeCheckingContext.{LocalInfo, LocalUsesCollector}
+import compiler.{AnalysisContext, Errors, Position}
+import identifiers.FunOrVarId
 import lang.Keyword
+import lang.Types.PrimitiveType.{NothingType, VoidType}
+import lang.Types.Type
 
 import scala.collection.mutable
 
