@@ -70,15 +70,16 @@ Statements are separated with `;`. `;` may be omitted after the last statement.
 
   The subtyping relation between structures and interfaces must be declared explicitely: `struct A : I { x: Int, y: Double, var s: String }`.
   The structure must then provide at least the fields declared by the interface. If a field is declared reassignable in an interface (`var` keyword),
-  then it must be reassignable in the structure as well. If a structure `A` is a subtype of an interface `I`, then the non-reassignable fields of `A` declared in `I`
-  must declare a type that is a subtype of their type in `I`. If a field is reassignable, then it must declare the exact same type as in `I`. E.g.,
+  then it must be reassignable in the structure as well. If a structure `A` is a subtype of an interface `I`, then the fields of `A` declared in `I` and non-reassignable in `I`
+  must declare a type that is a subtype of their type in `I`. If a field is reassignable in `I`, then it must declare the exact same type as in `I`. E.g.,
   assuming the existence of an interface `Z` and a struct `U` that is a subtype of `Z` (denoted `U <: Z` in the following snippet):
   ```
   // We assume the existence of U and Z such that U <: Z
   interface I { f: Z, var g: Z }
-  struct A : I { f: U, var g: Z }    // valid, U <: Z and f is not reassignable
-  struct B : I { f: U, var g: U }    // not valid, as U != Z and g is reassignable
-  struct C : I { f: Z, g: Z }        // not valid, as g is not reassignable in C
+  struct A : I { f: Z, var h: String, var g: Z } // valid, extends I with an additional field h
+  struct B : I { f: U, var g: Z }                // valid, U <: Z and f is not reassignable
+  struct C : I { f: U, var g: U }                // not valid, as U != Z and g is reassignable
+  struct D : I { f: Z, g: Z }                    // not valid, as g is reassignable in I but not in D
   ```
   
 
@@ -217,9 +218,10 @@ E.g.:
 interface Foo {}
 struct Bar : Foo { x: Int }
 ...
-val t = when f is Foo then f.x else 0;    // smartcast on ternary operator
-val condition = f is Foo && f.x == 42;    // smartcast on &&
-if (f is Foo){                            // smartcast on if statement
+val f: Foo = ...
+val t = when f is Bar then f.x else 0;    // smartcast on ternary operator
+val condition = f is Bar && f.x == 42;    // smartcast on &&
+if (f is Bar){                            // smartcast on if statement
     ... = f.x;
 }
 ```
