@@ -89,11 +89,11 @@ final class Lexer(errorReporter: ErrorReporter) extends CompilerStep[SourceCodeP
 
   // Tokenization ------------------------------------------------------------------------
 
-  private def tokenizeLine(line: String, lineIdx: Int, srcCodeProvider: SourceCodeProvider): List[(Token, Int)] = {
+  private def tokenizeLine(line: String, lineIdxZeroBased: Int, srcCodeProvider: SourceCodeProvider): List[(Token, Int)] = {
 
     // takes longest match, if two candidates with maximum match then first in order is taken
-    @tailrec def tokenizeRemaining(rem: String, tokensReversed: List[(Token, Int)], col: Int): List[(Token, Int)] = {
-      if rem.isEmpty then ((EndlToken, col) :: tokensReversed).reverse
+    @tailrec def tokenizeRemaining(rem: String, tokensReversed: List[(Token, Int)], colZeroBased: Int): List[(Token, Int)] = {
+      if rem.isEmpty then ((EndlToken, colZeroBased) :: tokensReversed).reverse
       else {
         val matcherRes = matchersByPriorityOrder
           .flatMap(_.apply(rem))
@@ -101,17 +101,17 @@ final class Lexer(errorReporter: ErrorReporter) extends CompilerStep[SourceCodeP
         matcherRes match {
 
           case Some((newTok, newRem, len)) =>
-            tokenizeRemaining(newRem, (newTok, col) :: tokensReversed, col + len)
+            tokenizeRemaining(newRem, (newTok, colZeroBased) :: tokensReversed, colZeroBased + len)
 
           case None => {
             errorReporter.push(Err(CompilationStep.Lexing,
-              s"syntax error: '${stringLengthLimited(20, rem)}'", Some(Position(srcCodeProvider, lineIdx, col))))
+              s"syntax error: '${stringLengthLimited(20, rem)}'", Some(Position(srcCodeProvider, lineIdxZeroBased + 1, colZeroBased + 1))))
             val splitIdx = rem.indexOf(' ')
             if (splitIdx >= 0) {
               val (errTokStr, newRem) = rem.splitAt(splitIdx)
-              tokenizeRemaining(newRem, (ErrorToken(errTokStr), col) :: tokensReversed, col + splitIdx)
+              tokenizeRemaining(newRem, (ErrorToken(errTokStr), colZeroBased) :: tokensReversed, colZeroBased + splitIdx)
             }
-            else ((ErrorToken(rem), col) :: tokensReversed).reverse
+            else ((ErrorToken(rem), colZeroBased) :: tokensReversed).reverse
           }
         }
       }
@@ -131,8 +131,8 @@ final class Lexer(errorReporter: ErrorReporter) extends CompilerStep[SourceCodeP
         val tokenizedLines = indexedLines.map((line, idx) => tokenizeLine(line, idx, sourceCodeProvider))
         errorReporter.displayAndTerminateIfErrors()
         val positionedTokens =
-          for (line, lineIdx) <- tokenizedLines.zipWithIndex; (token, colIdx) <- line yield {
-            PositionedToken(token, Position(sourceCodeProvider, line = lineIdx + 1, col = colIdx + 1))
+          for (line, lineIdxZeroBased) <- tokenizedLines.zipWithIndex; (token, colIdx) <- line yield {
+            PositionedToken(token, Position(sourceCodeProvider, line = lineIdxZeroBased + 1, col = colIdx + 1))
           }
         (positionedTokens, sourceCodeProvider.name)
       }
