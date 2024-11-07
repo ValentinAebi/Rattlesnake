@@ -2,12 +2,12 @@ package compiler.ctxcreator
 
 import compiler.Errors.ErrorReporter
 import compiler.irs.Asts.*
-import compiler.{AnalysisContext, CompilerStep, FunctionsToInject}
+import compiler.{AnalysisContext, CompilerStep}
 
 /**
  * Compiler pass to generate an [[AnalysisContext]]
  */
-final class ContextCreator(errorReporter: ErrorReporter, functionsToInject: List[FunDef]) extends CompilerStep[List[Source], (List[Source], AnalysisContext)] {
+final class ContextCreator(errorReporter: ErrorReporter) extends CompilerStep[List[Source], (List[Source], AnalysisContext)] {
 
   override def apply(sources: List[Source]): (List[Source], AnalysisContext) = {
     val ctx = buildContext(sources)
@@ -29,9 +29,6 @@ final class ContextCreator(errorReporter: ErrorReporter, functionsToInject: List
           case constDef: ConstDef =>
             ctxBuilder.addConstant(constDef)
       }
-    }
-    for df <- functionsToInject do {
-      ctxBuilder.addFunction(df)
     }
     ctxBuilder.build()
   }

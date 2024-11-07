@@ -1,15 +1,13 @@
 package compiler.lowerer
 
 import compiler.irs.Asts.*
-import compiler.{AnalysisContext, CompilerStep, FunctionsToInject}
-import identifiers.{FunOrVarId, StringEqualityFunId}
+import compiler.{AnalysisContext, CompilerStep}
 import lang.Operator.*
-import lang.Operators
 import lang.Types.PrimitiveType.*
-import lang.Types.{ArrayType, Type, UndefinedType}
+import lang.Types.{ArrayType, UndefinedType}
 
 /**
- * Lowering replaces:
+ * Lowering replaces (this list may not be complete):
  *  - `>`, `>=` ---> reversed
  *  - `x <= y` ---> `(x < y) || (x == y)`
  *  - `x != y` ---> `!(x == y)`
@@ -131,15 +129,6 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
           case ExclamationMark => Ternary(loweredOperand, BoolLit(false), BoolLit(true))
           case _ => UnaryOp(operator, loweredOperand)
         }
-
-      case BinaryOp(lhs, Equality, rhs) if lhs.getType == StringType => {
-        val loweredLhs = lower(lhs)
-        val loweredRhs = lower(rhs)
-        Call(
-          VariableRef(StringEqualityFunId).setType(UndefinedType),
-          List(loweredLhs, loweredRhs)
-        ).setType(BoolType)
-      }
         
       case binaryOp: BinaryOp => {
         val loweredLhs = lower(binaryOp.lhs)

@@ -4,7 +4,7 @@ import compiler.CompilationStep.CodeGeneration
 import compiler.Errors.*
 import compiler.backend.BuiltinFunctionsImpl.*
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
-import compiler.backend.TypesConverter.{convertToAsmType, convertToAsmTypeCode, internalNameOf, opcodeFor}
+import compiler.backend.TypesConverter.{convertToAsmTypeCode, internalNameOf, opcodeFor}
 import compiler.irs.Asts.*
 import compiler.{AnalysisContext, CompilerStep, FileExtensions, GenFilesNames}
 import identifiers.{BackendGeneratedVarId, FunOrVarId, TypeIdentifier}
@@ -16,20 +16,20 @@ import lang.Types.{ArrayType, PrimitiveType, StructType, UnionType}
 import org.objectweb.asm
 import org.objectweb.asm.*
 import org.objectweb.asm.Opcodes.*
-import org.objectweb.asm.util.{Textifier, TraceClassVisitor}
+import org.objectweb.asm.util.TraceClassVisitor
 
-import java.io.{File, FileOutputStream, FileWriter, PrintWriter}
+import java.io.{FileOutputStream, PrintWriter}
 import java.nio.file.{Files, Path}
 import java.util.concurrent.atomic.AtomicInteger
-import scala.collection.immutable.{Nil, StringOps}
+import scala.collection.immutable.Nil
 import scala.collection.mutable
-import scala.util.{Failure, Success, Try, Using}
+import scala.util.{Failure, Success, Using}
 
 /**
  * Generates the output files: 1 core file, containing the program, and 1 file per struct
  *
- * @param mode          cf nested class [[Backend.Mode]]
- * @param outputDirBase output directory path (will be extended with `/out`)
+ * @param mode              cf nested class [[Backend.Mode]]
+ * @param outputDirBase     output directory path (will be extended with `/out`)
  * @param mainClassFileName name of the class file containing the main program class
  * @tparam V depends on the mode
  */
@@ -39,18 +39,16 @@ final class Backend[V <: ClassVisitor](
                                         outputDirBase: Path,
                                         javaVersionCode: Int,
                                         mainClassFileName: String,
-                                        functionsToInject: List[FunDef],
                                         generateTests: Boolean
                                       ) extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
 
   import Backend.*
-  
+
   override def apply(input: (List[Source], AnalysisContext)): List[Path] = {
     val (sources, analysisContext) = input
     if (sources.isEmpty) {
       errorReporter.pushFatal(Fatal(CodeGeneration, "nothing to write: no sources", None))
-    }
-    else {
+    } else {
 
       given Map[TypeIdentifier, StructSignature] = analysisContext.structs
 
@@ -100,7 +98,7 @@ final class Backend[V <: ClassVisitor](
   private def sortStructs(structs: List[StructDef]): List[StructDef] = {
     val remStructs = mutable.Queue.from(structs)
     val sortedList = new mutable.LinkedHashMap[TypeIdentifier, StructDef]
-    while (remStructs.nonEmpty){
+    while (remStructs.nonEmpty) {
       // get is safe here because the subtyping relation admits no cycles (checked by ContextCreation phase)
       val curr = remStructs.removeFirst(_.directSupertypes.forall(sortedList.contains)).get
       sortedList.addOne(curr.structName -> curr)
@@ -145,7 +143,7 @@ final class Backend[V <: ClassVisitor](
   private def generateCoreFile(analysisContext: AnalysisContext, functions: List[FunDef], coreFilePath: Path): Unit = {
     val cv: V = mode.createVisitor(coreFilePath)
     cv.visit(javaVersionCode, ACC_PUBLIC, mainClassFileName, null, objectTypeStr, null)
-    for function <- (functions ++ functionsToInject) do {
+    for function <- functions do {
       val descriptor = descriptorForFunc(function.signature)(using analysisContext.structs)
       val mv = cv.visitMethod(ACC_PUBLIC | ACC_STATIC, function.funName.stringId, descriptor, null, null)
       generateFunction(function, mv, analysisContext)
@@ -168,22 +166,22 @@ final class Backend[V <: ClassVisitor](
 
   private def generateStruct(structDef: StructDef, superInterfaces: Array[String],
                              structFilePath: Path, ctx: AnalysisContext): Unit = {
-    
+
     given Map[TypeIdentifier, StructSignature] = ctx.structs
-    
+
     val structName = structDef.structName
     val sig = ctx.structs.apply(structName)
     val isInterface = sig.isInterface
     val cv = mode.createVisitor(structFilePath)
     var classMods = ACC_PUBLIC
-    if (isInterface){
+    if (isInterface) {
       classMods |= ACC_INTERFACE
       classMods |= ACC_ABSTRACT
     } else {
       classMods |= ACC_FINAL
     }
     cv.visit(javaVersionCode, classMods, structDef.structName.stringId, null, objectTypeStr, superInterfaces)
-    if (!isInterface){
+    if (!isInterface) {
       addFields(structDef, cv)
       addConstructor(cv)
     }
@@ -205,7 +203,7 @@ final class Backend[V <: ClassVisitor](
                             (using Map[TypeIdentifier, StructSignature]): Unit = {
     val getterDescriptor = descriptorForFunc(FunctionSignature(fld, List.empty, fldType))
     var modifiers = ACC_PUBLIC
-    if (!genImplementation){
+    if (!genImplementation) {
       modifiers |= ACC_ABSTRACT
     }
     val getterVisitor = cv.visitMethod(modifiers, fld.stringId,
@@ -281,7 +279,7 @@ final class Backend[V <: ClassVisitor](
   }
 
   private def generateTest(testDef: TestDef, mv: MethodVisitor, analysisContext: AnalysisContext, outputName: String): Unit = {
-    
+
     given MethodVisitor = mv
 
     val start = new Label()
@@ -335,9 +333,9 @@ final class Backend[V <: ClassVisitor](
 
   private def generateCode(ast: Ast, ctx: CodeGenerationContext)
                           (using mv: MethodVisitor): Unit = {
-    
+
     given Map[TypeIdentifier, StructSignature] = ctx.structs
-    
+
     val analysisContext = ctx.analysisContext
     ast match {
 
@@ -396,7 +394,7 @@ final class Backend[V <: ClassVisitor](
         for (arg <- args) {
           generateCode(arg, ctx)
         }
-        for ((arg, idx) <- args.zipWithIndex.reverse){
+        for ((arg, idx) <- args.zipWithIndex.reverse) {
           val opcode = opcodeFor(arg.getType, Opcodes.ISTORE, Opcodes.ASTORE)
           mv.visitIntInsn(opcode, idx)
         }
@@ -458,7 +456,9 @@ final class Backend[V <: ClassVisitor](
         generateCode(lhs, ctx)
         generateCode(rhs, ctx)
         val tpe = lhs.getType
-        if (operator == Equality && tpe == DoubleType) {
+        if (operator == Equality && tpe == StringType) {
+          mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, stringTypeStr, "equals", "(Ljava/lang/Object;)Z", false)
+        } else if (operator == Equality && tpe == DoubleType) {
           /*
            *   if (lhs compare rhs) == 0 goto trueLabel:
            *   push false
@@ -634,7 +634,7 @@ final class Backend[V <: ClassVisitor](
 
       case Cast(expr, tpe) => {
         generateCode(expr, ctx)
-        if (!expr.getType.subtypeOf(tpe)){
+        if (!expr.getType.subtypeOf(tpe)) {
           TypeConversion.conversionFor(expr.getType, tpe) match
             case Some(TypeConversion.Int2Double) => mv.visitInsn(Opcodes.I2D)
             case Some(TypeConversion.Double2Int) => mv.visitInsn(Opcodes.D2I)
@@ -744,7 +744,7 @@ object Backend {
     override val extension: String = FileExtensions.binary
 
     override def createVisitor(path: Path): ClassWriter = {
-      new ClassWriter(ClassWriter.COMPUTE_FRAMES){
+      new ClassWriter(ClassWriter.COMPUTE_FRAMES) {
         override def getCommonSuperClass(type1: String, type2: String): String = objectTypeStr
       }
     }

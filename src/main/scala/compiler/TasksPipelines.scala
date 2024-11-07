@@ -48,11 +48,11 @@ object TasksPipelines {
   /**
    * Pipeline for formatting (src file -> formatted text file)
    */
-  def formatter(    // TODO should be able to handle comments
-                 directoryPath: Path, 
-                 filename: String, 
+  def formatter( // TODO should be able to handle comments
+                 directoryPath: Path,
+                 filename: String,
                  indentGranularity: Int,
-                 overwriteFileCallback: String => Boolean, 
+                 overwriteFileCallback: String => Boolean,
                  displayAllParentheses: Boolean = false,
                  er: ErrorReporter = defaultErrorReporter
                ): CompilerStep[SourceCodeProvider, Unit] = {
@@ -66,7 +66,7 @@ object TasksPipelines {
    */
   def typeChecker(er: ErrorReporter = defaultErrorReporter, okReporter: String => Unit = println): CompilerStep[List[SourceCodeProvider], Unit] = {
     MultiStep(frontend(er))
-      .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
+      .andThen(new ContextCreator(er))
       .andThen(new TypeChecker(er))
       .andThen(Mapper(_ => okReporter("no error found")))
   }
@@ -77,15 +77,15 @@ object TasksPipelines {
    */
   def lowerer(
                outputDirectoryPath: Path,
-               filename: String, 
+               filename: String,
                indentGranularity: Int = 2,
-               overwriteFileCallback: String => Boolean, 
+               overwriteFileCallback: String => Boolean,
                displayAllParentheses: Boolean = false,
                er: ErrorReporter = defaultErrorReporter
              ): CompilerStep[SourceCodeProvider, Unit] = {
     frontend(er)
       .andThen(Mapper(List(_)))
-      .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
+      .andThen(new ContextCreator(er))
       .andThen(new TypeChecker(er))
       .andThen(new Lowerer())
       .andThen(Mapper(_._1.head))
@@ -100,13 +100,17 @@ object TasksPipelines {
                                               generateTests: Boolean,
                                               er: ErrorReporter) = {
     MultiStep(frontend(er))
-      .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
+      .andThen(new ContextCreator(er))
       .andThen(new TypeChecker(er))
       .andThen(new Lowerer())
       .andThen(new TailrecChecker(er))
       .andThen(new Backend(
-          backendMode, er, outputDirectoryPath, javaVersionCode, outputName,
-          FunctionsToInject.functionsToInject, generateTests
+        backendMode,
+        er,
+        outputDirectoryPath,
+        javaVersionCode,
+        outputName,
+        generateTests
       ))
   }
 

@@ -421,7 +421,7 @@ class AnalyzerTests {
     val er = new ErrorReporter(errorsConsumer, exit = code => throw ExitException(code))
     val pipeline =
       MultiStep(frontend(er))
-        .andThen(new ContextCreator(er, FunctionsToInject.functionsToInject))
+        .andThen(new ContextCreator(er))
         .andThen(new TypeChecker(er))
         .andThen(new Lowerer())
         .andThen(new TailrecChecker(er))
