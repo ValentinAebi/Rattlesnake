@@ -5,8 +5,8 @@ import compiler.StringFormatting.stringLengthLimited
 import compiler.irs.Tokens.*
 import compiler.lexer.Matchers.*
 import compiler.{CompilationStep, CompilerStep, Position, SourceCodeProvider}
-import lang.{Keyword, Operator}
 import lang.Types.PrimitiveType
+import lang.{Keyword, Operator}
 
 import scala.annotation.tailrec
 import scala.util.{Failure, Success}

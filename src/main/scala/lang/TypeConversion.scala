@@ -1,7 +1,7 @@
 package lang
 
+import lang.Types.PrimitiveType.*
 import lang.Types.Type
-import Types.PrimitiveType.*
 
 enum TypeConversion(val from: Type, val to: Type) {
   case Int2Double extends TypeConversion(IntType, DoubleType)

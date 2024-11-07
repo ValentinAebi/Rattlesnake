@@ -23,7 +23,7 @@ object ParseTree {
    * @tparam L left
    * @tparam R right
    */
-  final case class ^:[+L, +R](left: L, right: R){
+  final infix case class ^:[+L, +R](left: L, right: R){
     
     def toTuple: (L, R) = (left, right)
     

@@ -1,18 +1,16 @@
 package compiler.parser
 
-import compiler.Position
 import compiler.irs.Tokens.*
-import lang.Operator.{ClosingBrace, Semicolon}
-import lang.Keyword.Else
+import lang.Operator.Semicolon
 
-import scala.annotation.tailrec
+import scala.compiletime.uninitialized
 
 /**
  * Iterator allowing at most one lookahead
  */
 final class LL1Iterator private(initTokensList: List[PositionedToken]) {
   require(initTokensList.nonEmpty)
-  private var _curr: PositionedToken = _
+  private var _curr: PositionedToken = uninitialized
   private var _remTokens: List[PositionedToken] = initTokensList
   moveForward()
 

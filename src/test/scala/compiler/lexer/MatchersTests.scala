@@ -1,6 +1,6 @@
 package compiler.lexer
 
-import Matchers.*
+import compiler.lexer.Matchers.*
 import org.junit.Assert.{assertEquals, fail}
 import org.junit.Test
 

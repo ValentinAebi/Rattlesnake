@@ -4,8 +4,8 @@ import compiler.AnalysisContext
 import compiler.CompilationStep.ContextCreation
 import compiler.Errors.{CompilationError, Err, ErrorReporter, errorsExitCode}
 import compiler.irs.Asts.{ConstDef, FunDef, StructDef, TestDef}
-import lang.SubtypeRelation.subtypeOf
 import identifiers.{FunOrVarId, TypeIdentifier}
+import lang.SubtypeRelation.subtypeOf
 import lang.Types.PrimitiveType.{NothingType, VoidType}
 import lang.Types.Type
 import lang.{BuiltInFunctions, FunctionSignature, StructSignature, Types}

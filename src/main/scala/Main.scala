@@ -1,9 +1,5 @@
-import compiler.Errors.{ErrorReporter, errorsExitCode}
 import compiler.io.SourceFile
-import compiler.parser.LL1Iterator
 import compiler.{FileExtensions, GenFilesNames, SourceCodeProvider, TasksPipelines}
-import lang.Types.ArrayType
-import lang.Types.PrimitiveType.StringType
 import org.objectweb.asm.Opcodes.{V11, V17, V1_8}
 
 import java.lang.reflect.InvocationTargetException
@@ -387,7 +383,7 @@ object Main {
 
   /** Class loader to load generated .class files when executing the `run` command */
   private object Loader extends ClassLoader(Thread.currentThread().getContextClassLoader) {
-    def load(name: String, bytes: Array[Byte]): Class[_] = {
+    def load(name: String, bytes: Array[Byte]): Class[?] = {
       super.defineClass(name, bytes, 0, bytes.length)
     }
   }

@@ -2,9 +2,9 @@ package lang
 
 import identifiers.TypeIdentifier
 import lang.Operator.*
+import lang.SubtypeRelation.subtypeOf
 import lang.Types.PrimitiveType.*
 import lang.Types.Type
-import lang.SubtypeRelation.subtypeOf
 
 import scala.annotation.targetName
 
@@ -84,19 +84,19 @@ object Operators {
   // Binop signature DSL implementation --------------------------------------------
 
   private case class PartialBinop1(leftOperandType: Type, op: Operator) {
-    @targetName("andThen") def $(rightOperandType: Type): PartialBinop2 = {
+    @targetName("andThen") infix def $(rightOperandType: Type): PartialBinop2 = {
       PartialBinop2(leftOperandType, op, rightOperandType)
     }
   }
 
   private case class PartialBinop2(leftOperandType: Type, op: Operator, rightOperandType: Type) {
-    def is(retType: Type): BinaryOpSignature = {
+    infix def is(retType: Type): BinaryOpSignature = {
       BinaryOpSignature(leftOperandType, op, rightOperandType, retType)
     }
   }
 
   extension (leftOperandType: Type) {
-    @targetName("andThen") private def $(op: Operator): PartialBinop1 = {
+    @targetName("andThen") private infix def $(op: Operator): PartialBinop1 = {
       PartialBinop1(leftOperandType, op)
     }
   }

@@ -1,8 +1,8 @@
 package compiler.irs
 
 import compiler.Position
-import lang.{Keyword, Operator}
 import lang.Types.PrimitiveType
+import lang.{Keyword, Operator}
 
 object Tokens {
 

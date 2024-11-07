@@ -2,8 +2,9 @@ package compiler
 
 import compiler.Errors.{ErrorReporter, ExitCode}
 import compiler.io.SourceFile
-import org.junit.Assert.{assertArrayEquals, assertEquals, assertFalse, assertTrue, fail}
+import org.junit.Assert.*
 import org.junit.{After, Before, Test}
+import org.objectweb.asm.Opcodes.V1_8
 
 import java.io.*
 import java.net.URLClassLoader
@@ -11,7 +12,6 @@ import java.nio.file.{Files, Path}
 import java.util.spi.ToolProvider
 import scala.reflect.ClassTag
 import scala.util.Using
-import org.objectweb.asm.Opcodes.V1_8
 
 class CompilerTests {
 

@@ -1,13 +1,13 @@
 package compiler.backend
 
-import lang.{StructSignature, Types}
-import lang.Types.{ArrayType, PrimitiveType, StructType, UndefinedType, UnionType}
-import org.objectweb.asm
-import org.objectweb.asm.{Opcodes, Type}
-import org.objectweb.asm.Type.*
-import Opcodes.*
-import DescriptorsCreator.descriptorForType
+import compiler.backend.DescriptorsCreator.descriptorForType
 import identifiers.TypeIdentifier
+import lang.Types.*
+import lang.{StructSignature, Types}
+import org.objectweb.asm
+import org.objectweb.asm.Opcodes.*
+import org.objectweb.asm.Type.*
+import org.objectweb.asm.{Opcodes, Type}
 
 object TypesConverter {
 

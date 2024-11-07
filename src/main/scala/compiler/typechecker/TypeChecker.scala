@@ -3,15 +3,15 @@ package compiler.typechecker
 import compiler.CompilationStep.TypeChecking
 import compiler.Errors.{CompilationError, Err, ErrorReporter, Warning}
 import compiler.irs.Asts.*
-import lang.SubtypeRelation.subtypeOf
 import compiler.typechecker.TypeCheckingContext.LocalInfo
 import compiler.{AnalysisContext, CompilerStep, Position}
 import identifiers.{FunOrVarId, TypeIdentifier}
+import lang.*
 import lang.Operator.{Equality, Inequality, Sharp}
 import lang.StructSignature.FieldInfo
+import lang.SubtypeRelation.subtypeOf
 import lang.Types.*
 import lang.Types.PrimitiveType.*
-import lang.*
 
 final class TypeChecker(errorReporter: ErrorReporter)
   extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {

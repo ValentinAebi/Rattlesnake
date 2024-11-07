@@ -1,7 +1,7 @@
 package compiler.ctxcreator
 
 import compiler.Errors.ErrorReporter
-import compiler.irs.Asts.{ConstDef, FunDef, Source, StructDef, TestDef}
+import compiler.irs.Asts.*
 import compiler.{AnalysisContext, CompilerStep, FunctionsToInject}
 
 /**

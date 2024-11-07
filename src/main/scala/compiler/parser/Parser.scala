@@ -1,12 +1,11 @@
 package compiler.parser
 
 import compiler.CompilationStep.Parsing
-import compiler.Errors.{ErrorReporter, Fatal, errorsExitCode}
+import compiler.Errors.{ErrorReporter, Fatal}
 import compiler.irs.Asts.*
 import compiler.irs.Tokens.*
 import compiler.parser.ParseTree.^:
 import compiler.parser.TreeParsers.*
-import compiler.prettyprinter.PrettyPrinter
 import compiler.{CompilerStep, Errors, Position}
 import identifiers.*
 import lang.Keyword.*
@@ -14,11 +13,11 @@ import lang.Operator.*
 import lang.Types.{ArrayType, StructType, Type}
 import lang.{Keyword, Operator, Operators, Types}
 
-import scala.util.Try
+import scala.compiletime.uninitialized
 
 final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[PositionedToken], String), Source] {
   private implicit val implErrorReporter: ErrorReporter = errorReporter
-  private var ll1Iterator: LL1Iterator = _
+  private var ll1Iterator: LL1Iterator = uninitialized
 
   private type P[X] = AnyTreeParser[X]
 

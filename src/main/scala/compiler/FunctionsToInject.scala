@@ -2,10 +2,10 @@ package compiler
 
 import compiler.Errors.{CompilationError, ErrorReporter}
 import compiler.ctxcreator.ContextCreator
-import compiler.lowerer.Lowerer
 import compiler.io.SourceFile
 import compiler.irs.Asts.{FunDef, Source}
 import compiler.lexer.Lexer
+import compiler.lowerer.Lowerer
 import compiler.parser.Parser
 import compiler.typechecker.TypeChecker
 import identifiers.StringEqualityFunId

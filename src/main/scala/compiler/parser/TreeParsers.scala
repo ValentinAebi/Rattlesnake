@@ -1,13 +1,11 @@
 package compiler.parser
 
-import compiler.{CompilationStep, Position}
-import compiler.Errors.{CompilationError, Err, ErrorReporter, fatalErrorExitCode}
+import compiler.Errors.{Err, ErrorReporter}
 import compiler.ExprToStringMacro.exprToString
-import compiler.parser.ParseTree.^:
 import compiler.irs.Asts.Ast
 import compiler.irs.Tokens.*
-
-import scala.util.Try
+import compiler.parser.ParseTree.^:
+import compiler.{CompilationStep, Position}
 
 /**
  * Parsers for some parts of the syntax
@@ -164,7 +162,7 @@ object TreeParsers {
     private var nameOpt: Option[() => String] = None
     private var nameWasSet = false
 
-    protected[TreeParsers] def setNameResetable(name: => String): AnyTreeParser[U] = {
+    protected[TreeParsers] infix def setNameResetable(name: => String): AnyTreeParser[U] = {
       this.nameOpt = Some(() => name)
       this
     }
@@ -173,7 +171,7 @@ object TreeParsers {
      * Sets a name for this parser (useful for debugging)
      * @return `this`
      */
-    def setName(name: String): AnyTreeParser[U] = {
+    infix def setName(name: String): AnyTreeParser[U] = {
       if (nameWasSet) throw IllegalStateException("parser name assigned twice")
       this.nameOpt = Some(() => name)
       nameWasSet = true
@@ -197,7 +195,7 @@ object TreeParsers {
      * @param firstSuffix next parser
      * @return the `U` produced by parsing, wrapped in a `Some`, if parsing succeeded, `None` o.w.
      */
-    def extract(ll1Iterator: LL1Iterator, suffixAdmits: => Boolean, suffixDescr: => String, firstSuffix: AnyTreeParser[_]): Option[U]
+    def extract(ll1Iterator: LL1Iterator, suffixAdmits: => Boolean, suffixDescr: => String, firstSuffix: AnyTreeParser[?]): Option[U]
 
     /**
      * @param suffixDescr description of the following parser(s)
@@ -226,19 +224,19 @@ object TreeParsers {
      *
      * The parser throws an exception reporting that parser is not LL1 if both `this` and `right` match some token it is given
      */
-    final def OR[T](right: AnyTreeParser[T])(implicit errorReporter: ErrorReporter): AnyTreeParser[U | T] = {
+    final infix def OR[T](right: AnyTreeParser[T])(implicit errorReporter: ErrorReporter): AnyTreeParser[U | T] = {
       NonFinalDisjunction(this, right, errorReporter) setNameResetable s"${this.getName} OR ${right.getName}"
     }
 
     /**
      * Creates a new parser that transforms the `U` produced by this parser into a `T` using `f`
      */
-    def map[T](f: U => T): AnyTreeParser[T] = {
+    infix def map[T](f: U => T): AnyTreeParser[T] = {
       val original = this
       new AnyTreeParser[T] {
         export original.admits
         override def extract(ll1Iterator: LL1Iterator, suffixAdmits: => Boolean,
-                             suffixDescr: => String, firstSuffix: AnyTreeParser[_]): Option[T] = {
+                             suffixDescr: => String, firstSuffix: AnyTreeParser[?]): Option[T] = {
           val pos = ll1Iterator.current.position
           val res = original.extract(ll1Iterator, suffixAdmits, suffixDescr, firstSuffix).map(f)
           // if is an AST, set position unless it is already set
@@ -266,12 +264,12 @@ object TreeParsers {
    */
   sealed abstract class FinalTreeParser[+U] extends AnyTreeParser[U]{
 
-    override final def setName(name: String): FinalTreeParser[U] = {
+    override final infix def setName(name: String): FinalTreeParser[U] = {
       super.setName(name)
       this
     }
 
-    override protected[TreeParsers] final def setNameResetable(name: => String): FinalTreeParser[U] = {
+    override protected[TreeParsers] final infix def setNameResetable(name: => String): FinalTreeParser[U] = {
       super.setNameResetable(name)
       this
     }
@@ -283,11 +281,11 @@ object TreeParsers {
     override def admits(ll1Iterator: LL1Iterator, suffixAdmits: => Boolean): Boolean = admits(ll1Iterator)
 
     override def extract(ll1Iterator: LL1Iterator, suffixAdmits: => Boolean,
-                         suffixDescr: => String, firstSuffix: AnyTreeParser[_]): Option[U] = extract(ll1Iterator)
+                         suffixDescr: => String, firstSuffix: AnyTreeParser[?]): Option[U] = extract(ll1Iterator)
 
     override def firstExpectedDescr(suffixDescr: => String): String = firstExpectedDescr
 
-    final override def map[T](f: U => T): FinalTreeParser[T] = {
+    final override infix def map[T](f: U => T): FinalTreeParser[T] = {
       val original = this
       new FinalTreeParser[T] {
         export original.admits
@@ -318,21 +316,21 @@ object TreeParsers {
      *
      * The parser throws an exception reporting that parser is not LL1 if both `this` and `right` match some token it is given
      */
-    final def OR[T](right: FinalTreeParser[T])(implicit errorReporter: ErrorReporter): FinalTreeParser[U | T] = {
+    final infix def OR[T](right: FinalTreeParser[T])(implicit errorReporter: ErrorReporter): FinalTreeParser[U | T] = {
       FinalDisjunction(this, right, errorReporter) setNameResetable s"${this.getName} OR ${right.getName}"
     }
 
   }
 
   trait Ignored {
-    def ignoredAnyTreeParser: AnyTreeParser[_]
+    def ignoredAnyTreeParser: AnyTreeParser[?]
 
     def getName: String = s"ignored(${ignoredAnyTreeParser.getName})"
   }
 
-  final case class NonFinalIgnored(ignored: AnyTreeParser[_]) extends Ignored {
+  final case class NonFinalIgnored(ignored: AnyTreeParser[?]) extends Ignored {
 
-    override def ignoredAnyTreeParser: AnyTreeParser[_] = ignored
+    override def ignoredAnyTreeParser: AnyTreeParser[?] = ignored
 
     def :::[T](left: AnyTreeParser[T]): AnyTreeParser[T] = {
       left ::: ignored map {
@@ -344,14 +342,14 @@ object TreeParsers {
       (leftIgnored ::: ignored).ignored
     }
 
-    def OR(right: Ignored)(implicit errorReporter: ErrorReporter): NonFinalIgnored = {
+    infix def OR(right: Ignored)(implicit errorReporter: ErrorReporter): NonFinalIgnored = {
       (this.ignored OR right.ignoredAnyTreeParser).ignored
     }
   }
 
-  final case class FinalIgnored(ignored: FinalTreeParser[_]) extends Ignored {
+  final case class FinalIgnored(ignored: FinalTreeParser[?]) extends Ignored {
 
-    override def ignoredAnyTreeParser: AnyTreeParser[_] = ignored
+    override def ignoredAnyTreeParser: AnyTreeParser[?] = ignored
 
     def :::[T](left: AnyTreeParser[T]): FinalTreeParser[T] = {
       left ::: ignored map {
@@ -363,11 +361,11 @@ object TreeParsers {
       (leftIgnored ::: ignored).ignored
     }
 
-    def OR(right: FinalIgnored)(implicit errorReporter: ErrorReporter): FinalIgnored = {
+    infix def OR(right: FinalIgnored)(implicit errorReporter: ErrorReporter): FinalIgnored = {
       (this.ignored OR right.ignored).ignored
     }
 
-    def OR(right: NonFinalIgnored)(implicit errorReporter: ErrorReporter): NonFinalIgnored = {
+    infix def OR(right: NonFinalIgnored)(implicit errorReporter: ErrorReporter): NonFinalIgnored = {
       (this.ignored OR right.ignored).ignored
     }
 
@@ -403,7 +401,7 @@ object TreeParsers {
     }
 
     override def extract(ll1Iterator: LL1Iterator, suffixAdmits: => Boolean,
-                         suffixDescr: => String, firstSuffix: AnyTreeParser[_]): Option[L ^: R] = {
+                         suffixDescr: => String, firstSuffix: AnyTreeParser[?]): Option[L ^: R] = {
       for
         l <- left.extract(ll1Iterator, right.admits(ll1Iterator, suffixAdmits), right.firstExpectedDescr(suffixDescr), right)
         r <- right.extract(ll1Iterator, suffixAdmits, suffixDescr, firstSuffix)
@@ -455,7 +453,7 @@ object TreeParsers {
     }
 
     override def extract(ll1Iterator: LL1Iterator, suffixAdmits: => Boolean,
-                         suffixDescr: => String, firstSuffix: AnyTreeParser[_]): Option[L | R] = {
+                         suffixDescr: => String, firstSuffix: AnyTreeParser[?]): Option[L | R] = {
       val leftAdmits = left.admits(ll1Iterator, suffixAdmits)
       val rightAdmits = right.admits(ll1Iterator, suffixAdmits)
       if (leftAdmits && rightAdmits) {
@@ -484,7 +482,7 @@ object TreeParsers {
 
   private abstract sealed class AbstractExtractorTreeParser[+U] extends FinalTreeParser[U]{
 
-    val pf: PartialFunction[Token, _]
+    val pf: PartialFunction[Token, ?]
     val pfCode: String
 
     override def admits(ll1Iterator: LL1Iterator): Boolean = {
@@ -539,7 +537,7 @@ object TreeParsers {
     }
 
     override def extract(ll1Iterator: LL1Iterator, suffixAdmits: => Boolean,
-                         suffixDescr: => String, firstSuffix: AnyTreeParser[_]): Option[Option[T]] = {
+                         suffixDescr: => String, firstSuffix: AnyTreeParser[?]): Option[Option[T]] = {
       val optAdmitsVal = optional.admits(ll1Iterator, suffixAdmits)
       val suffixAdmitsVal = suffixAdmits
       if (optAdmitsVal && suffixAdmitsVal){
@@ -579,7 +577,7 @@ object TreeParsers {
       s"Option 1 ($name1) expected: $opt1\n" + s"Option 2 ($name2) expected: $opt2")
   }
 
-  private inline def pfToDescr(inline pf: PartialFunction[_, _]): String = {
+  private inline def pfToDescr(inline pf: PartialFunction[?, ?]): String = {
     try {
       val raw = exprToString(pf)
       raw.dropWhile(c => c != '{').dropRight(1).replaceAll("compiler.Tokens.", "")

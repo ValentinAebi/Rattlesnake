@@ -1,8 +1,7 @@
 package compiler
 
-import org.junit.Test
-import Errors.*
 import compiler.CompilationStep.{ContextCreation, TailrecChecking}
+import compiler.Errors.*
 import compiler.TasksPipelines.frontend
 import compiler.ctxcreator.ContextCreator
 import compiler.io.SourceFile
@@ -10,6 +9,7 @@ import compiler.lowerer.Lowerer
 import compiler.tailrecchecker.TailrecChecker
 import compiler.typechecker.TypeChecker
 import org.junit.Assert.{assertEquals, fail}
+import org.junit.Test
 
 import scala.collection.mutable.ListBuffer
 

@@ -3,10 +3,10 @@ package compiler
 import compiler.Errors.{ErrorReporter, ExitCode, errorsExitCode}
 import compiler.backend.Backend
 import compiler.ctxcreator.ContextCreator
-import compiler.lowerer.Lowerer
 import compiler.io.StringWriter
 import compiler.irs.Asts
 import compiler.lexer.Lexer
+import compiler.lowerer.Lowerer
 import compiler.parser.Parser
 import compiler.prettyprinter.PrettyPrinter
 import compiler.tailrecchecker.TailrecChecker

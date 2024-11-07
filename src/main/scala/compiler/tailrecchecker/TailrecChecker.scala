@@ -3,8 +3,8 @@ package compiler.tailrecchecker
 import compiler.CompilationStep.TailrecChecking
 import compiler.Errors.ErrorReporter
 import compiler.irs.Asts
-import compiler.{AnalysisContext, CompilerStep, Errors}
 import compiler.irs.Asts.*
+import compiler.{AnalysisContext, CompilerStep, Errors}
 
 final class TailrecChecker(errorReporter: ErrorReporter)
   extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {

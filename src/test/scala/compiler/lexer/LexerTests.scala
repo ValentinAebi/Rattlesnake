@@ -1,10 +1,10 @@
 package compiler.lexer
 
-import lang.Operator.*
-import lang.Keyword.*
-import compiler.{Position, SourceCodeProvider}
-import compiler.irs.Tokens.*
 import compiler.Errors.{CompilationError, ErrorReporter, ExitCode}
+import compiler.irs.Tokens.*
+import compiler.{Position, SourceCodeProvider}
+import lang.Keyword.*
+import lang.Operator.*
 import org.junit.Assert.{assertArrayEquals, assertEquals, assertTrue, fail}
 import org.junit.Test
 
