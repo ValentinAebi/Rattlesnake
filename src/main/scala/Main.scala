@@ -2,7 +2,7 @@ import compiler.io.SourceFile
 import compiler.{FileExtensions, GenFilesNames, SourceCodeProvider, TasksPipelines}
 import org.objectweb.asm.Opcodes.{V11, V17, V1_8}
 
-import java.lang.reflect.InvocationTargetException
+import java.lang.reflect.{InvocationTargetException, Method}
 import java.nio.file.{Files, InvalidPathException, Path, Paths}
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -84,7 +84,6 @@ object Main {
           case "format" => (Format(argsMap), files)
           case "typecheck" => (TypeCheck(argsMap), files)
           case "lower" => (Lower(argsMap), files)
-          case "test" => (Test(argsMap), files)
           case _ => error(s"unknown command: $cmd")
         }
       }
@@ -174,22 +173,15 @@ object Main {
    */
   private case class Run(argsMap: MutArgsMap) extends Action {
     override def run(sources: List[SourceCodeProvider]): Unit = {
-      val outputName = getOutputNameArg(sources, argsMap, createDefaultBytecodeOutputName(sources))
       val compiler = TasksPipelines.compiler(
         getOutDirArg(argsMap),
-        getJavaVersionArg(argsMap),
-        outputName,
-        false
+        getJavaVersionArg(argsMap)
       )
       val programArgs = getProgramArgsArg(argsMap)
       reportUnknownArgsIfAny(argsMap)
       val writtenFilesPaths = compiler.apply(sources)
       val classes = getClasses(writtenFilesPaths)
-      val coreClass = classes.find(_.getName == outputName).get
-      val mainMethod = coreClass.getDeclaredMethods.find(_.getName == "main").getOrElse(error("no main function"))
-      if (!mainMethod.getParameterTypes.sameElements(Array(classOf[Array[String]]))){
-        error("no function with signature 'main(arr String)'")
-      }
+      val mainMethod = findMainMethod(classes)
       try {
         mainMethod.invoke(null, programArgs)
       } catch {
@@ -199,6 +191,24 @@ object Main {
       }
     }
   }
+  
+  private def findMainMethod(classes: List[Class[?]]): Method = {
+    val mainMethods = mutable.ListBuffer.empty[Method]
+    for
+      clazz <- classes
+      mth <- clazz.getDeclaredMethods
+      if isMainMethod(mth)
+    do mainMethods.addOne(mth)
+    if (mainMethods.isEmpty){
+      error("no main method found")
+    } else if (mainMethods.size > 1){
+      error("more than one main methods found")
+    } else mainMethods.head
+  }
+  
+  private def isMainMethod(mth: Method): Boolean =
+    mth.getName == "main"
+      && mth.getParameterTypes.sameElements(Array(classOf[Array[String]]))
 
   /**
    * Compile command
@@ -207,9 +217,7 @@ object Main {
     override def run(sources: List[SourceCodeProvider]): Unit = {
       val compiler = TasksPipelines.compiler(
         getOutDirArg(argsMap),
-        getJavaVersionArg(argsMap),
-        getOutputNameArg(sources, argsMap, createDefaultBytecodeOutputName(sources)),
-        false
+        getJavaVersionArg(argsMap)
       )
       reportUnknownArgsIfAny(argsMap)
       val cnt = compiler.apply(sources).size
@@ -224,8 +232,7 @@ object Main {
     override def run(sources: List[SourceCodeProvider]): Unit = {
       val bytecodeWriter = TasksPipelines.bytecodeWriter(
         getOutDirArg(argsMap),
-        getJavaVersionArg(argsMap),
-        getOutputNameArg(sources, argsMap, createDefaultBytecodeOutputName(sources))
+        getJavaVersionArg(argsMap)
       )
       reportUnknownArgsIfAny(argsMap)
       val cnt = bytecodeWriter.apply(sources).size
@@ -286,35 +293,6 @@ object Main {
     }
   }
 
-  private case class Test(argsMap: MutArgsMap) extends Action {
-    override def run(sources: List[SourceCodeProvider]): Unit = {
-      val compiler = TasksPipelines.compiler(
-        getOutDirArg(argsMap),
-        getJavaVersionArg(argsMap),
-        getOutputNameArg(sources, argsMap, createDefaultBytecodeOutputName(sources)),
-        true
-      )
-      reportUnknownArgsIfAny(argsMap)
-      val writtenFilesPaths = compiler.apply(sources)
-      val classes = getClasses(writtenFilesPaths)
-      val testClass = classes.find(_.getName == GenFilesNames.testFileName).get
-      val testMethods = testClass.getDeclaredMethods.filter(_.getName.startsWith(GenFilesNames.testMethodPrefix))
-      println(">> Running tests\n")
-      var successCnt = 0
-      for (testMethod, idx) <- testMethods.zipWithIndex do {
-        print((idx+1).toString ++ " - ")
-        val ret = testMethod.invoke(null)
-        successCnt += (if ret.asInstanceOf[Boolean] then 1 else 0)
-      }
-      val testsCnt = testMethods.length
-      val failuresCnt = testsCnt - successCnt
-      println("\n-------------------------------------")
-      println(s"Passed: $successCnt | Failed: $failuresCnt")
-      println(s"$successCnt/$testsCnt : " ++ (if failuresCnt == 0 then "All tests passed" else "There were errors"))
-      println("-------------------------------------")
-    }
-  }
-
   private def error(msg: String): Nothing = {
     System.err.println(msg)
     System.exit(cmdLineExitCode)
@@ -344,16 +322,13 @@ object Main {
         |
         |run: compile and run the program
         | args: -out-dir=...: required, directory where to write the output file
-        |       -out-file=...: optional, output file name (by default <input file name>_core
         |       -java-version=...: optional, can be '$java8Tag', '$java11Tag' or '$java17Tag' (default is '$java8Tag')
         |       -args=[...]: optional, arguments to be passed to the executed program (e.g. -args=[foo bar baz])
         |compile: compile the program
         | args: -out-dir=...: required, directory where to write the output file
-        |       -out-file=...: optional, output file name (by default <input file name>_core
         |       -java-version=...: optional, can be '$java8Tag', '$java11Tag' or '$java17Tag' (default is '$java8Tag')
         |asm: write JVM bytecode instructions to a text file
         | args: -out-dir=...: required, directory where to write the output file
-        |       -out-file=...: optional, output file name (by default <input file name>_core
         |       -java-version=...: optional, can be '$java8Tag', '$java11Tag' or '$java17Tag' (default is '$java8Tag')
         |format: reformat file
         | args: -out-dir=...: required, directory where to write the output file
@@ -368,10 +343,6 @@ object Main {
         |       -indent=...: optional, indent granularity (2 by default)
         |       -all-parenth: flag indicating that all parentheses should be displayed in expressions,
         |                     regardless of the priority of operations (takes no value)
-        |test: runs all the tests found in the given programs
-        | args: -out-dir=...: required, directory where to write the output file
-        |       -out-file=...: optional, output file name (by default <input file name>_core
-        |       -java-version=...: optional, can be '$java8Tag', '$java11Tag' or '$java17Tag' (default is '$java8Tag')
         |help: displays help (this)
         |""".stripMargin)
   }

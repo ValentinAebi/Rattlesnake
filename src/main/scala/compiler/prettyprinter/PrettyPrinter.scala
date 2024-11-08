@@ -62,13 +62,6 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         }
         addBracesList(fields, ",", onMultipleLines = true)
 
-      case TestDef(testName, body) =>
-        pps
-          .add(Test.str)
-          .addSpace()
-          .add(testName)
-        addAst(body)
-
       case ConstDef(constName, tpeOpt, value) =>
         pps
           .add(Const.str)
@@ -134,12 +127,6 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         addAst(callee)
         addParenthList(args)
 
-      case TailCall(funId, args) =>
-        pps
-          .add(funId)
-          .add("!")
-        addParenthList(args)
-
       case Indexing(indexed, arg) =>
         addAst(indexed)
         pps.add("[")
@@ -163,7 +150,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         }
         addParenthList(arrayElems, parenth = ("[", "]"))
 
-      case StructInit(structName, args, modifiable) =>
+      case StructOrModuleInstantiation(structName, args, modifiable) =>
         if (modifiable) {
           pps
             .add(Mut.str)

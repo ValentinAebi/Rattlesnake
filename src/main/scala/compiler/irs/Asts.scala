@@ -109,14 +109,31 @@ object Asts {
   }
 
   sealed abstract class TopLevelDef extends Ast
+  
+  sealed trait TypeDefTree extends TopLevelDef {
+    def name: TypeIdentifier
+    def directSupertypes: Seq[TypeIdentifier]
+    def isInterface: Boolean
+  }
+  
+  sealed trait ModuleOrPackageTree extends TypeDefTree {
+    def params: List[Param]
+    def functions: List[FunDef]
+  }
+  
+  final case class PackageDef(packageName: TypeIdentifier, functions: List[FunDef]) extends ModuleOrPackageTree {
+    override def name: TypeIdentifier = packageName
+    override def params: List[Param] = Nil
+    override def directSupertypes: Seq[TypeIdentifier] = Nil
+    override def isInterface: Boolean = false
+    override def children: List[Ast] = functions
+  }
 
-  /**
-   * Function definition
-   */
-  final case class FunDef(funName: FunOrVarId, params: List[Param], optRetType: Option[Type], body: Block) extends TopLevelDef {
-    val signature: FunctionSignature = FunctionSignature(funName, params.map(_.tpe), optRetType.getOrElse(VoidType))
-
-    override def children: List[Ast] = params :+ body
+  final case class ModuleDef(moduleName: TypeIdentifier, params: List[Param], functions: List[FunDef]) extends ModuleOrPackageTree {
+    override def name: TypeIdentifier = moduleName
+    override def directSupertypes: Seq[TypeIdentifier] = Nil
+    override def isInterface: Boolean = false
+    override def children: List[Ast] = params ++ functions
   }
 
   /**
@@ -127,17 +144,18 @@ object Asts {
                               fields: List[Param],
                               directSupertypes: Seq[TypeIdentifier],
                               isInterface: Boolean
-                            ) extends TopLevelDef {
+                            ) extends TypeDefTree {
+    override def name: TypeIdentifier = structName
     override def children: List[Ast] = fields
   }
-  
-  
 
   /**
-   * Test definition
+   * Function definition
    */
-  final case class TestDef(testName: FunOrVarId, body: Block) extends TopLevelDef {
-    override def children: List[Ast] = List(body)
+  final case class FunDef(funName: FunOrVarId, params: List[Param], optRetType: Option[Type], body: Block) extends TopLevelDef {
+    val signature: FunctionSignature = FunctionSignature(funName, params.map(_.tpe), optRetType.getOrElse(VoidType))
+
+    override def children: List[Ast] = params :+ body
   }
 
   /**
@@ -220,16 +238,20 @@ object Asts {
   final case class VariableRef(name: FunOrVarId) extends Expr {
     override def children: List[Ast] = Nil
   }
+  
+  final case class MeRef() extends Expr {
+    override def children: List[Ast] = Nil
+  }
+  
+  final case class PackageRef(pkgName: TypeIdentifier) extends Expr {
+    override def children: List[Ast] = Nil
+  }
 
   /**
    * Function call: `callee(args)`
    */
   final case class Call(callee: Expr, args: List[Expr]) extends Expr {
     override def children: List[Ast] = callee :: args
-  }
-  
-  final case class TailCall(funId: FunOrVarId, args: List[Expr]) extends Expr {
-    override def children: List[Ast] = args
   }
 
   /**
@@ -256,7 +278,7 @@ object Asts {
   /**
    * Initialization of a struct, e.g. `new Foo { 0, 1 }`
    */
-  final case class StructInit(structName: TypeIdentifier, args: List[Expr], modifiable: Boolean) extends Expr {
+  final case class StructOrModuleInstantiation(typeId: TypeIdentifier, args: List[Expr], modifiable: Boolean) extends Expr {
     override def children: List[Ast] = args
   }
 

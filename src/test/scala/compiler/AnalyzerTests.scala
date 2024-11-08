@@ -6,7 +6,6 @@ import compiler.TasksPipelines.frontend
 import compiler.ctxcreator.ContextCreator
 import compiler.io.SourceFile
 import compiler.lowerer.Lowerer
-import compiler.tailrecchecker.TailrecChecker
 import compiler.typechecker.TypeChecker
 import org.junit.Assert.{assertEquals, fail}
 import org.junit.Test
@@ -424,7 +423,6 @@ class AnalyzerTests {
         .andThen(new ContextCreator(er))
         .andThen(new TypeChecker(er))
         .andThen(new Lowerer())
-        .andThen(new TailrecChecker(er))
     val testFile = SourceFile(s"$srcDir/$srcFileName.${FileExtensions.rattlesnake}")
     try {
       pipeline.apply(List(testFile))

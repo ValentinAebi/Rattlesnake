@@ -10,7 +10,7 @@ import compiler.{CompilerStep, Errors, Position}
 import identifiers.*
 import lang.Keyword.*
 import lang.Operator.*
-import lang.Types.{ArrayType, StructType, Type}
+import lang.Types.{ArrayType, StructOrModuleType, Type}
 import lang.{Keyword, Operator, Operators, Types}
 
 import scala.compiletime.uninitialized
@@ -70,6 +70,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private val dot = op(Dot).ignored
   private val colon = op(Colon).ignored
   private val doubleColon = colon ::: colon
+  private val maybeSemicolon = opt(op(Semicolon)).ignored
   private val -> = (op(Minus) ::: op(GreaterThan)).ignored
   private val `=>` = (op(Assig) ::: op(GreaterThan)).ignored
   private val lessThan = op(LessThan).ignored
@@ -92,7 +93,23 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     }
   } setName "source"
 
-  private lazy val topLevelDef: P[TopLevelDef] = funDef OR structDef OR testDef OR constDef
+  private lazy val topLevelDef: P[TopLevelDef] = moduleDef OR packageDef OR structDef OR constDef
+
+  private lazy val packageDef: P[PackageDef] = {
+    kw(Package).ignored ::: highName ::: openBrace ::: repeat(funDef ::: maybeSemicolon) ::: closeBrace map {
+      case packageName ^: functions =>
+        PackageDef(packageName, functions)
+    }
+  } setName "packageDef"
+
+  private lazy val moduleDef: P[ModuleDef] = {
+    kw(Module).ignored ::: highName
+      ::: openParenth ::: repeatWithSep(param, comma) ::: closeParenth
+      ::: openBrace ::: repeat(funDef ::: maybeSemicolon) ::: closeBrace map {
+      case moduleName ^: params ^: functions =>
+        ModuleDef(moduleName, params, functions)
+    }
+  } setName "moduleDef"
 
   private lazy val funDef = {
     kw(Fn).ignored ::: lowName ::: openParenth ::: repeatWithSep(param, comma) ::: closeParenth ::: opt(-> ::: tpe) ::: block map {
@@ -115,12 +132,6 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
         StructDef(name, fields, supertypesOpt.getOrElse(Seq.empty), structOrInterface == Interface)
     }
   } setName "structDef"
-
-  private lazy val testDef = {
-    kw(Test).ignored ::: lowName ::: block map {
-      case name ^: body => TestDef(name, body)
-    }
-  } setName "testDef"
 
   private lazy val possiblyNegativeNumericLiteralValue: FinalTreeParser[NumericLiteral] = {
     (numericLiteralValue OR (op(Minus) ::: numericLiteralValue)) map {
@@ -150,7 +161,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   private lazy val modifiableType: P[Type] = recursive {
     kw(Mut).ignored ::: unmodifiableType map {
-      case StructType(typeName, _) => StructType(typeName, modifiable = true)
+      case StructOrModuleType(typeName, _) => StructOrModuleType(typeName, modifiable = true)
       case ArrayType(elemType, _) => ArrayType(elemType, modifiable = true)
       case tpe =>
         val pos = ll1Iterator.current.position // imprecise (takes the position on the next token)
@@ -164,7 +175,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "unmodifiableType"
 
   private lazy val atomicType = {
-    highName map (name => Types.primTypeFor(name).getOrElse(StructType(name, modifiable = false)))
+    highName map (name => Types.primTypeFor(name).getOrElse(StructOrModuleType(name, modifiable = false)))
   } setName "atomicType"
 
   private lazy val arrayType = recursive {
@@ -210,7 +221,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "noBinopExpr"
 
   private lazy val binopArg = recursive {
-    (noBinopExpr OR mutPossiblyFilledArrayInit OR arrayInit OR structInit) ::: opt((kw(As) OR kw(Is)) ::: tpe) map {
+    (noBinopExpr OR mutPossiblyFilledArrayInit OR arrayInit OR structOrModuleInstantiation) ::: opt((kw(As) OR kw(Is)) ::: tpe) map {
       case expression ^: None => expression
       case expression ^: Some(As ^: tp) => Cast(expression, tp)
       case expression ^: Some(Is ^: tp) => TypeTest(expression, tp)
@@ -226,28 +237,24 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     openingBracket ::: expr ::: closingBracket
   } setName "indexing"
 
-  private lazy val varRefOrFunCall = recursive {
-    lowName ::: opt(opt(op(ExclamationMark)) ::: callArgs) map {
-      case name ^: None =>
-        VariableRef(name)
-      case name ^: Some(None ^: args) =>
-        Call(VariableRef(name), args)
-      case name ^: Some(Some(_) ^: args) =>
-        TailCall(name, args)
-    }
-  } setName "varRefOrCallArgs"
+  private lazy val varRef = lowName map (name => VariableRef(name))
 
-  private lazy val atomicExpr = {
-    varRefOrFunCall OR literalValue OR filledArrayInit OR parenthesizedExpr
+  private lazy val me = kw(Me) map (_ => MeRef())
+  
+  private lazy val pkgRef = highName map (PackageRef(_))
+
+  private lazy val atomicExpr = recursive {
+    varRef OR me OR pkgRef OR literalValue OR filledArrayInit OR parenthesizedExpr
   } setName "atomicExpr"
 
   private lazy val selectOrIndexingChain = recursive {
-    atomicExpr ::: repeat((dot ::: lowName) OR indexing) map {
+    atomicExpr ::: repeat((dot ::: lowName) OR indexing OR callArgs) map {
       case atExpr ^: selOrInds =>
         selOrInds.foldLeft(atExpr) { (acc, curr) =>
           curr match
             case field: NormalFunOrVarId => Select(acc, field)
             case idx: Expr => Indexing(acc, idx)
+            case args: List[Expr] => Call(acc, args)
         }
     }
   } setName "selectOrIndexingChain"
@@ -280,11 +287,11 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     }
   } setName "filledArrayInit"
 
-  private lazy val structInit = recursive {
+  private lazy val structOrModuleInstantiation = recursive {
     kw(New).ignored ::: opt(kw(Mut)) ::: highName ::: openBrace ::: repeatWithSep(expr, comma) ::: closeBrace map {
-      case optMut ^: structName ^: args => StructInit(structName, args, optMut.isDefined)
+      case optMut ^: tid ^: args => StructOrModuleInstantiation(tid, args, optMut.isDefined)
     }
-  } setName "structInit"
+  } setName "structOrModuleInstantiation"
 
   private lazy val stat: P[Statement] = {
     exprOrAssig OR valDef OR varDef OR whileLoop OR forLoop OR ifThenElse OR returnStat OR panicStat

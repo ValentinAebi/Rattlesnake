@@ -1,22 +1,21 @@
 package compiler
 
-import compiler.AnalysisContext
+import compiler.AnalysisContext.{FunctionFound, FunctionNotFound, MethodResolutionResult, ModuleNotFound}
 import compiler.CompilationStep.ContextCreation
-import compiler.Errors.{CompilationError, Err, ErrorReporter, errorsExitCode}
-import compiler.irs.Asts.{ConstDef, FunDef, StructDef, TestDef}
-import identifiers.{FunOrVarId, TypeIdentifier}
+import compiler.Errors.{Err, ErrorReporter, errorsExitCode}
+import compiler.irs.Asts.*
+import identifiers.{FunOrVarId, IntrinsicsPackageId, TypeIdentifier}
+import lang.*
 import lang.SubtypeRelation.subtypeOf
 import lang.Types.PrimitiveType.{NothingType, VoidType}
 import lang.Types.Type
-import lang.{BuiltInFunctions, FunctionSignature, StructSignature, Types}
 
-import scala.annotation.tailrec
 import scala.collection.mutable
 
 final case class AnalysisContext(
-                                  functions: Map[FunOrVarId, FunctionSignature],
+                                  modules: Map[TypeIdentifier, ModuleSignature],
+                                  packages: Map[TypeIdentifier, PackageSignature],
                                   structs: Map[TypeIdentifier, StructSignature],
-                                  tests: Set[FunOrVarId],
                                   constants: Map[FunOrVarId, Type]
                                 ) {
 
@@ -27,72 +26,98 @@ final case class AnalysisContext(
   def knowsType(tpe: Type): Boolean = {
     tpe match {
       case _: Types.PrimitiveType => true
-      case Types.StructType(typeName, _) => structs.contains(typeName)
+      case Types.StructOrModuleType(typeName, _) => knowsUserDefType(typeName)
       case Types.ArrayType(elemType, _) => knowsType(elemType)
       case Types.UnionType(unitedTypes) => unitedTypes.forall(knowsType)
       case Types.UndefinedType => true
     }
   }
 
+  def knowsUserDefType(tid: TypeIdentifier): Boolean =
+    knowsPackageOrModule(tid) || knowsStruct(tid)
+
+  def knowsPackageOrModule(tid: TypeIdentifier): Boolean = knowsPackage(tid) || knowsModule(tid)
+
+  def knowsPackage(tid: TypeIdentifier): Boolean = packages.contains(tid)
+
+  def knowsModule(tid: TypeIdentifier): Boolean = modules.contains(tid)
+
+  def knowsStruct(tid: TypeIdentifier): Boolean = structs.contains(tid)
+
+  def resolveType(tid: TypeIdentifier): Option[TypeSignature] =
+    structs.get(tid).orElse(modules.get(tid)).orElse(packages.get(tid))
+
+  def resolveFunc(owner: TypeIdentifier, methodName: FunOrVarId): MethodResolutionResult = {
+    modules.get(owner).orElse(packages.get(owner)) map { funcRepo =>
+      funcRepo.functions.get(methodName) map { sig =>
+        FunctionFound(sig)
+      } getOrElse FunctionNotFound
+    } getOrElse ModuleNotFound
+  }
+
 }
 
 object AnalysisContext {
 
+  sealed trait MethodResolutionResult {
+    def getOrThrow(): FunctionSignature
+  }
+
+  final case class FunctionFound(signature: FunctionSignature) extends MethodResolutionResult {
+    override def getOrThrow(): FunctionSignature = signature
+  }
+
+  object ModuleNotFound extends MethodResolutionResult {
+    override def getOrThrow(): FunctionSignature = throw new NoSuchElementException()
+  }
+
+  object FunctionNotFound extends MethodResolutionResult {
+    override def getOrThrow(): FunctionSignature = throw new NoSuchElementException()
+  }
+
   final class Builder(errorReporter: ErrorReporter) {
-    private val functions: mutable.Map[FunOrVarId, FunctionSignature] = mutable.Map.empty
+    private val modules: mutable.Map[TypeIdentifier, ModuleSignature] = mutable.Map.empty
+    private val packages: mutable.Map[TypeIdentifier, PackageSignature] = mutable.Map(
+      IntrinsicsPackageId -> PackageSignature(
+        IntrinsicsPackageId,
+        Intrinsics.builtInFunctions
+      )
+    )
     private val structs: mutable.Map[TypeIdentifier, (StructSignature, Option[Position])] = mutable.Map.empty
-    private val tests: mutable.Set[FunOrVarId] = mutable.Set.empty
     private val constants: mutable.Map[FunOrVarId, Type] = mutable.Map.empty
 
-    def addFunction(funDef: FunDef): Unit = {
-      val name = funDef.funName
-      if (BuiltInFunctions.builtInFunctions.contains(name)) {
-        errorReporter.push(Err(ContextCreation, s"function name '$name' conflicts with built-in function", funDef.getPosition))
-      } else if (functions.contains(name)) {
-        errorReporter.push(Err(ContextCreation, s"redefinition of function '$name'", funDef.getPosition))
-      } else {
-        functions.put(name, funDef.signature)
+    def addModule(moduleDef: ModuleDef): Unit = {
+      val moduleName = moduleDef.moduleName
+      if (checkTypeNotAlreadyDefined(moduleName, moduleDef.getPosition)) {
+        val paramsMap = buildParamsMap(moduleDef)
+        val functions = extractFunctions(moduleDef)
+        val moduleSig = ModuleSignature(moduleName, paramsMap, functions)
+        modules.put(moduleName, moduleSig)
+      }
+    }
+
+    def addPackage(packageDef: PackageDef): Unit = {
+      val packageName = packageDef.packageName
+      if (checkTypeNotAlreadyDefined(packageName, packageDef.getPosition)) {
+        val functions = extractFunctions(packageDef)
+        val sig = PackageSignature(packageName, functions)
+        packages.put(packageName, sig)
       }
     }
 
     def addStruct(structDef: StructDef): Unit = {
       val name = structDef.structName
-      if (structs.contains(name)) {
-        errorReporter.push(Err(ContextCreation, s"redefinition of struct '$name'", structDef.getPosition))
-      } else {
-        val fieldsMap = new mutable.LinkedHashMap[FunOrVarId, StructSignature.FieldInfo]()
-        for param <- structDef.fields do {
-          param.paramNameOpt match {
-            case None =>
-              errorReporter.push(Err(ContextCreation, "struct fields must be named", param.getPosition))
-            case Some(paramName) =>
-              if (param.tpe == VoidType || param.tpe == NothingType) {
-                errorReporter.push(Err(ContextCreation, s"struct field cannot have type '${param.tpe}'", param.getPosition))
-              } else if (fieldsMap.contains(paramName)) {
-                errorReporter.push(Err(ContextCreation, s"duplicated field: '$paramName'", param.getPosition))
-              } else {
-                fieldsMap.put(paramName, StructSignature.FieldInfo(param.tpe, param.isReassignable))
-              }
-          }
-        }
+      if (checkTypeNotAlreadyDefined(name, structDef.getPosition)) {
+        val fieldsMap = buildFieldsMap(structDef)
         val sig = StructSignature(name, fieldsMap, structDef.directSupertypes, structDef.isInterface)
         structs.put(name, (sig, structDef.getPosition))
-      }
-    }
-
-    def addTest(testDef: TestDef): Unit = {
-      import testDef.testName
-      if (tests.contains(testName)) {
-        errorReporter.push(Err(ContextCreation, s"redefinition of test $testName", testDef.getPosition))
-      } else {
-        tests.addOne(testName)
       }
     }
 
     def addConstant(constDef: ConstDef): Unit = {
       import constDef.constName
       if (constants.contains(constName)) {
-        errorReporter.push(Err(ContextCreation, s"redefinition of constant $constName", constDef.getPosition))
+        reportError(s"redefinition of constant $constName", constDef.getPosition)
       } else {
         // type is already known since value is a Literal
         constants(constName) = constDef.value.getType
@@ -103,13 +128,86 @@ object AnalysisContext {
       val builtStructsMap = structs.map((tid, sigAndPos) => (tid, sigAndPos._1)).toMap
       checkSubtyping(builtStructsMap)
       checkSubtypingCycles(builtStructsMap)
-      functions.addAll(BuiltInFunctions.builtInFunctions)
       new AnalysisContext(
-        functions.toMap,
+        modules.toMap,
+        packages.toMap,
         builtStructsMap,
-        tests.toSet,
         constants.toMap
       )
+    }
+
+    private def extractFunctions(repo: ModuleOrPackageTree): Map[FunOrVarId, FunctionSignature] = {
+      val functions = mutable.Map.empty[FunOrVarId, FunctionSignature]
+      for funDef <- repo.functions do {
+        val name = funDef.funName
+        if (functions.contains(name)) {
+          reportError(s"redefinition of function '$name'", funDef.getPosition)
+        } else {
+          functions.put(name, funDef.signature)
+        }
+      }
+      functions.toMap
+    }
+
+    private def buildParamsMap(moduleDef: ModuleDef) = {
+      val paramsMap = new mutable.LinkedHashMap[FunOrVarId, Type]()
+      for param <- moduleDef.params do {
+        param.paramNameOpt match {
+          case None =>
+            reportError("module parameters must be named", param.getPosition)
+          case Some(paramName) =>
+            if (param.isReassignable) {
+              reportError("module parameters can not be reassignable", param.getPosition)
+            }
+            if (checkIsNotVoidOrNothing(param.tpe, param.getPosition)) {
+              if (paramsMap.contains(paramName)) {
+                reportError(s"duplicate parameter: '$paramName'", param.getPosition)
+              } else {
+                paramsMap.put(paramName, param.tpe)
+              }
+            }
+        }
+      }
+      paramsMap
+    }
+
+    private def buildFieldsMap(structDef: StructDef) = {
+      val fieldsMap = new mutable.LinkedHashMap[FunOrVarId, StructSignature.FieldInfo]()
+      for param <- structDef.fields do {
+        param.paramNameOpt match {
+          case None =>
+            reportError("struct fields must be named", param.getPosition)
+          case Some(paramName) =>
+            if (checkIsNotVoidOrNothing(param.tpe, param.getPosition)) {
+              if (fieldsMap.contains(paramName)) {
+                reportError(s"duplicate field: '$paramName'", param.getPosition)
+              } else {
+                fieldsMap.put(paramName, StructSignature.FieldInfo(param.tpe, param.isReassignable))
+              }
+            }
+        }
+      }
+      fieldsMap
+    }
+
+    private def reportError(msg: String, posOpt: Option[Position]): Unit = {
+      errorReporter.push(Err(ContextCreation, msg, posOpt))
+    }
+
+    private def checkTypeNotAlreadyDefined(tid: TypeIdentifier, posOpt: Option[Position]): Boolean = {
+      val alreadyDefined = structs.contains(tid) || modules.contains(tid) || packages.contains(tid)
+      if (alreadyDefined) {
+        reportError(s"$tid is already defined", posOpt)
+      }
+      !alreadyDefined
+    }
+
+    private def checkIsNotVoidOrNothing(tpe: Type, posOpt: Option[Position]): Boolean = {
+      val isVoidOrNothing = tpe == VoidType || tpe == NothingType
+      if (isVoidOrNothing) {
+        reportError(s"type $tpe is illegal at this place", posOpt)
+      }
+      !isVoidOrNothing
     }
 
     private def checkSubtyping(builtStructMap: Map[TypeIdentifier, StructSignature]): Unit = {
@@ -134,11 +232,11 @@ object AnalysisContext {
                       s"$structId cannot subtype $directSupertypeId: missing field $fldName", posOpt))
               }
             } else {
-              errorReporter.push(Err(ContextCreation, s"struct $directSupertypeId is not an interface", posOpt))
+              reportError(s"struct $directSupertypeId is not an interface", posOpt)
             }
           }
           case None =>
-            errorReporter.push(Err(ContextCreation, s"interface $directSupertypeId is unknown", posOpt))
+            reportError(s"interface $directSupertypeId is unknown", posOpt)
         }
       }
     }
@@ -165,16 +263,16 @@ object AnalysisContext {
       val maxDepth = builtStructMap.size
       var found = false
       val iter = structs.iterator
-      while (iter.hasNext && !found){
+      while (iter.hasNext && !found) {
 
         val (currId, (_, posOpt)) = iter.next()
 
         def findCycleFrom(start: TypeIdentifier, target: TypeIdentifier, depth: Int): Unit = {
-          if (start == target && depth > 0){
-            errorReporter.push(Err(ContextCreation, s"cyclic subtyping: cycle involves $start", posOpt))
+          if (start == target && depth > 0) {
+            reportError(s"cyclic subtyping: cycle involves $start", posOpt)
             found = true
           } else if (depth < maxDepth) {
-            for (child <- builtStructMap.apply(start).directSupertypes){
+            for (child <- builtStructMap.apply(start).directSupertypes) {
               findCycleFrom(child, target, depth + 1)
             }
           }

@@ -38,10 +38,10 @@ object Types {
   }
 
   /**
-   * Type of a structure instance
+   * Type of a structure or module or package
    * @param modifiable whether or not the fields of the struct are allowed to be modified from this reference
    */
-  final case class StructType(typeName: TypeIdentifier, modifiable: Boolean) extends Type {
+  final case class StructOrModuleType(typeName: TypeIdentifier, modifiable: Boolean) extends Type {
 
     override def maybeModifiable: Boolean = modifiable
 

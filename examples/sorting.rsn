@@ -1,41 +1,45 @@
 
-fn swap(array: mut arr Int, i1: Int, i2: Int) -> Void {
-    val tmp = array[i1];
-    array[i1] = array[i2];
-    array[i2] = tmp;
-}
+package Sorting {
 
-fn selectionSort(array: mut arr Int) {
-    for var i = 0; i < #array; i += 1 {
-        val maxIdx = maxIdx(array, i);
-        swap(array, i, maxIdx)
-    };
-}
+    fn swap(array: mut arr Int, i1: Int, i2: Int) -> Void {
+        val tmp = array[i1];
+        array[i1] = array[i2];
+        array[i2] = tmp;
+    }
 
-// returns the index of the maximal element of the array
-fn maxIdx(array: arr Int, firstIdx: Int) -> Int {
-    if #array == 0 {
-        panic "max of empty array"
-    } else {
-        var maxIdx = firstIdx;
-        for val len = #array, var i = firstIdx + 1; i < len; i += 1 {
-            if array[i] > array[maxIdx] {
-                maxIdx = i;
-            }
+    fn selectionSort(array: mut arr Int) {
+        for var i = 0; i < #array; i += 1 {
+            val maxIdx = me.maxIdx(array, i);
+            me.swap(array, i, maxIdx)
         };
-        return maxIdx
     }
-}
 
-fn main(args: arr String) {
-    val nbs = arr Int[10];
-    for var i = 0; i < 10; i += 1 {
-        nbs[i] = (2*i - i*i + 200) % 25;
-        nbs[i] += 1;
-    };
-    selectionSort(nbs);
-    for var i = 0; i < 10; i += 1 {
-        print(intToString(nbs[i]));
-        print(" ")
+    // returns the index of the maximal element of the array
+    fn maxIdx(array: arr Int, firstIdx: Int) -> Int {
+        if #array == 0 {
+            panic "max of empty array"
+        } else {
+            var maxIdx = firstIdx;
+            for val len = #array, var i = firstIdx + 1; i < len; i += 1 {
+                if array[i] > array[maxIdx] {
+                    maxIdx = i;
+                }
+            };
+            return maxIdx
+        }
     }
+
+    fn main(args: arr String) {
+        val nbs = arr Int[10];
+        for var i = 0; i < 10; i += 1 {
+            nbs[i] = (2*i - i*i + 200) % 25;
+            nbs[i] += 1;
+        };
+        Sorting.selectionSort(nbs);
+        for var i = 0; i < 10; i += 1 {
+            print(intToString(nbs[i]));
+            print(" ")
+        }
+    }
+
 }

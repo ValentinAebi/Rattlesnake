@@ -4,7 +4,7 @@ import identifiers.*
 import lang.Types.ArrayType
 import lang.Types.PrimitiveType.*
 
-object BuiltInFunctions {
+object Intrinsics {
   
   val print: NormalFunOrVarId = NormalFunOrVarId("print")
   val intToString: NormalFunOrVarId = NormalFunOrVarId("intToString")

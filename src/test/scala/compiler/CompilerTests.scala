@@ -414,9 +414,8 @@ class CompilerTests {
 
   private def compileAndLoadClasses(srcFileName: String): Seq[Class[?]] = {
     val tmpDir = Path.of(tmpTestDir, srcFileName)
-    val outputName = srcFileName.withHeadUppercase + GenFilesNames.coreFilePostfix
     val errorReporter = new ErrorReporter(errorsConsumer = System.err.print, exit = failExit)
-    val compiler = TasksPipelines.compiler(tmpDir, javaVersionCode, outputName, true, errorReporter)
+    val compiler = TasksPipelines.compiler(tmpDir, javaVersionCode, true, errorReporter)
     val testFile = SourceFile(s"$srcDir/$srcFileName.${FileExtensions.rattlesnake}")
     val writtenFilesPaths = compiler.apply(List(testFile))
     val classes = {

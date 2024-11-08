@@ -1,5 +1,6 @@
 package compiler.backend
 
+import compiler.AnalysisContext
 import compiler.backend.DescriptorsCreator.descriptorForType
 import identifiers.TypeIdentifier
 import lang.Types.*
@@ -29,7 +30,7 @@ object TypesConverter {
       case PrimitiveType.BoolType => BOOLEAN_TYPE.toSome
       case PrimitiveType.VoidType => VOID_TYPE.toSome
       case PrimitiveType.NothingType => VOID_TYPE.toSome
-      case _: (PrimitiveType.StringType.type | StructType | ArrayType | UnionType) => None
+      case _: (PrimitiveType.StringType.type | StructOrModuleType | ArrayType | UnionType) => None
       case Types.UndefinedType => assert(false)
   }
 
@@ -42,7 +43,7 @@ object TypesConverter {
       case _ => None
   }
   
-  def internalNameOf(tpe: Types.Type)(using structs: Map[TypeIdentifier, StructSignature]): String = {
+  def internalNameOf(tpe: Types.Type)(using ctx: AnalysisContext): String = {
     tpe match
       case PrimitiveType.IntType => "I"
       case PrimitiveType.DoubleType => "D"
@@ -51,9 +52,9 @@ object TypesConverter {
       case PrimitiveType.StringType => "java/lang/String"
       case PrimitiveType.VoidType => "V"
       case PrimitiveType.NothingType => "V"
-      case StructType(typeName, _) if !structs.apply(typeName).isInterface => s"$typeName"
+      case StructOrModuleType(typeName, _) if !ctx.resolveType(typeName).get.isInterface => s"$typeName"
       case ArrayType(elemType, _) => s"[${descriptorForType(elemType)}"
-      case StructType(_, _) | UnionType(_) => "java/lang/Object"
+      case StructOrModuleType(_, _) | UnionType(_) => "java/lang/Object"
       case UndefinedType => assert(false)
   }
 

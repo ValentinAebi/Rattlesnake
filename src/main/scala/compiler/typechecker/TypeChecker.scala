@@ -1,11 +1,12 @@
 package compiler.typechecker
 
+import compiler.AnalysisContext.{FunctionFound, FunctionNotFound, ModuleNotFound}
 import compiler.CompilationStep.TypeChecking
-import compiler.Errors.{CompilationError, Err, ErrorReporter, Warning}
+import compiler.Errors.{Err, ErrorReporter, Warning}
 import compiler.irs.Asts.*
 import compiler.typechecker.TypeCheckingContext.LocalInfo
 import compiler.{AnalysisContext, CompilerStep, Position}
-import identifiers.{FunOrVarId, TypeIdentifier}
+import identifiers.{FunOrVarId, IntrinsicsPackageId, TypeIdentifier}
 import lang.*
 import lang.Operator.{Equality, Inequality, Sharp}
 import lang.StructSignature.FieldInfo
@@ -19,7 +20,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   override def apply(input: (List[Source], AnalysisContext)): (List[Source], AnalysisContext) = {
     val (sources, analysisContext) = input
     for src <- sources do {
-      check(src, TypeCheckingContext(analysisContext, currentFunctionName = None))  // expectedRetType is be ignored here
+      check(src, TypeCheckingContext(analysisContext, expectedRetType = None, currentModule = None))
     }
     errorReporter.displayAndTerminateIfErrors()
     sources.foreach(_.assertAllTypesAreSet())
@@ -44,10 +45,21 @@ final class TypeChecker(errorReporter: ErrorReporter)
         newCtx.writeLocalsRelatedWarnings(errorReporter)
         VoidType
 
-      case StructDef(_, fields, _, _) =>
-        for param@Param(_, tpe, _) <- fields do {
-          typeMustBeKnown(tpe, ctx, param.getPosition)
+      case ModuleDef(moduleName, params, functions) =>
+        typesMustBeKnownInParams(params, ctx)
+        for func <- functions do {
+          check(func, ctx.copyWithCurrentModule(moduleName))
         }
+        VoidType
+
+      case PackageDef(packageName, functions) =>
+        for func <- functions do {
+          check(func, ctx.copyWithCurrentModule(packageName))
+        }
+        VoidType
+
+      case StructDef(_, fields, _, _) =>
+        typesMustBeKnownInParams(fields, ctx)
         VoidType
 
       case funDef@FunDef(funName, params, optRetType, body) =>
@@ -57,7 +69,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
           }
         }
         val expRetType = optRetType.getOrElse(VoidType)
-        val bodyCtx = ctx.copyWithoutLocals(funName)
+        val bodyCtx = ctx.copyForNewFunction(expRetType)
         for param <- params do {
           val paramType = typeMustBeKnown(param.tpe, ctx, param.getPosition)
           param.paramNameOpt.foreach { paramName =>
@@ -83,10 +95,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
           reportError(s"cannot prove that function '$funName' with return type '$NothingType' cannot return", funDef.getPosition)
         }
         bodyCtx.writeLocalsRelatedWarnings(errorReporter)
-        VoidType
-
-      case TestDef(_, body) =>
-        check(body, ctx)
         VoidType
 
       case constDef@ConstDef(constName, tpeOpt, value) =>
@@ -128,23 +136,41 @@ final class TypeChecker(errorReporter: ErrorReporter)
         ctx.localIsQueried(name)
         mustBeKnown(name, ctx, varRef.getPosition)
 
-      case call@Call(callee, args) =>
-        callee match {
-          case varRef@VariableRef(name) =>
-            varRef.setType(UndefinedType) // useless but o.w. the check that all expressions have a type fails
-            checkFunCall(name, args, call.getPosition, ctx)
-          case _ => reportError("syntax error, only functions can be called", call.getPosition)
+      case MeRef() =>
+        StructOrModuleType(ctx.currentModule.get, modifiable = false)
+
+      case pkg@PackageRef(packageName) =>
+        ctx.resolveType(packageName) match {
+          case Some(PackageSignature(_, _)) => StructOrModuleType(packageName, modifiable = false)
+          case Some(_) => reportError(s"$packageName is not a package and is thus not allowed here", pkg.getPosition)
+          case None => reportError(s"not found: $packageName", pkg.getPosition)
         }
 
-      case call@TailCall(funId, args) =>
-        if (funId != ctx.currentFunctionName.get){
-          reportError("tail calls can only refer to the enclosing function", call.getPosition)
+      case call@Call(callee, args) =>
+        callee match {
+          // intrinsic
+          case varRef@VariableRef(funName) =>
+            markWithUndefinedType(varRef)
+            checkFunCall(IntrinsicsPackageId, funName, args, call.getPosition, ctx)
+          // function in current module
+          case select@Select(meRef: MeRef, funName) =>
+            markWithUndefinedType(select, meRef)
+            checkFunCall(ctx.currentModule.get, funName, args, call.getPosition, ctx)
+          // module function
+          case select@Select(lhs: VariableRef, funName) =>
+            markWithUndefinedType(select, lhs)
+            check(lhs, ctx) match {
+              case StructOrModuleType(typeName, _) =>
+                checkFunCall(typeName, funName, args, call.getPosition, ctx)
+              case lhsType =>
+                reportError(s"expected a module type, found $lhsType", lhs.getPosition)
+            }
+          // package function
+          case select@Select(pkgRef@PackageRef(pkgId), funName) =>
+            markWithUndefinedType(select, pkgRef)
+            checkFunCall(pkgId, funName, args, call.getPosition, ctx)
+          case _ => reportError("syntax error, only functions can be invoked", call.getPosition)
         }
-        if (BuiltInFunctions.builtInFunctions.contains(funId)){
-          reportError("built-in functions do not support tail calls", call.getPosition)
-        }
-        // the fact that the call is indeed in tail position is checked in the backend
-        checkFunCall(funId, args, call.getPosition, ctx)
 
       case indexing@Indexing(indexed, arg) =>
         val indexedType = check(indexed, ctx)
@@ -185,24 +211,24 @@ final class TypeChecker(errorReporter: ErrorReporter)
             reportError("cannot infer array type", filledArrayInit.getPosition)
         }
 
-      case structInit@StructInit(structName, args, modifiable) =>
-        ctx.structs.get(structName) match {
+      case instantiation@StructOrModuleInstantiation(tid, args, modifiable) =>
+        ctx.structs.get(tid).orElse(ctx.modules.get(tid)) match {
           case Some(structSig: StructSignature) if structSig.isInterface =>
             reportError(
-              s"cannot instantiate interface $structName",
-              structInit.getPosition
+              s"cannot instantiate interface $tid",
+              instantiation.getPosition
             )
           case Some(structSig: StructSignature) =>
-            checkCallArgs(structSig.fields.values.map(_.tpe).toList, args, ctx, structInit.getPosition)
+            checkCallArgs(structSig.fields.values.map(_.tpe).toList, args, ctx, instantiation.getPosition)
             if (modifiable && !structSig.fields.exists(_._2.isReassignable)){
               reportError(
-                s"modification permission granted on struct of type '$structName', but all of its fields are constant",
-                structInit.getPosition,
+                s"modification permission granted on struct of type '$tid', but all of its fields are constant",
+                instantiation.getPosition,
                 isWarning = true
               )
             }
-            StructType(structName, modifiable)
-          case None => reportError(s"not found: struct '$structName'", structInit.getPosition)
+            StructOrModuleType(tid, modifiable)
+          case _ => reportError(s"not found: structure or module '$tid'", instantiation.getPosition)
         }
 
       case unaryOp@UnaryOp(operator, operand) =>
@@ -346,7 +372,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         valueOpt.foreach { value =>
           check(value, ctx)
           value match {
-            case VariableRef(name) if ctx.functions.apply(ctx.currentFunctionName.get).retType.maybeModifiable =>
+            case VariableRef(name) if ctx.expectedRetType.get.maybeModifiable =>
               ctx.mutIsUsed(name)
             case _ => ()
           }
@@ -394,24 +420,33 @@ final class TypeChecker(errorReporter: ErrorReporter)
     tpe
   }
 
-  private def checkFunCall(name: FunOrVarId, args: List[Expr], pos: Option[Position], ctx: TypeCheckingContext)
+  private def typesMustBeKnownInParams(params: List[Param], ctx: TypeCheckingContext): Unit = {
+    for param@Param(_, tpe, _) <- params do {
+      typeMustBeKnown(tpe, ctx, param.getPosition)
+    }
+  }
+
+  private def checkFunCall(owner: TypeIdentifier, funName: FunOrVarId, args: List[Expr], pos: Option[Position], ctx: TypeCheckingContext)
                           (using Map[TypeIdentifier, StructSignature]): Type = {
-    ctx.functions.get(name) match {
-      case Some(funSig) =>
+    ctx.resolveFunc(owner, funName) match {
+      case FunctionFound(funSig) =>
         checkCallArgs(funSig.argTypes, args, ctx, pos)
         funSig.retType
-      case None =>
+      case ModuleNotFound =>
         args.foreach(check(_, ctx))
-        reportError(s"not found: $name", pos)
+        reportError(s"not found: package or module $owner", pos)
+      case FunctionNotFound =>
+        args.foreach(check(_, ctx))
+        reportError(s"package or module $owner has no function named $funName", pos)
     }
   }
 
   private def structCastResult(srcType: Type, destType: Type)
-                              (using Map[TypeIdentifier, StructSignature]): Option[StructType] = {
+                              (using Map[TypeIdentifier, StructSignature]): Option[StructOrModuleType] = {
     (srcType, destType) match {
-      case (StructType(_, srcIsModifiable), StructType(destTypeName, destIsModifiable))
+      case (StructOrModuleType(_, srcIsModifiable), StructOrModuleType(destTypeName, destIsModifiable))
         if destType.subtypeOf(srcType.unmodifiable) && logicalImplies(destIsModifiable, srcIsModifiable)
-      => Some(StructType(destTypeName, srcIsModifiable))
+      => Some(StructOrModuleType(destTypeName, srcIsModifiable))
       case _ => None
     }
   }
@@ -455,6 +490,12 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case TypeTest(VariableRef(varName), tpe) if ctx.getLocalOnly(varName).exists(!_.isReassignable) =>
         Map(varName -> tpe)
       case _ => Map.empty
+    }
+  }
+
+  private def markWithUndefinedType(expressions: Expr*): Unit = {
+    for expr <- expressions do {
+      expr.setType(UndefinedType)
     }
   }
 
@@ -578,7 +619,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
                                          mustUpdateField: Boolean
                                        ): Type = {
     exprType match {
-      case StructType(typeName, modifiable) =>
+      case StructOrModuleType(typeName, modifiable) =>
         ctx.structs.apply(typeName) match {
           case StructSignature(_, fields, _, _) if fields.contains(fieldName) =>
             val FieldInfo(fieldType, fieldIsReassig) = fields.apply(fieldName)
@@ -618,15 +659,15 @@ final class TypeChecker(errorReporter: ErrorReporter)
   private def computeJoinOf(types: Set[Type])(using structs: Map[TypeIdentifier, StructSignature]): Option[Type] = {
     require(types.nonEmpty)
     if types.size == 1 then Some(types.head)
-    else if (types.forall(_.isInstanceOf[StructType])) {
+    else if (types.forall(_.isInstanceOf[StructOrModuleType])) {
       // if the structs have exactly 1 direct supertype in common, infer it as the result type
       val directSupertypesSets = types.map { tpe =>
-        structs.apply(tpe.asInstanceOf[StructType].typeName).directSupertypes.toSet
+        structs.apply(tpe.asInstanceOf[StructOrModuleType].typeName).directSupertypes.toSet
       }
       val commonDirectSupertypes = directSupertypesSets.reduceLeft(_.intersect(_))
       Some(
         if commonDirectSupertypes.size == 1
-        then StructType(commonDirectSupertypes.head, modifiable = types.forall(_.isModifiableForSure))
+        then StructOrModuleType(commonDirectSupertypes.head, modifiable = types.forall(_.isModifiableForSure))
         else UnionType(types)
       )
     } else {

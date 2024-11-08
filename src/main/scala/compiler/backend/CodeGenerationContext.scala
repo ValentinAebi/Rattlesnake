@@ -2,7 +2,7 @@ package compiler.backend
 
 import compiler.AnalysisContext
 import compiler.backend.CodeGenerationContext.from
-import identifiers.FunOrVarId
+import identifiers.{FunOrVarId, TypeIdentifier}
 import lang.Types.PrimitiveType.*
 import lang.Types.{PrimitiveType, Type}
 import org.objectweb.asm.Label
@@ -14,7 +14,7 @@ final class CodeGenerationContext(
                                    val analysisContext: AnalysisContext,
                                    locals: List[mutable.Map[FunOrVarId, (Type, Int)]],
                                    var currLocalIdx: Int,
-                                   val functionStartLabel: Label
+                                   val currentModule: TypeIdentifier
                                  ) {
 
   /**
@@ -25,7 +25,7 @@ final class CodeGenerationContext(
       analysisContext,
       mutable.Map.empty[FunOrVarId, (Type, Int)] :: locals,
       currLocalIdx,
-      functionStartLabel
+      currentModule
     )
   }
 
@@ -65,8 +65,8 @@ final class CodeGenerationContext(
 
 object CodeGenerationContext {
 
-  def from(analysisContext: AnalysisContext, functionStartLabel: Label): CodeGenerationContext = {
-    new CodeGenerationContext(analysisContext, List(mutable.Map.empty[FunOrVarId, (Type, Int)]), 0, functionStartLabel)
+  def from(analysisContext: AnalysisContext, currentModule: TypeIdentifier): CodeGenerationContext = {
+    new CodeGenerationContext(analysisContext, List(mutable.Map.empty[FunOrVarId, (Type, Int)]), 0, currentModule)
   }
 
 }

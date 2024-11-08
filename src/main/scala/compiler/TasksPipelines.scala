@@ -1,6 +1,6 @@
 package compiler
 
-import compiler.Errors.{ErrorReporter, ExitCode, errorsExitCode}
+import compiler.Errors.{ErrorReporter, ExitCode}
 import compiler.backend.Backend
 import compiler.ctxcreator.ContextCreator
 import compiler.io.StringWriter
@@ -9,7 +9,6 @@ import compiler.lexer.Lexer
 import compiler.lowerer.Lowerer
 import compiler.parser.Parser
 import compiler.prettyprinter.PrettyPrinter
-import compiler.tailrecchecker.TailrecChecker
 import compiler.typechecker.TypeChecker
 import org.objectweb.asm.ClassVisitor
 
@@ -26,11 +25,9 @@ object TasksPipelines {
   def compiler(
                 outputDirectoryPath: Path,
                 javaVersionCode: Int,
-                outputName: String,
-                generateTests: Boolean,
                 er: ErrorReporter = defaultErrorReporter
               ): CompilerStep[List[SourceCodeProvider], List[Path]] = {
-    compilerImpl(outputDirectoryPath, Backend.BinaryMode, javaVersionCode, outputName, generateTests, er)
+    compilerImpl(outputDirectoryPath, Backend.BinaryMode, javaVersionCode, er)
   }
 
   /**
@@ -39,10 +36,9 @@ object TasksPipelines {
   def bytecodeWriter(
                       outputDirectoryPath: Path,
                       javaVersionCode: Int,
-                      outputName: String,
                       er: ErrorReporter = defaultErrorReporter
                     ): CompilerStep[List[SourceCodeProvider], List[Path]] = {
-    compilerImpl(outputDirectoryPath, Backend.AssemblyMode, javaVersionCode, outputName, true, er)
+    compilerImpl(outputDirectoryPath, Backend.AssemblyMode, javaVersionCode, er)
   }
 
   /**
@@ -96,21 +92,16 @@ object TasksPipelines {
   private def compilerImpl[V <: ClassVisitor](outputDirectoryPath: Path,
                                               backendMode: Backend.Mode[V],
                                               javaVersionCode: Int,
-                                              outputName: String,
-                                              generateTests: Boolean,
                                               er: ErrorReporter) = {
     MultiStep(frontend(er))
       .andThen(new ContextCreator(er))
       .andThen(new TypeChecker(er))
       .andThen(new Lowerer())
-      .andThen(new TailrecChecker(er))
       .andThen(new Backend(
         backendMode,
         er,
         outputDirectoryPath,
-        javaVersionCode,
-        outputName,
-        generateTests
+        javaVersionCode
       ))
   }
 

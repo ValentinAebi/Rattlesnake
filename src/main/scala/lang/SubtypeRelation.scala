@@ -13,7 +13,7 @@ object SubtypeRelation {
     (subT, superT) match {
       case _ if subT == superT => true
       case (NothingType | UndefinedType, _) => true
-      case (StructType(subId, subIsModif), StructType(superId, superIsModif)) =>
+      case (StructOrModuleType(subId, subIsModif), StructOrModuleType(superId, superIsModif)) =>
         logicalImplies(superIsModif, subIsModif) && isSuperInterface(subId, superId)
       case (ArrayType(subElemType, subIsModif), ArrayType(superElemType, superIsModif)) =>
         logicalImplies(superIsModif, subIsModif) &&

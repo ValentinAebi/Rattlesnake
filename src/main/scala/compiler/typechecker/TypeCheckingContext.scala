@@ -5,10 +5,10 @@ import compiler.Errors.{ErrorReporter, Warning}
 import compiler.irs.Asts.{Expr, Indexing, Select, VariableRef}
 import compiler.typechecker.TypeCheckingContext.{LocalInfo, LocalUsesCollector}
 import compiler.{AnalysisContext, Errors, Position}
-import identifiers.FunOrVarId
-import lang.Keyword
+import identifiers.{FunOrVarId, TypeIdentifier}
+import lang.{FunctionSignature, Keyword}
 import lang.Types.PrimitiveType.{NothingType, VoidType}
-import lang.Types.Type
+import lang.Types.{StructOrModuleType, Type}
 
 import scala.collection.mutable
 
@@ -18,7 +18,8 @@ import scala.collection.mutable
 final case class TypeCheckingContext(
                                       private val analysisContext: AnalysisContext,
                                       private val locals: mutable.Map[FunOrVarId, LocalInfo] = mutable.Map.empty,
-                                      currentFunctionName: Option[FunOrVarId]
+                                      expectedRetType: Option[Type],
+                                      currentModule: Option[TypeIdentifier]
                                     ) {
   // Locals that have been created by this context (i.e. not obtained via copied)
   private val ownedLocals: mutable.Set[FunOrVarId] = mutable.Set.empty
@@ -26,8 +27,8 @@ final case class TypeCheckingContext(
   /**
    * @return a copy of this with empty locals map
    */
-  def copyWithoutLocals(currentFunctionName: FunOrVarId): TypeCheckingContext = {
-    copy(locals = mutable.Map.empty, currentFunctionName = Some(currentFunctionName))
+  def copyForNewFunction(expectedRetType: Type): TypeCheckingContext = {
+    copy(locals = mutable.Map.empty, expectedRetType = Some(expectedRetType))
   }
 
   /**
@@ -43,6 +44,9 @@ final case class TypeCheckingContext(
       case (id, info) => id -> info.copy(tpe = smartCasts.getOrElse(id, info.tpe))
     })
   }
+  
+  def copyWithCurrentModule(currentModule: TypeIdentifier): TypeCheckingContext =
+    copy(currentModule = Some(currentModule))
 
   /**
    * Register a new local

@@ -54,9 +54,16 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
     )
   }
   
-  private def lower(testDef: TestDef): TestDef = {
-    TestDef(testDef.testName, lower(testDef.body))
-  }
+  private def lower(moduleDef: ModuleDef): ModuleDef = ModuleDef(
+    moduleDef.moduleName,
+    moduleDef.params.map(lower),
+    moduleDef.functions.map(lower)
+  )
+  
+  private def lower(packageDef: PackageDef): PackageDef = PackageDef(
+    packageDef.packageName,
+    packageDef.functions.map(lower)
+  )
 
   private def lower(constDef: ConstDef): ConstDef = constDef
 
@@ -100,15 +107,12 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
     val lowered = expr match {
       case literal: Literal => literal
       case varRef: VariableRef => varRef
+      case meRef: MeRef => meRef
+      case packageRef: PackageRef => packageRef
       case call: Call => Call(lower(call.callee), call.args.map(lower))
-      case call: TailCall =>
-        val loweredCall = TailCall(call.funId, call.args.map(lower))
-        // important to propagate position here, as tail position check is performed in backend
-        loweredCall.setPosition(call.getPosition)
-        loweredCall
       case indexing: Indexing => Indexing(lower(indexing.indexed), lower(indexing.arg))
       case arrayInit: ArrayInit => ArrayInit(arrayInit.elemType, lower(arrayInit.size))
-      case structInit: StructInit => StructInit(structInit.structName, structInit.args.map(lower), structInit.modifiable)
+      case structInit: StructOrModuleInstantiation => StructOrModuleInstantiation(structInit.typeId, structInit.args.map(lower), structInit.modifiable)
       
       // [x_1, ... , x_n] ---> explicit assignments
       case filledArrayInit@FilledArrayInit(arrayElems, _) =>
@@ -207,9 +211,9 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
 
   private def lower(topLevelDef: TopLevelDef): TopLevelDef = {
     topLevelDef match
-      case funDef: FunDef => lower(funDef)
+      case moduleDef: ModuleDef => lower(moduleDef)
+      case packageDef: PackageDef => lower(packageDef)
       case structDef: StructDef => lower(structDef)
-      case testDef: TestDef => lower(testDef)
       case constDef: ConstDef => lower(constDef)
   }
 
