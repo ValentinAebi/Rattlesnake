@@ -146,30 +146,15 @@ final class TypeChecker(errorReporter: ErrorReporter)
           case None => reportError(s"not found: $packageName", pkg.getPosition)
         }
 
-      case call@Call(callee, args) =>
-        callee match {
-          // intrinsic
-          case varRef@VariableRef(funName) =>
-            markWithUndefinedType(varRef)
-            checkFunCall(IntrinsicsPackageId, funName, args, call.getPosition, ctx)
-          // function in current module
-          case select@Select(meRef: MeRef, funName) =>
-            markWithUndefinedType(select, meRef)
-            checkFunCall(ctx.currentModule.get, funName, args, call.getPosition, ctx)
-          // module function
-          case select@Select(lhs: VariableRef, funName) =>
-            markWithUndefinedType(select, lhs)
-            check(lhs, ctx) match {
-              case StructOrModuleType(typeName, _) =>
-                checkFunCall(typeName, funName, args, call.getPosition, ctx)
-              case lhsType =>
-                reportError(s"expected a module type, found $lhsType", lhs.getPosition)
-            }
-          // package function
-          case select@Select(pkgRef@PackageRef(pkgId), funName) =>
-            markWithUndefinedType(select, pkgRef)
-            checkFunCall(pkgId, funName, args, call.getPosition, ctx)
-          case _ => reportError("syntax error, only functions can be invoked", call.getPosition)
+      case call@Call(None, funName, args) =>
+        checkFunCall(IntrinsicsPackageId, funName, args, call.getPosition, ctx)
+        
+      case call@Call(Some(lhs), funName, args) =>
+        check(lhs, ctx) match {
+          case StructOrModuleType(typeName, _) =>
+            checkFunCall(typeName, funName, args, call.getPosition, ctx)
+          case lhsType =>
+            reportError(s"expected a module or package type, found $lhsType", lhs.getPosition)
         }
 
       case indexing@Indexing(indexed, arg) =>

@@ -15,11 +15,13 @@ final case class FunctionSignature(
 
 sealed trait TypeSignature {
   def isInterface: Boolean
+  def isModuleOrPackage: Boolean
 }
 
 sealed trait ModuleOrPackageSignature extends TypeSignature {
   def functions: Map[FunOrVarId, FunctionSignature]
   override def isInterface: Boolean = false
+  override def isModuleOrPackage: Boolean = true
 }
 
 final case class ModuleSignature(
@@ -38,7 +40,9 @@ final case class StructSignature(
                                   fields: mutable.LinkedHashMap[FunOrVarId, FieldInfo],
                                   directSupertypes: Seq[TypeIdentifier],
                                   isInterface: Boolean
-                                ) extends TypeSignature
+                                ) extends TypeSignature {
+  override def isModuleOrPackage: Boolean = false
+}
 
 object StructSignature {
   final case class FieldInfo(tpe: Type, isReassignable: Boolean)

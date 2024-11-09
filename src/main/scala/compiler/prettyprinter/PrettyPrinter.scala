@@ -123,8 +123,12 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
       case VariableRef(name) =>
         pps.add(name)
 
-      case Call(callee, args) =>
-        addAst(callee)
+      case Call(receiverOpt, funName, args) =>
+        receiverOpt.foreach { recv =>
+          addAst(recv)
+          pps.add(".")
+        }
+        pps.add(funName)
         addParenthList(args)
 
       case Indexing(indexed, arg) =>

@@ -1,8 +1,9 @@
 import compiler.io.SourceFile
 import compiler.{FileExtensions, GenFilesNames, SourceCodeProvider, TasksPipelines}
+import identifiers.packageInstanceName
 import org.objectweb.asm.Opcodes.{V11, V17, V1_8}
 
-import java.lang.reflect.{InvocationTargetException, Method}
+import java.lang.reflect.{Constructor, InvocationTargetException, Method}
 import java.nio.file.{Files, InvalidPathException, Path, Paths}
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -182,8 +183,10 @@ object Main {
       val writtenFilesPaths = compiler.apply(sources)
       val classes = getClasses(writtenFilesPaths)
       val mainMethod = findMainMethod(classes)
+      val mainPkg = mainMethod.getDeclaringClass
+      val mainPkgInstance = mainPkg.getField(packageInstanceName).get(null)
       try {
-        mainMethod.invoke(null, programArgs)
+        mainMethod.invoke(mainPkgInstance, programArgs)
       } catch {
         case e: InvocationTargetException =>
           System.err.println("EXECUTION FAILED")
@@ -196,6 +199,7 @@ object Main {
     val mainMethods = mutable.ListBuffer.empty[Method]
     for
       clazz <- classes
+      if clazz.getDeclaredFields.exists(_.getName == packageInstanceName)
       mth <- clazz.getDeclaredMethods
       if isMainMethod(mth)
     do mainMethods.addOne(mth)

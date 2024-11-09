@@ -2,13 +2,13 @@ package compiler.backend
 
 import compiler.CompilationStep.CodeGeneration
 import compiler.Errors.*
-import compiler.backend.BuiltinFunctionsImpl.*
+import compiler.backend.IntrinsicsImpl.*
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
 import compiler.backend.TypesConverter.{convertToAsmTypeCode, internalNameOf, opcodeFor}
 import compiler.irs.Asts.*
 import compiler.{AnalysisContext, CompilerStep, FileExtensions, GenFilesNames}
-import identifiers.{BackendGeneratedVarId, FunOrVarId, IntrinsicsPackageId, MeVarId, TypeIdentifier}
-import lang.{Types, *}
+import identifiers.{BackendGeneratedVarId, FunOrVarId, IntrinsicsPackageId, MeVarId, TypeIdentifier, packageInstanceName}
+import lang.*
 import lang.Operator.*
 import lang.SubtypeRelation.subtypeOf
 import lang.Types.PrimitiveType.*
@@ -39,8 +39,6 @@ final class Backend[V <: ClassVisitor](
                                         outputDirBase: Path,
                                         javaVersionCode: Int
                                       ) extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
-
-  private val packageInstanceName: String = "$INSTANCE"
 
   import Backend.*
 
@@ -154,6 +152,7 @@ final class Backend[V <: ClassVisitor](
     mv.visitInsn(Opcodes.DUP)
     mv.visitMethodInsn(Opcodes.INVOKESPECIAL, pkgName, "<init>", "()V", false)
     mv.visitFieldInsn(Opcodes.PUTSTATIC, pkgName, packageInstanceName, pkgTypeDescr)
+    mv.visitInsn(Opcodes.RETURN)
     mv.visitMaxs(0, 0)
     mv.visitEnd()
   }
@@ -190,6 +189,7 @@ final class Backend[V <: ClassVisitor](
         case modOrPkg: ModuleOrPackageTree =>
           generateModuleOrPackageFile(modOrPkg, classFilePath)
       }
+      classFilePaths.addOne(classFilePath)
     }
     classFilePaths.result()
   }
@@ -286,10 +286,6 @@ final class Backend[V <: ClassVisitor](
     }
   }
 
-  private def printCallFor(msgParts: Expr*): Call = {
-    Call(VariableRef(Intrinsics.print), List(msgParts.reduceLeft(BinaryOp(_, Plus, _).setType(StringType))))
-  }
-
   private def getInterfaceFieldsForStruct(structId: TypeIdentifier, structs: Map[TypeIdentifier, StructSignature]): Set[FunOrVarId] = {
     // BFS
 
@@ -349,39 +345,29 @@ final class Backend[V <: ClassVisitor](
         mv.visitIntInsn(opcodeFor(asType(ctx.currentModule), Opcodes.ILOAD, Opcodes.ALOAD), 0)
 
       case PackageRef(name) =>
-        ???
+        val packageType = asType(name)
+        val internalName = internalNameOf(packageType)
+        val descr = descriptorForType(packageType)
+        mv.visitFieldInsn(Opcodes.GETSTATIC, internalName, packageInstanceName, descr)
 
-      case Call(callee, args) => {
-
-        // will be used as a callback when generating built-in functions
+      case Call(None, funName, args) => {
         val generateArgs: () => Unit = { () =>
           for arg <- args do {
             generateCode(arg, ctx)
           }
         }
+        IntrinsicsImpl.intrinsicsMap.apply(funName)(generateArgs, mv)
+      }
 
-        callee match {
-          // intrinsics
-          case VariableRef(Intrinsics.print) => generatePrintCall(generateArgs, mv)
-          case VariableRef(Intrinsics.intToString) => generateIntToStringCall(generateArgs, mv)
-          case VariableRef(Intrinsics.doubleToString) => generateDoubleToStringCall(generateArgs, mv)
-          case VariableRef(Intrinsics.boolToString) => generateBoolToStringCall(generateArgs, mv)
-          case VariableRef(Intrinsics.charToString) => generateCharToStringCall(generateArgs, mv)
-          case VariableRef(Intrinsics.toCharArray) => generateStringToCharArrayCall(generateArgs, mv)
-          // function in current module
-          case Select(meRef: MeRef, funName) => {
-            ???
-          }
-          // module function
-          case Select(moduleId: FunOrVarId, funName) => {
-            ??? // TODO
-          }
-          // package function
-          case Select(packageRef: PackageRef, funName) => {
-            ??? // TODO
-          }
-          case _ => shouldNotHappen()
+      case Call(Some(receiver), funName, args) => {
+        generateCode(receiver, ctx)
+        for arg <- args do {
+          generateCode(arg, ctx)
         }
+        val recvInternalName = internalNameOf(receiver.getType)
+        val receiverTypeName = receiver.getType.asInstanceOf[StructOrModuleType].typeName
+        val funDescr = descriptorForFunc(ctx.resolveFunc(receiverTypeName, funName).getOrThrow())
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, recvInternalName, funName.stringId, funDescr, false)
       }
 
       case Indexing(indexed, arg) =>

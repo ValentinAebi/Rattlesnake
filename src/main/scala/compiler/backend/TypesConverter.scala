@@ -4,7 +4,7 @@ import compiler.AnalysisContext
 import compiler.backend.DescriptorsCreator.descriptorForType
 import identifiers.TypeIdentifier
 import lang.Types.*
-import lang.{StructSignature, Types}
+import lang.{StructSignature, TypeSignature, Types}
 import org.objectweb.asm
 import org.objectweb.asm.Opcodes.*
 import org.objectweb.asm.Type.*

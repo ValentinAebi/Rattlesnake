@@ -237,24 +237,26 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     openingBracket ::: expr ::: closingBracket
   } setName "indexing"
 
-  private lazy val varRef = lowName map (name => VariableRef(name))
-
   private lazy val me = kw(Me) map (_ => MeRef())
   
   private lazy val pkgRef = highName map (PackageRef(_))
+  
+  private lazy val varRefOrIntrinsicCall = lowName ::: opt(callArgs) map {
+    case name ^: Some(args) => Call(None, name, args)
+    case name ^: None => VariableRef(name)
+  } setName "varRefOrIntrinsicCall"
 
   private lazy val atomicExpr = recursive {
-    varRef OR me OR pkgRef OR literalValue OR filledArrayInit OR parenthesizedExpr
+    varRefOrIntrinsicCall OR me OR pkgRef OR literalValue OR filledArrayInit OR parenthesizedExpr
   } setName "atomicExpr"
 
   private lazy val selectOrIndexingChain = recursive {
-    atomicExpr ::: repeat((dot ::: lowName) OR indexing OR callArgs) map {
-      case atExpr ^: selOrInds =>
-        selOrInds.foldLeft(atExpr) { (acc, curr) =>
-          curr match
-            case field: NormalFunOrVarId => Select(acc, field)
-            case idx: Expr => Indexing(acc, idx)
-            case args: List[Expr] => Call(acc, args)
+    atomicExpr ::: repeat((dot ::: lowName ::: opt(callArgs)) OR indexing) map {
+      case atExpr ^: repeated =>
+        repeated.foldLeft(atExpr){
+          case (acc, name ^: Some(args)) => Call(Some(acc), name, args)
+          case (acc, name ^: None) => Select(acc, name)
+          case (acc, index: Expr) => Indexing(acc, index)
         }
     }
   } setName "selectOrIndexingChain"

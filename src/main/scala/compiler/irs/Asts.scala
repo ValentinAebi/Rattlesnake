@@ -246,12 +246,12 @@ object Asts {
   final case class PackageRef(pkgName: TypeIdentifier) extends Expr {
     override def children: List[Ast] = Nil
   }
-
+  
   /**
    * Function call: `callee(args)`
    */
-  final case class Call(callee: Expr, args: List[Expr]) extends Expr {
-    override def children: List[Ast] = callee :: args
+  final case class Call(receiverOpt: Option[Expr], function: FunOrVarId, args: List[Expr]) extends Expr {
+    override def children: List[Ast] = receiverOpt.toList ++ args
   }
 
   /**
@@ -300,7 +300,7 @@ object Asts {
     
     override def children: List[Ast] = List(lhs, rhs)
   }
-
+  
   /**
    * Access to a struct field: `lhs.select`
    */

@@ -33,3 +33,5 @@ case object MeVarId extends FunOrVarId {
 case object IntrinsicsPackageId extends TypeIdentifier {
   override def stringId: String = "pkg$intrinsics"
 }
+
+val packageInstanceName: String = "$INSTANCE"
