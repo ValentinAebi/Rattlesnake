@@ -2,7 +2,7 @@ package lang
 
 import identifiers.*
 import lang.StructSignature.FieldInfo
-import lang.Types.Type
+import lang.Types.{NamedType, Type}
 
 import java.util
 import scala.collection.mutable
@@ -46,7 +46,9 @@ final case class PackageSignature(
                                    importedPackages: mutable.LinkedHashSet[TypeIdentifier],
                                    importedDevices: mutable.LinkedHashSet[Device],
                                    functions: Map[FunOrVarId, FunctionSignature]
-                                 ) extends ModuleOrPackageSignature
+                                 ) extends ModuleOrPackageSignature {
+  override def importedModules: mutable.LinkedHashMap[FunOrVarId, TypeIdentifier] = mutable.LinkedHashMap.empty
+}
 
 final case class StructSignature(
                                   name: TypeIdentifier,

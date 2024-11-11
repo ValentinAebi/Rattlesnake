@@ -1,18 +1,5 @@
 
-package Sorting {
-
-    fn swap(array: mut arr Int, i1: Int, i2: Int) -> Void {
-        val tmp = array[i1];
-        array[i1] = array[i2];
-        array[i2] = tmp;
-    }
-
-    fn selectionSort(array: mut arr Int) {
-        for var i = 0; i < #array; i += 1 {
-            val maxIdx = me.maxIdx(array, i);
-            me.swap(array, i, maxIdx)
-        };
-    }
+package Arrays {
 
     // returns the index of the maximal element of the array
     fn maxIdx(array: arr Int, firstIdx: Int) -> Int {
@@ -29,13 +16,35 @@ package Sorting {
         }
     }
 
-    fn main(args: arr String) {
+}
+
+module Sorting(package Arrays) {
+
+    fn swap(array: mut arr Int, i1: Int, i2: Int) -> Void {
+        val tmp = array[i1];
+        array[i1] = array[i2];
+        array[i2] = tmp;
+    }
+
+    fn selectionSort(array: mut arr Int) {
+        for var i = 0; i < #array; i += 1 {
+            val maxIdx = Arrays.maxIdx(array, i);
+            me.swap(array, i, maxIdx)
+        };
+    }
+
+}
+
+package Main {
+
+    fn main(arr String) {
         val nbs = arr Int[10];
         for var i = 0; i < 10; i += 1 {
             nbs[i] = (2*i - i*i + 200) % 25;
             nbs[i] += 1;
         };
-        Sorting.selectionSort(nbs);
+        val sorting = new Sorting();
+        sorting.selectionSort(nbs);
         for var i = 0; i < 10; i += 1 {
             print(intToString(nbs[i]));
             print(" ")

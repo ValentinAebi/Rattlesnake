@@ -195,7 +195,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val arrayType = recursive {
     kw(Arr).ignored ::: tpe map (ArrayType.apply(_, modifiable = false))
   } setName "arrayType"
-  
+
   private lazy val device = kw(lang.Device.kwToDevice.keys.toSeq*) map {
     deviceKw => lang.Device.kwToDevice.apply(deviceKw)
   } setName "device"
@@ -258,7 +258,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val me = kw(Me) map (_ => MeRef())
 
   private lazy val pkgRef = highName map (PackageRef(_))
-  
+
   private lazy val deviceRef = device map (DeviceRef(_))
 
   private lazy val varRefOrIntrinsicCall = lowName ::: opt(callArgs) map {
@@ -310,7 +310,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "filledArrayInit"
 
   private lazy val structOrModuleInstantiation = recursive {
-    kw(New).ignored ::: opt(kw(Mut)) ::: highName ::: openBrace ::: repeatWithSep(expr, comma) ::: closeBrace map {
+    kw(New).ignored ::: opt(kw(Mut)) ::: highName ::: openParenth ::: repeatWithSep(expr, comma) ::: closeParenth map {
       case optMut ^: tid ^: args => StructOrModuleInstantiation(tid, args, optMut.isDefined)
     }
   } setName "structOrModuleInstantiation"

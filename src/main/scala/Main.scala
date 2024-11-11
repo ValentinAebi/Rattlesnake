@@ -1,9 +1,9 @@
+import compiler.NamesForGeneratedClasses.packageInstanceName
 import compiler.io.SourceFile
-import compiler.{FileExtensions, GenFilesNames, SourceCodeProvider, TasksPipelines}
-import identifiers.packageInstanceName
+import compiler.{FileExtensions, NamesForGeneratedClasses, SourceCodeProvider, TasksPipelines}
 import org.objectweb.asm.Opcodes.{V11, V17, V1_8}
 
-import java.lang.reflect.{Constructor, InvocationTargetException, Method}
+import java.lang.reflect.{InvocationTargetException, Method}
 import java.nio.file.{Files, InvalidPathException, Path, Paths}
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -107,10 +107,6 @@ object Main {
           case _ => assert(false)
         }
     }
-  }
-
-  private def createDefaultBytecodeOutputName(sources: List[SourceCodeProvider]): String = {
-    Path.of(sources.head.name).getFileName.toString.takeWhile(_ != '.').withHeadUppercase + GenFilesNames.coreFilePostfix
   }
 
   private def parseJavaVersion(str: String): Int = {

@@ -56,7 +56,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
   
   private def lower(moduleDef: ModuleDef): ModuleDef = ModuleDef(
     moduleDef.moduleName,
-    moduleDef.params.map(lower),
+    moduleDef.imports.map(lower),
     moduleDef.functions.map(lower)
   )
   
@@ -68,6 +68,8 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
   private def lower(constDef: ConstDef): ConstDef = constDef
 
   private def lower(param: Param): Param = param
+
+  private def lower(imp: Import): Import = imp
 
   private def lower(localDef: LocalDef): LocalDef =
     LocalDef(localDef.localName, localDef.optType, lower(localDef.rhs), localDef.isReassignable)
@@ -109,6 +111,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
       case varRef: VariableRef => varRef
       case meRef: MeRef => meRef
       case packageRef: PackageRef => packageRef
+      case deviceRef: DeviceRef => deviceRef
       case call: Call => Call(call.receiverOpt.map(lower), call.function, call.args.map(lower))
       case indexing: Indexing => Indexing(lower(indexing.indexed), lower(indexing.arg))
       case arrayInit: ArrayInit => ArrayInit(arrayInit.elemType, lower(arrayInit.size))

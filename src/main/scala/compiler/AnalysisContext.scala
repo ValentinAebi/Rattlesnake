@@ -178,6 +178,7 @@ object AnalysisContext {
           packages.add(packageName)
         case DeviceRef(device) =>
           devices.add(device)
+        case _ => ()
       }
       (packages, devices)
     }

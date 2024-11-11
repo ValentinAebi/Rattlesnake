@@ -2,17 +2,18 @@ package compiler.backend
 
 import compiler.CompilationStep.CodeGeneration
 import compiler.Errors.*
+import compiler.NamesForGeneratedClasses.packageInstanceName
 import compiler.backend.IntrinsicsImpl.*
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
 import compiler.backend.TypesConverter.{convertToAsmTypeCode, internalNameOf, opcodeFor}
 import compiler.irs.Asts.*
-import compiler.{AnalysisContext, CompilerStep, FileExtensions, GenFilesNames}
-import identifiers.{BackendGeneratedVarId, FunOrVarId, IntrinsicsPackageId, MeVarId, TypeIdentifier, packageInstanceName}
+import compiler.{AnalysisContext, CompilerStep, FileExtensions, NamesForGeneratedClasses}
+import identifiers.{BackendGeneratedVarId, FunOrVarId, IntrinsicsPackageId, MeVarId, TypeIdentifier}
 import lang.*
 import lang.Operator.*
 import lang.SubtypeRelation.subtypeOf
 import lang.Types.PrimitiveType.*
-import lang.Types.{ArrayType, PrimitiveType, NamedType, UnionType}
+import lang.Types.{ArrayType, NamedType, PrimitiveType, UnionType}
 import org.objectweb.asm
 import org.objectweb.asm.*
 import org.objectweb.asm.Opcodes.*
@@ -71,7 +72,7 @@ final class Backend[V <: ClassVisitor](
       val modAndPkgFilesPaths = generateTypes(modulesAndPackages, outputDir)
       val structFilesPaths = generateTypes(structs, outputDir)
 
-      val constantsFilePath = outputDir.resolve(mode.withExtension(GenFilesNames.constantsFileName))
+      val constantsFilePath = outputDir.resolve(mode.withExtension(NamesForGeneratedClasses.constantsClassName))
       generateConstantsFile(consts, constantsFilePath)
 
       errorReporter.displayAndTerminateIfErrors()
@@ -97,7 +98,7 @@ final class Backend[V <: ClassVisitor](
   private def generateConstantsFile(consts: List[ConstDef], constantsFilePath: Path)
                                    (using AnalysisContext): Unit = {
     val ccv: V = mode.createVisitor(constantsFilePath)
-    ccv.visit(javaVersionCode, ACC_PUBLIC, GenFilesNames.constantsFileName, null, objectTypeStr, null)
+    ccv.visit(javaVersionCode, ACC_PUBLIC, NamesForGeneratedClasses.constantsClassName, null, objectTypeStr, null)
     for const <- consts do {
       ccv.visitField(
         ACC_PUBLIC | ACC_STATIC,
@@ -119,8 +120,8 @@ final class Backend[V <: ClassVisitor](
     if (modOrPkg.isInstanceOf[PackageDef]) {
       addInstanceFieldAndInitializer(modOrPkg, cv, pkgTypeDescr)
     }
-    for param <- modOrPkg.params do {
-      cv.visitField(ACC_PRIVATE, param.paramNameOpt.get.stringId, descriptorForType(param.tpe), null, null)
+    for (varId, moduleId) <- ctx.resolveType(modOrPkg.name).get.asInstanceOf[ModuleOrPackageSignature].importedModules do {
+      cv.visitField(ACC_PRIVATE, varId.stringId, descriptorForType(asUnmodifiableType(moduleId)), null, null)
     }
     for func <- modOrPkg.functions do {
       val desc = descriptorForFunc(func.signature)
@@ -159,7 +160,7 @@ final class Backend[V <: ClassVisitor](
 
   private def addFunction(owner: TypeIdentifier, funDef: FunDef, mv: MethodVisitor, analysisContext: AnalysisContext): Unit = {
     val ctx = CodeGenerationContext.from(analysisContext, owner)
-    ctx.addLocal(MeVarId, asType(owner))
+    ctx.addLocal(MeVarId, asUnmodifiableType(owner))
     val unnamedParamIdx = new AtomicInteger(0)
     for param <- funDef.params do {
       param.paramNameOpt match {
@@ -335,17 +336,17 @@ final class Backend[V <: ClassVisitor](
           case None =>
             mv.visitFieldInsn(
               Opcodes.GETSTATIC,
-              GenFilesNames.constantsFileName,
+              NamesForGeneratedClasses.constantsClassName,
               name.stringId,
               descriptorForType(varRef.getType)
             )
       }
 
       case MeRef() =>
-        mv.visitIntInsn(opcodeFor(asType(ctx.currentModule), Opcodes.ILOAD, Opcodes.ALOAD), 0)
+        mv.visitIntInsn(opcodeFor(asUnmodifiableType(ctx.currentModule), Opcodes.ILOAD, Opcodes.ALOAD), 0)
 
       case PackageRef(name) =>
-        val packageType = asType(name)
+        val packageType = asUnmodifiableType(name)
         val internalName = internalNameOf(packageType)
         val descr = descriptorForType(packageType)
         mv.visitFieldInsn(Opcodes.GETSTATIC, internalName, packageInstanceName, descr)
@@ -388,22 +389,22 @@ final class Backend[V <: ClassVisitor](
           case Types.UndefinedType => shouldNotHappen()
         }
 
-      case StructOrModuleInstantiation(structName, args, modifiable) =>
-        val structType = NamedType(structName, modifiable)
+      case StructOrModuleInstantiation(tid, args, modifiable) =>
+        val instantiatedType = NamedType(tid, modifiable)
         val tmpVarIdx = ctx.currLocalIdx
         val tempLocalName = BackendGeneratedVarId(tmpVarIdx)
-        ctx.addLocal(tempLocalName, structType)
-        val storeTmpOpcode = opcodeFor(structType, Opcodes.ISTORE, Opcodes.ASTORE)
-        mv.visitTypeInsn(Opcodes.NEW, structName.stringId)
+        ctx.addLocal(tempLocalName, instantiatedType)
+        val storeTmpOpcode = opcodeFor(instantiatedType, Opcodes.ISTORE, Opcodes.ASTORE)
+        mv.visitTypeInsn(Opcodes.NEW, tid.stringId)
         mv.visitInsn(Opcodes.DUP)
-        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, structName.stringId, "<init>", "()V", false)
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, tid.stringId, "<init>", "()V", false)
         mv.visitVarInsn(storeTmpOpcode, tmpVarIdx)
-        val structSig = analysisContext.structs.apply(structName)
-        val loadTmpOpcode = opcodeFor(structType, Opcodes.ILOAD, Opcodes.ALOAD)
-        for (arg, (paramName, fieldInfo)) <- args.zip(structSig.fields) do {
+        val sig = analysisContext.resolveType(tid).get
+        val loadTmpOpcode = opcodeFor(instantiatedType, Opcodes.ILOAD, Opcodes.ALOAD)
+        for (arg, (paramName, paramType)) <- args.zip(instantiationParameters(sig)) do {
           mv.visitVarInsn(loadTmpOpcode, tmpVarIdx)
           generateCode(arg, ctx)
-          mv.visitFieldInsn(Opcodes.PUTFIELD, structName.stringId, paramName.stringId, descriptorForType(fieldInfo.tpe))
+          mv.visitFieldInsn(Opcodes.PUTFIELD, tid.stringId, paramName, descriptorForType(paramType))
         }
         mv.visitVarInsn(loadTmpOpcode, tmpVarIdx)
 
@@ -682,8 +683,16 @@ final class Backend[V <: ClassVisitor](
       mv.visitIntInsn(Opcodes.ASTORE, varIdx)
     }
   }
+  
+  private def instantiationParameters(typeSig: TypeSignature): List[(String, Types.Type)] = typeSig match {
+    case StructSignature(name, fields, directSupertypes, isInterface) =>
+      fields.toList.map((id, infos) => (id.stringId, infos.tpe))
+    case ModuleSignature(name, importedModules, importedPackages, importedDevices, functions) =>
+      importedModules.toList.map((id, tpe) => (id.stringId, asUnmodifiableType(tpe)))
+    case _ => shouldNotHappen()
+  }
 
-  private def asType(tid: TypeIdentifier): NamedType = NamedType(tid, modifiable = false)
+  private def asUnmodifiableType(tid: TypeIdentifier): NamedType = NamedType(tid, modifiable = false)
 
   private def shouldNotHappen(): Nothing = assert(false)
 

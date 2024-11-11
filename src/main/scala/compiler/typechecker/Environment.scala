@@ -1,6 +1,5 @@
 package compiler.typechecker
 
-import compiler.irs.Asts.ModuleDef
 import identifiers.TypeIdentifier
 import lang.Device
 

@@ -29,6 +29,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
   private def check(ast: Ast, ctx: TypeCheckingContext): Type = {
     given Map[TypeIdentifier, StructSignature] = ctx.structs
+
     val tpe: Type = ast match {
 
       case Source(defs) =>
@@ -49,7 +50,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         for imp <- imports do {
           check(imp, ctx)
         }
-        val moduleSig = ctx.resolveType(moduleName).asInstanceOf[ModuleSignature]
+        val moduleSig = ctx.resolveType(moduleName).get.asInstanceOf[ModuleSignature]
         val newCtx = ctx.copyForModuleOrPackage(Environment(
           moduleName,
           moduleSig.importedPackages.toSet,
@@ -61,7 +62,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         VoidType
 
       case PackageDef(packageName, functions) =>
-        val sig = ctx.resolveType(packageName).asInstanceOf[PackageSignature]
+        val sig = ctx.resolveType(packageName).get.asInstanceOf[PackageSignature]
         val newCtx = ctx.copyForModuleOrPackage(Environment(
           packageName,
           sig.importedPackages.toSet,
@@ -126,7 +127,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
           checkSubtypingConstraint(checkedType, inferredType, localDef.getPosition, "local definition")
         }
         val requestExplicitType = optType.isEmpty && inferredType.isInstanceOf[UnionType]
-        if (requestExplicitType){
+        if (requestExplicitType) {
           reportError(s"Please provide an explicit type for $localName", localDef.getPosition)
         }
         val actualType = if requestExplicitType then UndefinedType else optType.getOrElse(inferredType)
@@ -151,27 +152,27 @@ final class TypeChecker(errorReporter: ErrorReporter)
         mustBeKnown(name, ctx, varRef.getPosition)
 
       case MeRef() =>
-        NamedType(ctx.currentEnvironment.get.currentModule, modifiable = false)
+        asUnmodifiableType(ctx.currentEnvironment.get.currentModule)
 
       case pkg@PackageRef(packageName) =>
-        if (!ctx.currentEnvironment.get.allowsPackage(packageName)){
+        if (!ctx.currentEnvironment.get.allowsPackage(packageName)) {
           reportError(s"illegal reference to $packageName, which is not imported in this module", pkg.getPosition)
         }
         ctx.resolveType(packageName) match {
-          case Some(packageSignature: PackageSignature) => NamedType(packageName, modifiable = false)
+          case Some(packageSignature: PackageSignature) => asUnmodifiableType(packageName)
           case Some(_) => reportError(s"$packageName is not a package and is thus not allowed here", pkg.getPosition)
           case None => reportError(s"not found: $packageName", pkg.getPosition)
         }
 
       case devRef@DeviceRef(device) =>
-        if (!ctx.currentEnvironment.get.allowsDevice(device)){
+        if (!ctx.currentEnvironment.get.allowsDevice(device)) {
           reportError(s"illegal reference to device $device, which is not imported in this module", devRef.getPosition)
         }
-        NamedType(device.sig.tpe, modifiable = false)
+        asUnmodifiableType(device.sig.tpe)
 
       case call@Call(None, funName, args) =>
         checkFunCall(IntrinsicsPackageId, funName, args, call.getPosition, ctx)
-        
+
       case call@Call(Some(lhs), funName, args) =>
         check(lhs, ctx) match {
           case NamedType(typeName, _) =>
@@ -220,7 +221,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         }
 
       case instantiation@StructOrModuleInstantiation(tid, args, modifiable) =>
-        ctx.structs.get(tid).orElse(ctx.modules.get(tid)) match {
+        ctx.resolveType(tid) match {
           case Some(structSig: StructSignature) if structSig.isInterface =>
             reportError(
               s"cannot instantiate interface $tid",
@@ -228,7 +229,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
             )
           case Some(structSig: StructSignature) =>
             checkCallArgs(structSig.fields.values.map(_.tpe).toList, args, ctx, instantiation.getPosition)
-            if (modifiable && !structSig.fields.exists(_._2.isReassignable)){
+            if (modifiable && !structSig.fields.exists(_._2.isReassignable)) {
               reportError(
                 s"modification permission granted on struct of type '$tid', but all of its fields are constant",
                 instantiation.getPosition,
@@ -236,6 +237,13 @@ final class TypeChecker(errorReporter: ErrorReporter)
               )
             }
             NamedType(tid, modifiable)
+          case Some(moduleSig: ModuleSignature) =>
+            val expectedTypes = moduleSig.importedModules.map((_, tpe) => asUnmodifiableType(tpe)).toList
+            checkCallArgs(expectedTypes, args, ctx, instantiation.getPosition)
+            if (modifiable) {
+              reportError(s"${Keyword.Mut} not allowed in module instantiation", instantiation.getPosition)
+            }
+            asUnmodifiableType(tid)
           case _ => reportError(s"not found: structure or module '$tid'", instantiation.getPosition)
         }
 
@@ -406,7 +414,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case typeTest@TypeTest(expr, tpe) =>
         val exprType = check(expr, ctx)
-        if (exprType.subtypeOf(tpe)){
+        if (exprType.subtypeOf(tpe)) {
           reportError(s"test will always be true, as '$exprType' is a subtype of '$tpe'", typeTest.getPosition, isWarning = true)
         } else if (structCastResult(exprType, tpe).isEmpty) {
           reportError(s"cannot check expression of type '$exprType' against type '$tpe'", typeTest.getPosition)
@@ -417,6 +425,16 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val msgType = check(msg, ctx)
         checkSubtypingConstraint(StringType, msgType, panicStat.getPosition, "panic")
         NothingType
+
+      case modImp@ModuleImport(instanceId, moduleId) =>
+        typeMustBeKnown(asUnmodifiableType(moduleId), ctx, modImp.getPosition)
+        VoidType
+
+      case pkgImp@PackageImport(packageId) =>
+        typeMustBeKnown(asUnmodifiableType(packageId), ctx, pkgImp.getPosition)
+        VoidType
+
+      case DeviceImport(device) => VoidType
 
       case _: (Param | Sequence) => assert(false)
     }
@@ -473,7 +491,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         reportError(s"expected '$expType', found '$actType'", arg.getPosition)
         errorFound = true
         args.foreach {
-          case VariableRef(name) => ctx.mutIsUsed(name)  // minimize false positives
+          case VariableRef(name) => ctx.mutIsUsed(name) // minimize false positives
           case _ => ()
         }
       }
@@ -489,7 +507,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       }
     }
   }
-  
+
   private def detectSmartCasts(expr: Expr, ctx: TypeCheckingContext): Map[FunOrVarId, Type] = {
     expr match {
       case BinaryOp(lhs, Operator.And, rhs) =>
@@ -594,7 +612,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case None =>
         reportError(s"unknown: $name", posOpt)
       case Some(LocalInfo(_, tpe, isReassignable, _, _, _)) =>
-        if (!isReassignable){
+        if (!isReassignable) {
           reportError(s"$name is not reassignable", posOpt)
         }
         tpe
@@ -603,7 +621,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   private def exprMustBeArray(exprType: Type, ctx: TypeCheckingContext, posOpt: Option[Position], mustUpdate: Boolean): Type = {
     exprType match
       case ArrayType(elemType, modifiable) =>
-        if (mustUpdate && !modifiable){
+        if (mustUpdate && !modifiable) {
           reportError("update impossible: missing modification privileges on array", posOpt)
         }
         elemType
@@ -632,11 +650,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
           case StructSignature(_, fields, _, _) if fields.contains(fieldName) =>
             val FieldInfo(fieldType, fieldIsReassig) = fields.apply(fieldName)
             val missingModifPrivilege = mustUpdateField && !modifiable
-            if (missingModifPrivilege){
+            if (missingModifPrivilege) {
               reportError(s"cannot update field '$fieldName': missing modification privileges on owner struct", posOpt)
             }
             val missingFieldMutability = mustUpdateField && !fieldIsReassig
-            if (missingFieldMutability){
+            if (missingFieldMutability) {
               reportError(s"cannot update immutable field '$fieldName'", posOpt)
             }
             fieldType
@@ -650,14 +668,14 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
   private def checkSubtypingConstraint(expected: Type, actual: Type, posOpt: Option[Position], msgPrefix: String)
                                       (using Map[TypeIdentifier, StructSignature]): Unit = {
-    if (expected != UndefinedType && actual != UndefinedType && !actual.subtypeOf(expected)){
+    if (expected != UndefinedType && actual != UndefinedType && !actual.subtypeOf(expected)) {
       val fullprefix = if msgPrefix == "" then "" else (msgPrefix ++ ": ")
       reportError(fullprefix ++ s"expected '$expected', found '$actual'", posOpt)
     }
   }
 
   private def typeMustBeKnown(tpe: Type, ctx: TypeCheckingContext, posOpt: Option[Position]): Type = {
-    if (ctx.knowsType(tpe)){
+    if (ctx.knowsType(tpe)) {
       tpe
     } else {
       reportError(s"unknown type: '$tpe'", posOpt)
@@ -705,6 +723,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
         ctx.mutIsUsed(name)
       case _ => ()
   }
+
+  private def asUnmodifiableType(tid: TypeIdentifier): NamedType = NamedType(tid, modifiable = false)
 
   private def logicalImplies(p: Boolean, q: Boolean): Boolean = !p || q
 

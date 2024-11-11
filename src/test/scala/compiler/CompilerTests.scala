@@ -409,7 +409,7 @@ class CompilerTests {
   }
 
   private def findCoreClass(classes: Seq[Class[?]]) = {
-    classes.find(_.getName.endsWith(GenFilesNames.coreFilePostfix)).get
+    classes.find(_.getName.endsWith(NamesForGeneratedClasses.coreFilePostfix)).get
   }
 
   private def compileAndLoadClasses(srcFileName: String): Seq[Class[?]] = {

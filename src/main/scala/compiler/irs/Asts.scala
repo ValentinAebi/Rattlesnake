@@ -137,21 +137,21 @@ object Asts {
     override def isInterface: Boolean = false
     override def children: List[Ast] = imports ++ functions
   }
-  
+
   sealed trait Import extends Ast
-  
+
   final case class ModuleImport(instanceId: FunOrVarId, moduleId: TypeIdentifier) extends Import {
     override def children: List[Ast] = Nil
   }
-  
+
   final case class PackageImport(packageId: TypeIdentifier) extends Import {
     override def children: List[Ast] = Nil
   }
-  
+
   final case class DeviceImport(device: Device) extends Import {
     override def children: List[Ast] = Nil
   }
-  
+
 
   /**
    * Structure (`struct`) or interface definition
@@ -169,7 +169,7 @@ object Asts {
   /**
    * Function definition
    */
-  final case class FunDef(funName: FunOrVarId, params: List[Param], optRetType: Option[Type], body: Block) extends TopLevelDef {
+  final case class FunDef(funName: FunOrVarId, params: List[Param], optRetType: Option[Type], body: Block) extends Ast {
     val signature: FunctionSignature = FunctionSignature(funName, params.map(_.tpe), optRetType.getOrElse(VoidType))
 
     override def children: List[Ast] = params :+ body
@@ -263,7 +263,7 @@ object Asts {
   final case class PackageRef(pkgName: TypeIdentifier) extends Expr {
     override def children: List[Ast] = Nil
   }
-  
+
   final case class DeviceRef(device: Device) extends Expr {
     override def children: List[Ast] = Nil
   }
