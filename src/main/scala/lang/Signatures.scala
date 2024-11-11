@@ -15,23 +15,36 @@ final case class FunctionSignature(
 
 sealed trait TypeSignature {
   def isInterface: Boolean
+
   def isModuleOrPackage: Boolean
+
+  def functions: Map[FunOrVarId, FunctionSignature]
 }
 
 sealed trait ModuleOrPackageSignature extends TypeSignature {
-  def functions: Map[FunOrVarId, FunctionSignature]
+  def importedModules: mutable.LinkedHashMap[FunOrVarId, TypeIdentifier]
+
+  def importedPackages: mutable.LinkedHashSet[TypeIdentifier]
+
+  def importedDevices: mutable.LinkedHashSet[Device]
+
   override def isInterface: Boolean = false
+
   override def isModuleOrPackage: Boolean = true
 }
 
 final case class ModuleSignature(
                                   name: TypeIdentifier,
-                                  paramTypes: mutable.LinkedHashMap[FunOrVarId, Type],
+                                  importedModules: mutable.LinkedHashMap[FunOrVarId, TypeIdentifier],
+                                  importedPackages: mutable.LinkedHashSet[TypeIdentifier],
+                                  importedDevices: mutable.LinkedHashSet[Device],
                                   functions: Map[FunOrVarId, FunctionSignature]
                                 ) extends ModuleOrPackageSignature
 
 final case class PackageSignature(
                                    name: TypeIdentifier,
+                                   importedPackages: mutable.LinkedHashSet[TypeIdentifier],
+                                   importedDevices: mutable.LinkedHashSet[Device],
                                    functions: Map[FunOrVarId, FunctionSignature]
                                  ) extends ModuleOrPackageSignature
 
@@ -41,6 +54,17 @@ final case class StructSignature(
                                   directSupertypes: Seq[TypeIdentifier],
                                   isInterface: Boolean
                                 ) extends TypeSignature {
+  override def isModuleOrPackage: Boolean = false
+
+  override def functions: Map[FunOrVarId, FunctionSignature] = Map.empty
+}
+
+final case class DeviceSignature(
+                                  tpe: TypeIdentifier,
+                                  functions: Map[FunOrVarId, FunctionSignature]
+                                ) extends TypeSignature {
+  override def isInterface: Boolean = false
+
   override def isModuleOrPackage: Boolean = false
 }
 

@@ -12,7 +12,7 @@ import lang.*
 import lang.Operator.*
 import lang.SubtypeRelation.subtypeOf
 import lang.Types.PrimitiveType.*
-import lang.Types.{ArrayType, PrimitiveType, StructOrModuleType, UnionType}
+import lang.Types.{ArrayType, PrimitiveType, NamedType, UnionType}
 import org.objectweb.asm
 import org.objectweb.asm.*
 import org.objectweb.asm.Opcodes.*
@@ -52,7 +52,7 @@ final class Backend[V <: ClassVisitor](
       val constsBuilder = List.newBuilder[ConstDef]
       for src <- sources; df <- src.defs do {
         df match
-          case modOrPkg: ModuleOrPackageTree => modulesAndPackagesBuilder.addOne(modOrPkg)
+          case modOrPkg: ModuleOrPackageDefTree => modulesAndPackagesBuilder.addOne(modOrPkg)
           case structDef: StructDef => structsBuilder.addOne(structDef)
           case constDef: ConstDef => constsBuilder.addOne(constDef)
       }
@@ -111,11 +111,11 @@ final class Backend[V <: ClassVisitor](
     mode.terminate(ccv, constantsFilePath, errorReporter)
   }
 
-  private def generateModuleOrPackageFile(modOrPkg: ModuleOrPackageTree, path: Path)(using ctx: AnalysisContext): Unit = {
+  private def generateModuleOrPackageFile(modOrPkg: ModuleOrPackageDefTree, path: Path)(using ctx: AnalysisContext): Unit = {
     val cv: V = mode.createVisitor(path)
     cv.visit(javaVersionCode, ACC_PUBLIC, modOrPkg.name.stringId, null, objectTypeStr, null)
     addConstructor(cv)
-    val pkgTypeDescr = descriptorForType(StructOrModuleType(modOrPkg.name, false))
+    val pkgTypeDescr = descriptorForType(NamedType(modOrPkg.name, false))
     if (modOrPkg.isInstanceOf[PackageDef]) {
       addInstanceFieldAndInitializer(modOrPkg, cv, pkgTypeDescr)
     }
@@ -131,7 +131,7 @@ final class Backend[V <: ClassVisitor](
     mode.terminate(cv, path, errorReporter)
   }
 
-  private def addInstanceFieldAndInitializer(modOrPkg: ModuleOrPackageTree, cv: V, pkgTypeDescr: String): Unit = {
+  private def addInstanceFieldAndInitializer(modOrPkg: ModuleOrPackageDefTree, cv: V, pkgTypeDescr: String): Unit = {
     val pkgName = modOrPkg.name.stringId
     cv.visitField(
       ACC_PUBLIC | ACC_STATIC,
@@ -186,7 +186,7 @@ final class Backend[V <: ClassVisitor](
         case struct: StructDef =>
           val interfaces = struct.directSupertypes.map(_.stringId).toArray
           generateStruct(struct, interfaces, classFilePath)
-        case modOrPkg: ModuleOrPackageTree =>
+        case modOrPkg: ModuleOrPackageDefTree =>
           generateModuleOrPackageFile(modOrPkg, classFilePath)
       }
       classFilePaths.addOne(classFilePath)
@@ -365,7 +365,7 @@ final class Backend[V <: ClassVisitor](
           generateCode(arg, ctx)
         }
         val recvInternalName = internalNameOf(receiver.getType)
-        val receiverTypeName = receiver.getType.asInstanceOf[StructOrModuleType].typeName
+        val receiverTypeName = receiver.getType.asInstanceOf[NamedType].typeName
         val funDescr = descriptorForFunc(ctx.resolveFunc(receiverTypeName, funName).getOrThrow())
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, recvInternalName, funName.stringId, funDescr, false)
       }
@@ -380,7 +380,7 @@ final class Backend[V <: ClassVisitor](
       case ArrayInit(elemType, size) =>
         generateCode(size, ctx)
         elemType match {
-          case _: (PrimitiveType.StringType.type | StructOrModuleType | ArrayType | UnionType) =>
+          case _: (PrimitiveType.StringType.type | NamedType | ArrayType | UnionType) =>
             mv.visitTypeInsn(Opcodes.ANEWARRAY, internalNameOf(elemType))
           case _: Types.PrimitiveType =>
             val elemTypeCode = convertToAsmTypeCode(elemType).get
@@ -389,7 +389,7 @@ final class Backend[V <: ClassVisitor](
         }
 
       case StructOrModuleInstantiation(structName, args, modifiable) =>
-        val structType = StructOrModuleType(structName, modifiable)
+        val structType = NamedType(structName, modifiable)
         val tmpVarIdx = ctx.currLocalIdx
         val tempLocalName = BackendGeneratedVarId(tmpVarIdx)
         ctx.addLocal(tempLocalName, structType)
@@ -456,7 +456,7 @@ final class Backend[V <: ClassVisitor](
            */
           val trueLabel = new Label()
           val endLabel = new Label()
-          val opcode = if tpe.isInstanceOf[StructOrModuleType] then Opcodes.IF_ACMPEQ else Opcodes.IF_ICMPEQ
+          val opcode = if tpe.isInstanceOf[NamedType] then Opcodes.IF_ACMPEQ else Opcodes.IF_ICMPEQ
           mv.visitJumpInsn(opcode, trueLabel)
           mv.visitInsn(Opcodes.ICONST_0)
           mv.visitJumpInsn(Opcodes.GOTO, endLabel)
@@ -518,7 +518,7 @@ final class Backend[V <: ClassVisitor](
 
       case Select(lhs, selected) =>
         generateCode(lhs, ctx)
-        val structName = lhs.getType.asInstanceOf[StructOrModuleType].typeName
+        val structName = lhs.getType.asInstanceOf[NamedType].typeName
         val fieldInfo = analysisContext.structs.apply(structName).fields.apply(selected)
         if (ctx.structs.apply(structName).isInterface) {
           val getterDescriptor = descriptorForFunc(FunctionSignature(selected, List.empty, fieldInfo.tpe))
@@ -549,7 +549,7 @@ final class Backend[V <: ClassVisitor](
           case Select(ownerStruct, fieldName) =>
             generateCode(ownerStruct, ctx)
             generateCode(rhs, ctx)
-            val ownerTypeName = ownerStruct.getType.asInstanceOf[StructOrModuleType].typeName
+            val ownerTypeName = ownerStruct.getType.asInstanceOf[NamedType].typeName
             val fieldType = ctx.structs(ownerTypeName).fields(fieldName).tpe
             if (ctx.structs.apply(ownerTypeName).isInterface) {
               val setterSig = FunctionSignature(fieldName, List(fieldType), PrimitiveType.VoidType)
@@ -683,7 +683,7 @@ final class Backend[V <: ClassVisitor](
     }
   }
 
-  private def asType(tid: TypeIdentifier): StructOrModuleType = StructOrModuleType(tid, modifiable = false)
+  private def asType(tid: TypeIdentifier): NamedType = NamedType(tid, modifiable = false)
 
   private def shouldNotHappen(): Nothing = assert(false)
 

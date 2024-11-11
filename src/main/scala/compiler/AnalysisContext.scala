@@ -26,7 +26,7 @@ final case class AnalysisContext(
   def knowsType(tpe: Type): Boolean = {
     tpe match {
       case _: Types.PrimitiveType => true
-      case Types.StructOrModuleType(typeName, _) => knowsUserDefType(typeName)
+      case Types.NamedType(typeName, _) => knowsUserDefType(typeName)
       case Types.ArrayType(elemType, _) => knowsType(elemType)
       case Types.UnionType(unitedTypes) => unitedTypes.forall(knowsType)
       case Types.UndefinedType => true
@@ -48,11 +48,14 @@ final case class AnalysisContext(
     structs.get(tid).orElse(modules.get(tid)).orElse(packages.get(tid))
 
   def resolveFunc(owner: TypeIdentifier, methodName: FunOrVarId): MethodResolutionResult = {
-    modules.get(owner).orElse(packages.get(owner)) map { funcRepo =>
-      funcRepo.functions.get(methodName) map { sig =>
-        FunctionFound(sig)
-      } getOrElse FunctionNotFound
-    } getOrElse ModuleNotFound
+    modules.get(owner)
+      .orElse(packages.get(owner))
+      .orElse(Device.deviceTypeToSig.get(owner))
+      .map { modOrPkg =>
+        modOrPkg.functions.get(methodName) map { sig =>
+          FunctionFound(sig)
+        } getOrElse FunctionNotFound
+      } getOrElse ModuleNotFound
   }
 
 }
@@ -79,8 +82,10 @@ object AnalysisContext {
     private val modules: mutable.Map[TypeIdentifier, ModuleSignature] = mutable.Map.empty
     private val packages: mutable.Map[TypeIdentifier, PackageSignature] = mutable.Map(
       IntrinsicsPackageId -> PackageSignature(
-        IntrinsicsPackageId,
-        Intrinsics.builtInFunctions
+        name = IntrinsicsPackageId,
+        importedPackages = mutable.LinkedHashSet.empty,
+        importedDevices = mutable.LinkedHashSet.empty,
+        functions = Intrinsics.builtInFunctions
       )
     )
     private val structs: mutable.Map[TypeIdentifier, (StructSignature, Option[Position])] = mutable.Map.empty
@@ -89,9 +94,9 @@ object AnalysisContext {
     def addModule(moduleDef: ModuleDef): Unit = {
       val moduleName = moduleDef.moduleName
       if (checkTypeNotAlreadyDefined(moduleName, moduleDef.getPosition)) {
-        val paramsMap = buildParamsMap(moduleDef)
+        val (importedModules, importedPackages, importedDevices) = analyzeImports(moduleDef)
         val functions = extractFunctions(moduleDef)
-        val moduleSig = ModuleSignature(moduleName, paramsMap, functions)
+        val moduleSig = ModuleSignature(moduleName, importedModules, importedPackages, importedDevices, functions)
         modules.put(moduleName, moduleSig)
       }
     }
@@ -100,7 +105,8 @@ object AnalysisContext {
       val packageName = packageDef.packageName
       if (checkTypeNotAlreadyDefined(packageName, packageDef.getPosition)) {
         val functions = extractFunctions(packageDef)
-        val sig = PackageSignature(packageName, functions)
+        val (implicitlyImportedPackages, implicitlyImportedDevices) = trackPackagesAndDevices(packageDef)
+        val sig = PackageSignature(packageName, implicitlyImportedPackages, implicitlyImportedDevices, functions)
         packages.put(packageName, sig)
       }
     }
@@ -136,7 +142,7 @@ object AnalysisContext {
       )
     }
 
-    private def extractFunctions(repo: ModuleOrPackageTree): Map[FunOrVarId, FunctionSignature] = {
+    private def extractFunctions(repo: ModuleOrPackageDefTree): Map[FunOrVarId, FunctionSignature] = {
       val functions = mutable.Map.empty[FunOrVarId, FunctionSignature]
       for funDef <- repo.functions do {
         val name = funDef.funName
@@ -149,26 +155,31 @@ object AnalysisContext {
       functions.toMap
     }
 
-    private def buildParamsMap(moduleDef: ModuleDef) = {
-      val paramsMap = new mutable.LinkedHashMap[FunOrVarId, Type]()
-      for param <- moduleDef.params do {
-        param.paramNameOpt match {
-          case None =>
-            reportError("module parameters must be named", param.getPosition)
-          case Some(paramName) =>
-            if (param.isReassignable) {
-              reportError("module parameters can not be reassignable", param.getPosition)
-            }
-            if (checkIsNotVoidOrNothing(param.tpe, param.getPosition)) {
-              if (paramsMap.contains(paramName)) {
-                reportError(s"duplicate parameter: '$paramName'", param.getPosition)
-              } else {
-                paramsMap.put(paramName, param.tpe)
-              }
-            }
-        }
+    private def analyzeImports(moduleDef: ModuleDef) = {
+      val importsMap = new mutable.LinkedHashMap[FunOrVarId, TypeIdentifier]()
+      val packagesSet = new mutable.LinkedHashSet[TypeIdentifier]()
+      val devicesSet = new mutable.LinkedHashSet[Device]()
+      moduleDef.imports.foreach {
+        case ModuleImport(instanceId, moduleId) =>
+          importsMap.put(instanceId, moduleId)
+        case PackageImport(packageId) =>
+          packagesSet.add(packageId)
+        case DeviceImport(device) =>
+          devicesSet.add(device)
       }
-      paramsMap
+      (importsMap, packagesSet, devicesSet)
+    }
+
+    private def trackPackagesAndDevices(pkg: PackageDef) = {
+      val packages = mutable.LinkedHashSet[TypeIdentifier]()
+      val devices = mutable.LinkedHashSet[Device]()
+      pkg.collect {
+        case PackageRef(packageName) =>
+          packages.add(packageName)
+        case DeviceRef(device) =>
+          devices.add(device)
+      }
+      (packages, devices)
     }
 
     private def buildFieldsMap(structDef: StructDef) = {

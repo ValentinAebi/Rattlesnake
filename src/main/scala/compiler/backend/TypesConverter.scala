@@ -30,7 +30,7 @@ object TypesConverter {
       case PrimitiveType.BoolType => BOOLEAN_TYPE.toSome
       case PrimitiveType.VoidType => VOID_TYPE.toSome
       case PrimitiveType.NothingType => VOID_TYPE.toSome
-      case _: (PrimitiveType.StringType.type | StructOrModuleType | ArrayType | UnionType) => None
+      case _: (PrimitiveType.StringType.type | NamedType | ArrayType | UnionType) => None
       case Types.UndefinedType => assert(false)
   }
 
@@ -52,9 +52,9 @@ object TypesConverter {
       case PrimitiveType.StringType => "java/lang/String"
       case PrimitiveType.VoidType => "V"
       case PrimitiveType.NothingType => "V"
-      case StructOrModuleType(typeName, _) if !ctx.resolveType(typeName).get.isInterface => s"$typeName"
+      case NamedType(typeName, _) if !ctx.resolveType(typeName).get.isInterface => s"$typeName"
       case ArrayType(elemType, _) => s"[${descriptorForType(elemType)}"
-      case StructOrModuleType(_, _) | UnionType(_) => "java/lang/Object"
+      case NamedType(_, _) | UnionType(_) => "java/lang/Object"
       case UndefinedType => assert(false)
   }
 

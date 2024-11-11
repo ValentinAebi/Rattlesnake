@@ -4,7 +4,7 @@ import compiler.Position
 import identifiers.*
 import lang.Types.*
 import lang.Types.PrimitiveType.*
-import lang.{FunctionSignature, Keyword, Operator}
+import lang.{Device, FunctionSignature, Keyword, Operator}
 
 object Asts {
 
@@ -116,25 +116,42 @@ object Asts {
     def isInterface: Boolean
   }
   
-  sealed trait ModuleOrPackageTree extends TypeDefTree {
-    def params: List[Param]
+  sealed trait ModuleOrPackageDefTree extends TypeDefTree {
     def functions: List[FunDef]
   }
   
-  final case class PackageDef(packageName: TypeIdentifier, functions: List[FunDef]) extends ModuleOrPackageTree {
+  final case class PackageDef(packageName: TypeIdentifier, functions: List[FunDef]) extends ModuleOrPackageDefTree {
     override def name: TypeIdentifier = packageName
-    override def params: List[Param] = Nil
     override def directSupertypes: Seq[TypeIdentifier] = Nil
     override def isInterface: Boolean = false
     override def children: List[Ast] = functions
   }
 
-  final case class ModuleDef(moduleName: TypeIdentifier, params: List[Param], functions: List[FunDef]) extends ModuleOrPackageTree {
+  final case class ModuleDef(
+                              moduleName: TypeIdentifier,
+                              imports: List[Import],
+                              functions: List[FunDef]
+                            ) extends ModuleOrPackageDefTree {
     override def name: TypeIdentifier = moduleName
     override def directSupertypes: Seq[TypeIdentifier] = Nil
     override def isInterface: Boolean = false
-    override def children: List[Ast] = params ++ functions
+    override def children: List[Ast] = imports ++ functions
   }
+  
+  sealed trait Import extends Ast
+  
+  final case class ModuleImport(instanceId: FunOrVarId, moduleId: TypeIdentifier) extends Import {
+    override def children: List[Ast] = Nil
+  }
+  
+  final case class PackageImport(packageId: TypeIdentifier) extends Import {
+    override def children: List[Ast] = Nil
+  }
+  
+  final case class DeviceImport(device: Device) extends Import {
+    override def children: List[Ast] = Nil
+  }
+  
 
   /**
    * Structure (`struct`) or interface definition
@@ -244,6 +261,10 @@ object Asts {
   }
   
   final case class PackageRef(pkgName: TypeIdentifier) extends Expr {
+    override def children: List[Ast] = Nil
+  }
+  
+  final case class DeviceRef(device: Device) extends Expr {
     override def children: List[Ast] = Nil
   }
   

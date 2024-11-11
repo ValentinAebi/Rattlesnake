@@ -10,7 +10,7 @@ import compiler.{CompilerStep, Errors, Position}
 import identifiers.*
 import lang.Keyword.*
 import lang.Operator.*
-import lang.Types.{ArrayType, StructOrModuleType, Type}
+import lang.Types.{ArrayType, NamedType, Type}
 import lang.{Keyword, Operator, Operators, Types}
 
 import scala.compiletime.uninitialized
@@ -104,10 +104,10 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   private lazy val moduleDef: P[ModuleDef] = {
     kw(Module).ignored ::: highName
-      ::: openParenth ::: repeatWithSep(param, comma) ::: closeParenth
+      ::: openParenth ::: repeatWithSep(importTree, comma) ::: closeParenth
       ::: openBrace ::: repeat(funDef ::: maybeSemicolon) ::: closeBrace map {
-      case moduleName ^: params ^: functions =>
-        ModuleDef(moduleName, params, functions)
+      case moduleName ^: imports ^: functions =>
+        ModuleDef(moduleName, imports, functions)
     }
   } setName "moduleDef"
 
@@ -117,6 +117,20 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
         FunDef(funName, params, optRetType, body)
     }
   } setName "funDef"
+
+  private lazy val moduleImport = lowName ::: colon ::: highName map {
+    case instanceId ^: moduleId => ModuleImport(instanceId, moduleId)
+  } setName "moduleImport"
+
+  private lazy val packageImport = {
+    kw(Package).ignored ::: highName map (PackageImport(_))
+  } setName "packageImport"
+
+  private lazy val deviceImport = kw(Device).ignored ::: device map {
+    device => DeviceImport(device)
+  } setName "deviceImport"
+
+  private lazy val importTree = moduleImport OR packageImport OR deviceImport
 
   private lazy val param = {
     opt(kw(Var)) ::: opt(lowName ::: colon) ::: tpe map {
@@ -161,7 +175,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   private lazy val modifiableType: P[Type] = recursive {
     kw(Mut).ignored ::: unmodifiableType map {
-      case StructOrModuleType(typeName, _) => StructOrModuleType(typeName, modifiable = true)
+      case NamedType(typeName, _) => NamedType(typeName, modifiable = true)
       case ArrayType(elemType, _) => ArrayType(elemType, modifiable = true)
       case tpe =>
         val pos = ll1Iterator.current.position // imprecise (takes the position on the next token)
@@ -175,12 +189,16 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "unmodifiableType"
 
   private lazy val atomicType = {
-    highName map (name => Types.primTypeFor(name).getOrElse(StructOrModuleType(name, modifiable = false)))
+    highName map (name => Types.primTypeFor(name).getOrElse(NamedType(name, modifiable = false)))
   } setName "atomicType"
 
   private lazy val arrayType = recursive {
     kw(Arr).ignored ::: tpe map (ArrayType.apply(_, modifiable = false))
   } setName "arrayType"
+  
+  private lazy val device = kw(lang.Device.kwToDevice.keys.toSeq*) map {
+    deviceKw => lang.Device.kwToDevice.apply(deviceKw)
+  } setName "device"
 
   private lazy val block = recursive {
     openBrace ::: repeatWithEnd(stat, semicolon) ::: closeBrace map {
@@ -238,9 +256,11 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "indexing"
 
   private lazy val me = kw(Me) map (_ => MeRef())
-  
+
   private lazy val pkgRef = highName map (PackageRef(_))
   
+  private lazy val deviceRef = device map (DeviceRef(_))
+
   private lazy val varRefOrIntrinsicCall = lowName ::: opt(callArgs) map {
     case name ^: Some(args) => Call(None, name, args)
     case name ^: None => VariableRef(name)
@@ -253,7 +273,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val selectOrIndexingChain = recursive {
     atomicExpr ::: repeat((dot ::: lowName ::: opt(callArgs)) OR indexing) map {
       case atExpr ^: repeated =>
-        repeated.foldLeft(atExpr){
+        repeated.foldLeft(atExpr) {
           case (acc, name ^: Some(args)) => Call(Some(acc), name, args)
           case (acc, name ^: None) => Select(acc, name)
           case (acc, index: Expr) => Indexing(acc, index)

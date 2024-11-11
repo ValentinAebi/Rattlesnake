@@ -8,7 +8,7 @@ import compiler.{AnalysisContext, Errors, Position}
 import identifiers.{FunOrVarId, TypeIdentifier}
 import lang.{FunctionSignature, Keyword}
 import lang.Types.PrimitiveType.{NothingType, VoidType}
-import lang.Types.{StructOrModuleType, Type}
+import lang.Types.{NamedType, Type}
 
 import scala.collection.mutable
 
@@ -19,7 +19,7 @@ final case class TypeCheckingContext(
                                       private val analysisContext: AnalysisContext,
                                       private val locals: mutable.Map[FunOrVarId, LocalInfo] = mutable.Map.empty,
                                       expectedRetType: Option[Type],
-                                      currentModule: Option[TypeIdentifier]
+                                      currentEnvironment: Option[Environment]
                                     ) {
   // Locals that have been created by this context (i.e. not obtained via copied)
   private val ownedLocals: mutable.Set[FunOrVarId] = mutable.Set.empty
@@ -45,8 +45,8 @@ final case class TypeCheckingContext(
     })
   }
   
-  def copyWithCurrentModule(currentModule: TypeIdentifier): TypeCheckingContext =
-    copy(currentModule = Some(currentModule))
+  def copyForModuleOrPackage(moduleInfos: Environment): TypeCheckingContext =
+    copy(currentEnvironment = Some(moduleInfos))
 
   /**
    * Register a new local

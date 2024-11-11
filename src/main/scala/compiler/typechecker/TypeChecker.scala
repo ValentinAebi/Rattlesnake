@@ -20,7 +20,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   override def apply(input: (List[Source], AnalysisContext)): (List[Source], AnalysisContext) = {
     val (sources, analysisContext) = input
     for src <- sources do {
-      check(src, TypeCheckingContext(analysisContext, expectedRetType = None, currentModule = None))
+      check(src, TypeCheckingContext(analysisContext, expectedRetType = None, currentEnvironment = None))
     }
     errorReporter.displayAndTerminateIfErrors()
     sources.foreach(_.assertAllTypesAreSet())
@@ -45,16 +45,30 @@ final class TypeChecker(errorReporter: ErrorReporter)
         newCtx.writeLocalsRelatedWarnings(errorReporter)
         VoidType
 
-      case ModuleDef(moduleName, params, functions) =>
-        typesMustBeKnownInParams(params, ctx)
+      case ModuleDef(moduleName, imports, functions) =>
+        for imp <- imports do {
+          check(imp, ctx)
+        }
+        val moduleSig = ctx.resolveType(moduleName).asInstanceOf[ModuleSignature]
+        val newCtx = ctx.copyForModuleOrPackage(Environment(
+          moduleName,
+          moduleSig.importedPackages.toSet,
+          moduleSig.importedDevices.toSet
+        ))
         for func <- functions do {
-          check(func, ctx.copyWithCurrentModule(moduleName))
+          check(func, newCtx)
         }
         VoidType
 
       case PackageDef(packageName, functions) =>
+        val sig = ctx.resolveType(packageName).asInstanceOf[PackageSignature]
+        val newCtx = ctx.copyForModuleOrPackage(Environment(
+          packageName,
+          sig.importedPackages.toSet,
+          sig.importedDevices.toSet
+        ))
         for func <- functions do {
-          check(func, ctx.copyWithCurrentModule(packageName))
+          check(func, newCtx)
         }
         VoidType
 
@@ -137,21 +151,30 @@ final class TypeChecker(errorReporter: ErrorReporter)
         mustBeKnown(name, ctx, varRef.getPosition)
 
       case MeRef() =>
-        StructOrModuleType(ctx.currentModule.get, modifiable = false)
+        NamedType(ctx.currentEnvironment.get.currentModule, modifiable = false)
 
       case pkg@PackageRef(packageName) =>
+        if (!ctx.currentEnvironment.get.allowsPackage(packageName)){
+          reportError(s"illegal reference to $packageName, which is not imported in this module", pkg.getPosition)
+        }
         ctx.resolveType(packageName) match {
-          case Some(PackageSignature(_, _)) => StructOrModuleType(packageName, modifiable = false)
+          case Some(packageSignature: PackageSignature) => NamedType(packageName, modifiable = false)
           case Some(_) => reportError(s"$packageName is not a package and is thus not allowed here", pkg.getPosition)
           case None => reportError(s"not found: $packageName", pkg.getPosition)
         }
+
+      case devRef@DeviceRef(device) =>
+        if (!ctx.currentEnvironment.get.allowsDevice(device)){
+          reportError(s"illegal reference to device $device, which is not imported in this module", devRef.getPosition)
+        }
+        NamedType(device.sig.tpe, modifiable = false)
 
       case call@Call(None, funName, args) =>
         checkFunCall(IntrinsicsPackageId, funName, args, call.getPosition, ctx)
         
       case call@Call(Some(lhs), funName, args) =>
         check(lhs, ctx) match {
-          case StructOrModuleType(typeName, _) =>
+          case NamedType(typeName, _) =>
             checkFunCall(typeName, funName, args, call.getPosition, ctx)
           case lhsType =>
             reportError(s"expected a module or package type, found $lhsType", lhs.getPosition)
@@ -212,7 +235,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
                 isWarning = true
               )
             }
-            StructOrModuleType(tid, modifiable)
+            NamedType(tid, modifiable)
           case _ => reportError(s"not found: structure or module '$tid'", instantiation.getPosition)
         }
 
@@ -427,11 +450,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def structCastResult(srcType: Type, destType: Type)
-                              (using Map[TypeIdentifier, StructSignature]): Option[StructOrModuleType] = {
+                              (using Map[TypeIdentifier, StructSignature]): Option[NamedType] = {
     (srcType, destType) match {
-      case (StructOrModuleType(_, srcIsModifiable), StructOrModuleType(destTypeName, destIsModifiable))
+      case (NamedType(_, srcIsModifiable), NamedType(destTypeName, destIsModifiable))
         if destType.subtypeOf(srcType.unmodifiable) && logicalImplies(destIsModifiable, srcIsModifiable)
-      => Some(StructOrModuleType(destTypeName, srcIsModifiable))
+      => Some(NamedType(destTypeName, srcIsModifiable))
       case _ => None
     }
   }
@@ -604,7 +627,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
                                          mustUpdateField: Boolean
                                        ): Type = {
     exprType match {
-      case StructOrModuleType(typeName, modifiable) =>
+      case NamedType(typeName, modifiable) =>
         ctx.structs.apply(typeName) match {
           case StructSignature(_, fields, _, _) if fields.contains(fieldName) =>
             val FieldInfo(fieldType, fieldIsReassig) = fields.apply(fieldName)
@@ -644,15 +667,15 @@ final class TypeChecker(errorReporter: ErrorReporter)
   private def computeJoinOf(types: Set[Type])(using structs: Map[TypeIdentifier, StructSignature]): Option[Type] = {
     require(types.nonEmpty)
     if types.size == 1 then Some(types.head)
-    else if (types.forall(_.isInstanceOf[StructOrModuleType])) {
+    else if (types.forall(_.isInstanceOf[NamedType])) {
       // if the structs have exactly 1 direct supertype in common, infer it as the result type
       val directSupertypesSets = types.map { tpe =>
-        structs.apply(tpe.asInstanceOf[StructOrModuleType].typeName).directSupertypes.toSet
+        structs.apply(tpe.asInstanceOf[NamedType].typeName).directSupertypes.toSet
       }
       val commonDirectSupertypes = directSupertypesSets.reduceLeft(_.intersect(_))
       Some(
         if commonDirectSupertypes.size == 1
-        then StructOrModuleType(commonDirectSupertypes.head, modifiable = types.forall(_.isModifiableForSure))
+        then NamedType(commonDirectSupertypes.head, modifiable = types.forall(_.isModifiableForSure))
         else UnionType(types)
       )
     } else {
