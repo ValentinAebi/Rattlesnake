@@ -1,3 +1,10 @@
+
+### ⚠️ The documentation in this readme corresponds to the main branch.
+
+This branch contains an experimental implementation of the Gradient type system (Boruch-Gruszecki et al., 2024) inside the Rattlesnake language. 
+Documentation is not up to date.
+___
+
 # Rattlesnake 🐍
 
 Simple procedural programming language, statically typed and compiled to JVM bytecode
