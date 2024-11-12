@@ -85,7 +85,7 @@ object AnalysisContext {
         name = IntrinsicsPackageId,
         importedPackages = mutable.LinkedHashSet.empty,
         importedDevices = mutable.LinkedHashSet.empty,
-        functions = Intrinsics.builtInFunctions
+        functions = Intrinsics.intrinsics
       )
     )
     private val structs: mutable.Map[TypeIdentifier, (StructSignature, Option[Position])] = mutable.Map.empty

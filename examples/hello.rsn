@@ -1,16 +1,21 @@
-fn joinWords(words: arr String, endSymbol: Char) -> String {
-    var joined = "";
-    for var i = 0; i < #words; i += 1 {
-        joined += words[i];
-        if i < #words-1 {
-            joined += " ";
-        }
-    };
-    return joined + charToString(endSymbol)
-}
 
-fn main(arr String){
-    val msgWords = ["Hello", "world"];
-    val msg = joinWords(msgWords, '!');
-    print(msg)   // displays "Hello world!"
+package Hello {
+
+    fn joinWords(words: arr String, endSymbol: Char) -> String {
+        var joined = "";
+        for var i = 0; i < #words; i += 1 {
+            joined += words[i];
+            if i < #words-1 {
+                joined += " ";
+            }
+        };
+        return joined + charToString(endSymbol)
+    }
+
+    fn main(arr String){
+        val msgWords = ["Hello", "world"];
+        val msg = me.joinWords(msgWords, '!');
+        print(msg)   // displays "Hello world!"
+    }
+
 }

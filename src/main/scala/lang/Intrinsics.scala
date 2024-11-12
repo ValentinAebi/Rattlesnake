@@ -13,7 +13,7 @@ object Intrinsics {
   val boolToString: NormalFunOrVarId = NormalFunOrVarId("boolToString")
   val toCharArray: NormalFunOrVarId = NormalFunOrVarId("toCharArray")
 
-  val builtInFunctions: Map[FunOrVarId, FunctionSignature] = Map(
+  val intrinsics: Map[FunOrVarId, FunctionSignature] = Map(
     FunctionSignature(print, List(StringType), VoidType).keyed,
     FunctionSignature(intToString, List(IntType), StringType).keyed,
     FunctionSignature(doubleToString, List(DoubleType), StringType).keyed,

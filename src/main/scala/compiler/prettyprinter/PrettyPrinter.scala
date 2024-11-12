@@ -3,7 +3,7 @@ package compiler.prettyprinter
 import compiler.CompilerStep
 import compiler.irs.Asts.*
 import lang.Keyword.*
-import lang.Operator
+import lang.{Keyword, Operator}
 
 final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boolean = false) extends CompilerStep[Ast, String] {
 
@@ -29,6 +29,44 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
 
       case Sequence(stats, expr) =>
         addBracesList(stats :+ expr, ";", onMultipleLines = true)
+
+      case ModuleDef(moduleName, imports, functions) =>
+        pps
+          .add(Module.str)
+          .addSpace()
+          .add(moduleName)
+        addParenthList(imports)
+        pps
+          .add(" {")
+          .incrementIndent()
+          .newLine()
+        for (func <- functions) {
+          pps.newLine()
+          addAst(func)
+          pps.newLine()
+        }
+        pps
+          .decrementIndent()
+          .newLine()
+          .add("}")
+
+      case PackageDef(packageName, functions) =>
+        pps
+          .add(Package.str)
+          .addSpace()
+          .add(packageName)
+          .add(" {")
+          .incrementIndent()
+          .newLine()
+        for (func <- functions) {
+          pps.newLine()
+          addAst(func)
+          pps.newLine()
+        }
+        pps
+          .decrementIndent()
+          .newLine()
+          .add("}")
 
       case FunDef(funName, args, optRetType, body) =>
         pps
@@ -86,6 +124,24 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         }
         pps.add(tpe.toString)
 
+      case ModuleImport(instanceId, moduleId) =>
+        pps
+          .add(instanceId)
+          .add(": ")
+          .add(moduleId)
+
+      case PackageImport(packageId) =>
+        pps
+          .add(Package.str)
+          .addSpace()
+          .add(packageId)
+
+      case DeviceImport(device) =>
+        pps
+          .add(Keyword.Device.str)
+          .addSpace()
+          .add(device.keyword.str)
+
       case localDef@LocalDef(valName, optType, rhs, isReassignable) =>
         pps
           .add(localDef.keyword.str)
@@ -122,6 +178,15 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
 
       case VariableRef(name) =>
         pps.add(name)
+
+      case MeRef() =>
+        pps.add(Me.str)
+
+      case PackageRef(pkgName) =>
+        pps.add(pkgName)
+
+      case DeviceRef(device) =>
+        pps.add(device.keyword.str)
 
       case Call(receiverOpt, funName, args) =>
         receiverOpt.foreach { recv =>
@@ -164,8 +229,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           .add(New.str)
           .addSpace()
           .add(structName)
-          .addSpace()
-        addBracesList(args, ", ", onMultipleLines = false)
+        addParenthList(args)
 
       case UnaryOp(operator, operand) =>
         pps.add(operator.str)
