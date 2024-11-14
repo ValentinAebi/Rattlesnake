@@ -3,12 +3,11 @@ package compiler.backend
 import compiler.CompilationStep.CodeGeneration
 import compiler.Errors.*
 import compiler.NamesForGeneratedClasses.packageInstanceName
-import compiler.backend.IntrinsicsImpl.*
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
 import compiler.backend.TypesConverter.{convertToAsmTypeCode, internalNameOf, opcodeFor}
 import compiler.irs.Asts.*
 import compiler.{AnalysisContext, CompilerStep, FileExtensions, NamesForGeneratedClasses}
-import identifiers.{BackendGeneratedVarId, FunOrVarId, IntrinsicsPackageId, MeVarId, TypeIdentifier}
+import identifiers.{BackendGeneratedVarId, FunOrVarId, MeVarId, TypeIdentifier}
 import lang.*
 import lang.Operator.*
 import lang.SubtypeRelation.subtypeOf
@@ -22,7 +21,6 @@ import org.objectweb.asm.util.TraceClassVisitor
 import java.io.{FileOutputStream, PrintWriter}
 import java.nio.file.{Files, Path}
 import java.util.concurrent.atomic.AtomicInteger
-import scala.collection.immutable.Nil
 import scala.collection.mutable
 import scala.util.{Failure, Success, Using}
 

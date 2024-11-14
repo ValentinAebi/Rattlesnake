@@ -6,6 +6,7 @@ import compiler.Errors.{Err, ErrorReporter, errorsExitCode}
 import compiler.irs.Asts.*
 import identifiers.{FunOrVarId, IntrinsicsPackageId, TypeIdentifier}
 import lang.*
+import lang.SubcaptureRelation.SubcapturingContext
 import lang.SubtypeRelation.subtypeOf
 import lang.Types.PrimitiveType.{NothingType, VoidType}
 import lang.Types.Type
@@ -26,7 +27,7 @@ final case class AnalysisContext(
   def knowsType(tpe: Type): Boolean = {
     tpe match {
       case _: Types.PrimitiveType => true
-      case Types.NamedType(typeName, _) => knowsUserDefType(typeName)
+      case Types.NamedType(typeName, _, captureDescr) => knowsUserDefType(typeName)
       case Types.ArrayType(elemType, _) => knowsType(elemType)
       case Types.UnionType(unitedTypes) => unitedTypes.forall(knowsType)
       case Types.UndefinedType => true
@@ -230,11 +231,13 @@ object AnalysisContext {
         structs.get(directSupertypeId) match {
           case Some((directSupertypeSig, _)) => {
             if (directSupertypeSig.isInterface) {
+              val previousFields = mutable.Map.empty[FunOrVarId, Type]
               for ((fldName, superFldInfo) <- directSupertypeSig.fields) {
-                structSig.fields.get(fldName) match
+                structSig.fields.get(fldName) match {
                   case Some(subFieldInfo) =>
                     if (logicalImplies(superFldInfo.isReassignable, subFieldInfo.isReassignable)) {
-                      checkFieldVariance(structId, directSupertypeId, fldName, subFieldInfo, superFldInfo, builtStructMap, posOpt)
+                      checkFieldVariance(structId, directSupertypeId, fldName, previousFields.toMap,
+                        subFieldInfo, superFldInfo, builtStructMap, posOpt)
                     } else {
                       errorReporter.push(Err(ContextCreation,
                         s"subtyping error: $fldName needs to be reassignable in subtypes of $directSupertypeId", posOpt))
@@ -242,6 +245,8 @@ object AnalysisContext {
                   case None =>
                     errorReporter.push(Err(ContextCreation,
                       s"$structId cannot subtype $directSupertypeId: missing field $fldName", posOpt))
+                }
+                previousFields.addOne(fldName -> superFldInfo.tpe)
               }
             } else {
               reportError(s"struct $directSupertypeId is not an interface", posOpt)
@@ -254,15 +259,20 @@ object AnalysisContext {
     }
 
     private def checkFieldVariance(
-                                    structId: TypeIdentifier, directSupertypeId: TypeIdentifier,
+                                    structId: TypeIdentifier,
+                                    directSupertypeId: TypeIdentifier,
                                     fldName: FunOrVarId,
+                                    previousFields: Map[FunOrVarId, Type],
                                     subFieldInfo: StructSignature.FieldInfo, superFldInfo: StructSignature.FieldInfo,
-                                    builtStructMap: Map[TypeIdentifier, StructSignature], posOpt: Option[Position]
+                                    structs: Map[TypeIdentifier, StructSignature],
+                                    posOpt: Option[Position]
                                   ): Unit = {
       if (superFldInfo.isReassignable && subFieldInfo.tpe != superFldInfo.tpe) {
         errorReporter.push(Err(ContextCreation,
           s"subtyping error: type of $fldName is not the same in $structId and $directSupertypeId", posOpt))
-      } else if (!superFldInfo.isReassignable && !subFieldInfo.tpe.subtypeOf(superFldInfo.tpe)(using builtStructMap)) {
+      } else if (
+        !superFldInfo.isReassignable
+          && !subFieldInfo.tpe.subtypeOf(superFldInfo.tpe)(using SubcapturingContext(previousFields, structs))) {
         errorReporter.push(Err(ContextCreation,
           s"subtyping error: type of $fldName in $structId should be a subtype of its type in $directSupertypeId", posOpt))
       }

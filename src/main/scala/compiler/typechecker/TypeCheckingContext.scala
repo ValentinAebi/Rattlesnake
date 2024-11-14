@@ -6,9 +6,11 @@ import compiler.irs.Asts.{Expr, Indexing, Select, VariableRef}
 import compiler.typechecker.TypeCheckingContext.{LocalInfo, LocalUsesCollector}
 import compiler.{AnalysisContext, Errors, Position}
 import identifiers.{FunOrVarId, TypeIdentifier}
-import lang.{FunctionSignature, Keyword}
+import lang.Captures.*
+import lang.SubcaptureRelation.SubcapturingContext
 import lang.Types.PrimitiveType.{NothingType, VoidType}
 import lang.Types.{NamedType, Type}
+import lang.{Captures, FunctionSignature, Keyword}
 
 import scala.collection.mutable
 
@@ -23,6 +25,14 @@ final case class TypeCheckingContext(
                                     ) {
   // Locals that have been created by this context (i.e. not obtained via copied)
   private val ownedLocals: mutable.Set[FunOrVarId] = mutable.Set.empty
+  
+  def toSubcapturingCtx: SubcapturingContext = SubcapturingContext(
+    (for {
+      (id, info) <- locals
+      if !info.isReassignable
+    } yield (id, info.tpe)).toMap,
+    structs
+  )
 
   /**
    * @return a copy of this with empty locals map
@@ -44,7 +54,7 @@ final case class TypeCheckingContext(
       case (id, info) => id -> info.copy(tpe = smartCasts.getOrElse(id, info.tpe))
     })
   }
-  
+
   def copyForModuleOrPackage(moduleInfos: Environment): TypeCheckingContext =
     copy(currentEnvironment = Some(moduleInfos))
 
@@ -114,12 +124,12 @@ final case class TypeCheckingContext(
 
   def writeLocalsRelatedWarnings(errorReporter: ErrorReporter): Unit = {
     for (_, LocalInfo(name, tpe, isReassignable, defPos, declHasTypeAnnot, usesCollector)) <- locals if ownedLocals.contains(name) do {
-      if (!usesCollector.queried){
+      if (!usesCollector.queried) {
         errorReporter.push(Warning(TypeChecking, s"unused local: '$name' is never queried", defPos))
-      } else if (isReassignable && !usesCollector.reassigned){
+      } else if (isReassignable && !usesCollector.reassigned) {
         errorReporter.push(Warning(TypeChecking, s"value declared as variable: '$name' could be a ${Keyword.Val}", defPos))
       }
-      if (tpe.maybeModifiable && !usesCollector.mutUsed && declHasTypeAnnot){
+      if (tpe.maybeModifiable && !usesCollector.mutUsed && declHasTypeAnnot) {
         errorReporter.push(Warning(TypeChecking, s"unused modification privilege: '$name' could have type '${tpe.unmodifiable}'", defPos))
       }
     }
@@ -138,7 +148,7 @@ object TypeCheckingContext {
                                       defPos: Option[Position],
                                       declHasTypeAnnot: Boolean,
                                       usesCollector: LocalUsesCollector
-                                    ){
+                                    ) {
     def copy(
               name: FunOrVarId = name,
               tpe: Type = tpe,

@@ -1,7 +1,8 @@
 package lang
 
+import compiler.typechecker.TypeCheckingContext
 import identifiers.TypeIdentifier
-import lang.StructSignature
+import lang.SubcaptureRelation.{SubcapturingContext, subcaptureOf}
 import lang.Types.*
 import lang.Types.PrimitiveType.*
 
@@ -9,12 +10,12 @@ import scala.collection.mutable
 
 object SubtypeRelation {
 
-  extension (subT: Type) def subtypeOf(superT: Type)(using Map[TypeIdentifier, StructSignature]): Boolean = {
+  extension (subT: Type) def subtypeOf(superT: Type)(using ctx: SubcapturingContext): Boolean = {
     (subT, superT) match {
       case _ if subT == superT => true
       case (NothingType | UndefinedType, _) => true
-      case (NamedType(subId, subIsModif), NamedType(superId, superIsModif)) =>
-        logicalImplies(superIsModif, subIsModif) && isSuperInterface(subId, superId)
+      case (NamedType(subId, subIsModif, subcs), NamedType(superId, superIsModif, supercs)) =>
+        logicalImplies(superIsModif, subIsModif) && subInterfaceOf(subId, superId, ctx) && subcs.subcaptureOf(supercs)
       case (ArrayType(subElemType, subIsModif), ArrayType(superElemType, superIsModif)) =>
         logicalImplies(superIsModif, subIsModif) &&
           (subElemType == superElemType || (!superIsModif && superElemType.subtypeOf(superElemType)))
@@ -26,8 +27,7 @@ object SubtypeRelation {
     }
   }
 
-  private def isSuperInterface(subT: TypeIdentifier, superT: TypeIdentifier)
-                              (using structs: Map[TypeIdentifier, StructSignature]): Boolean = {
+  def subInterfaceOf(subT: TypeIdentifier, superT: TypeIdentifier, ctx: SubcapturingContext): Boolean = {
     // BFS
 
     val worklist = mutable.Queue.empty[TypeIdentifier]
@@ -46,7 +46,7 @@ object SubtypeRelation {
       if (curr == superT) {
         return true
       }
-      structs.apply(curr).directSupertypes.foreach(registerIfNew)
+      ctx.structs.apply(curr).directSupertypes.foreach(registerIfNew)
     }
     false
   }

@@ -1,6 +1,7 @@
 package lang
 
 import identifiers.TypeIdentifier
+import lang.Captures.CaptureDescriptor
 import lang.Types.PrimitiveType.NothingType
 
 
@@ -40,7 +41,7 @@ object Types {
   /**
    * @param modifiable whether or not the fields of the struct are allowed to be modified from this reference
    */
-  final case class NamedType(typeName: TypeIdentifier, modifiable: Boolean) extends Type {
+  final case class NamedType(typeName: TypeIdentifier, modifiable: Boolean, captureDescr: CaptureDescriptor) extends Type {
 
     override def maybeModifiable: Boolean = modifiable
 
