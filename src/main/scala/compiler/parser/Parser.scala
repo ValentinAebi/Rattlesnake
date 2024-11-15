@@ -8,6 +8,7 @@ import compiler.parser.ParseTree.^:
 import compiler.parser.TreeParsers.*
 import compiler.{CompilerStep, Errors, Position}
 import identifiers.*
+import lang.Captures.{Brand, CaptureSet}
 import lang.Keyword.*
 import lang.Operator.*
 import lang.Types.{ArrayType, NamedType, Type}
@@ -170,30 +171,31 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "noParenthType"
 
   private lazy val tpe: P[Type] = recursive {
-    modifiableType OR unmodifiableType
+    noParenthType OR (openParenth ::: tpe ::: closeParenth)
   } setName "tpe"
 
-  private lazy val modifiableType: P[Type] = recursive {
-    kw(Mut).ignored ::: unmodifiableType map {
-      case NamedType(typeName, _) => NamedType(typeName, modifiable = true)
-      case ArrayType(elemType, _) => ArrayType(elemType, modifiable = true)
-      case tpe =>
-        val pos = ll1Iterator.current.position // imprecise (takes the position on the next token)
-        errorReporter.push(Errors.Err(Parsing, s"$tpe is never modifiable", Some(pos)))
-        tpe
-    }
-  } setName "modifiableType"
-
-  private lazy val unmodifiableType: P[Type] = recursive {
-    noParenthType OR (openParenth ::: tpe ::: closeParenth)
-  } setName "unmodifiableType"
-
   private lazy val atomicType = {
-    highName map (name => Types.primTypeFor(name).getOrElse(NamedType(name, modifiable = false)))
+    highName map (name => Types.primTypeFor(name).getOrElse(NamedType(name, )))
   } setName "atomicType"
 
+  private lazy val capturablePath: P[CaptureSet] = ???
+
+  private lazy val captureSet = openBrace ::: repeatWithSep(capturablePath, comma) ::: closeBrace map {
+    case paths => CaptureSet(paths.toSet)
+  } setName "captureSet"
+
+  private lazy val brand = {
+    op(Sharp) map (_ => Brand)
+  } setName "brand"
+
+  private lazy val captureDescr = {
+    captureSet OR brand
+  } setName "captureDescr"
+
   private lazy val arrayType = recursive {
-    kw(Arr).ignored ::: tpe map (ArrayType.apply(_, modifiable = false))
+    opt(kw(Mut)) ::: kw(Arr).ignored ::: tpe map {
+      case mutOpt ^: tp => ArrayType(tp, mutOpt.isDefined)
+    }
   } setName "arrayType"
 
   private lazy val device = kw(lang.Device.kwToDevice.keys.toSeq*) map {
@@ -310,8 +312,8 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "filledArrayInit"
 
   private lazy val structOrModuleInstantiation = recursive {
-    kw(New).ignored ::: opt(kw(Mut)) ::: highName ::: openParenth ::: repeatWithSep(expr, comma) ::: closeParenth map {
-      case optMut ^: tid ^: args => StructOrModuleInstantiation(tid, args, optMut.isDefined)
+    kw(New).ignored ::: highName ::: openParenth ::: repeatWithSep(expr, comma) ::: closeParenth map {
+      case tid ^: args => StructOrModuleInstantiation(tid, args)
     }
   } setName "structOrModuleInstantiation"
 

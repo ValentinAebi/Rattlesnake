@@ -115,7 +115,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
       case call: Call => Call(call.receiverOpt.map(lower), call.function, call.args.map(lower))
       case indexing: Indexing => Indexing(lower(indexing.indexed), lower(indexing.arg))
       case arrayInit: ArrayInit => ArrayInit(arrayInit.elemType, lower(arrayInit.size))
-      case structInit: StructOrModuleInstantiation => StructOrModuleInstantiation(structInit.typeId, structInit.args.map(lower), structInit.modifiable)
+      case structInit: StructOrModuleInstantiation => StructOrModuleInstantiation(structInit.typeId, structInit.args.map(lower))
       
       // [x_1, ... , x_n] ---> explicit assignments
       case filledArrayInit@FilledArrayInit(arrayElems, _) =>

@@ -42,9 +42,10 @@ enum Operator(val str: String) {
   case TimesEq extends Operator("*=")
   case DivEq extends Operator("/=")
   case ModuloEq extends Operator("%=")
+  
+  case Hat extends Operator("^")
 
   override def toString: String = str
-
 }
 
 object Operator {

@@ -299,7 +299,7 @@ object Asts {
   /**
    * Initialization of a struct, e.g. `new Foo { 0, 1 }`
    */
-  final case class StructOrModuleInstantiation(typeId: TypeIdentifier, args: List[Expr], modifiable: Boolean) extends Expr {
+  final case class StructOrModuleInstantiation(typeId: TypeIdentifier, args: List[Expr]) extends Expr {
     override def children: List[Ast] = args
   }
 

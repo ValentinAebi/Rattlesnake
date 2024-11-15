@@ -219,12 +219,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         }
         addParenthList(arrayElems, parenth = ("[", "]"))
 
-      case StructOrModuleInstantiation(structName, args, modifiable) =>
-        if (modifiable) {
-          pps
-            .add(Mut.str)
-            .addSpace()
-        }
+      case StructOrModuleInstantiation(structName, args) =>
         pps
           .add(New.str)
           .addSpace()

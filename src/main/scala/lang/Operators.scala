@@ -2,6 +2,7 @@ package lang
 
 import identifiers.TypeIdentifier
 import lang.Operator.*
+import lang.SubcaptureRelation.SubcapturingContext
 import lang.SubtypeRelation.subtypeOf
 import lang.Types.PrimitiveType.*
 import lang.Types.Type
@@ -30,7 +31,7 @@ object Operators {
     UnaryOpSignature(ExclamationMark, BoolType, BoolType)
   )
   
-  def unaryOperatorSignatureFor(operator: Operator, operand: Type): Option[UnaryOpSignature] = {
+  def unaryOperatorSignatureFor(operator: Operator, operand: Type)(using ctx: SubcapturingContext): Option[UnaryOpSignature] = {
     unaryOperators.find {
       case UnaryOpSignature(op, operandType, _) =>
         operator == op && operand.subtypeOf(operandType)
@@ -65,7 +66,7 @@ object Operators {
     StringType $ Plus $ StringType is StringType
   )
 
-  def binaryOperatorSigFor(left: Type, operator: Operator, right: Type): Option[BinaryOpSignature] = {
+  def binaryOperatorSigFor(left: Type, operator: Operator, right: Type)(using ctx: SubcapturingContext): Option[BinaryOpSignature] = {
     binaryOperators.find {
       case BinaryOpSignature(leftOperandType, op, rightOperandType, _) =>
         left.subtypeOf(leftOperandType) && op == operator && right.subtypeOf(rightOperandType)

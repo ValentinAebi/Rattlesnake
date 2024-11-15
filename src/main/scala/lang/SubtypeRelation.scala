@@ -14,8 +14,8 @@ object SubtypeRelation {
     (subT, superT) match {
       case _ if subT == superT => true
       case (NothingType | UndefinedType, _) => true
-      case (NamedType(subId, subIsModif, subcs), NamedType(superId, superIsModif, supercs)) =>
-        logicalImplies(superIsModif, subIsModif) && subInterfaceOf(subId, superId, ctx) && subcs.subcaptureOf(supercs)
+      case (NamedType(subId, subcs), NamedType(superId, supercs)) =>
+        subInterfaceOf(subId, superId, ctx) && subcs.subcaptureOf(supercs)
       case (ArrayType(subElemType, subIsModif), ArrayType(superElemType, superIsModif)) =>
         logicalImplies(superIsModif, subIsModif) &&
           (subElemType == superElemType || (!superIsModif && superElemType.subtypeOf(superElemType)))

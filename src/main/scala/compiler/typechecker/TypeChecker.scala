@@ -220,7 +220,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
             reportError("cannot infer array type", filledArrayInit.getPosition)
         }
 
-      case instantiation@StructOrModuleInstantiation(tid, args, modifiable) =>
+      case instantiation@StructOrModuleInstantiation(tid, args) =>
         ctx.resolveType(tid) match {
           case Some(structSig: StructSignature) if structSig.isInterface =>
             reportError(
@@ -229,20 +229,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
             )
           case Some(structSig: StructSignature) =>
             checkCallArgs(structSig.fields.values.map(_.tpe).toList, args, ctx, instantiation.getPosition)
-            if (modifiable && !structSig.fields.exists(_._2.isReassignable)) {
-              reportError(
-                s"modification permission granted on struct of type '$tid', but all of its fields are constant",
-                instantiation.getPosition,
-                isWarning = true
-              )
-            }
-            NamedType(tid, modifiable)
+            NamedType(tid, )
           case Some(moduleSig: ModuleSignature) =>
             val expectedTypes = moduleSig.importedModules.map((_, tpe) => asUnmodifiableType(tpe)).toList
             checkCallArgs(expectedTypes, args, ctx, instantiation.getPosition)
-            if (modifiable) {
-              reportError(s"${Keyword.Mut} not allowed in module instantiation", instantiation.getPosition)
-            }
             asUnmodifiableType(tid)
           case _ => reportError(s"not found: structure or module '$tid'", instantiation.getPosition)
         }
@@ -257,7 +247,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
             reportError(s"operator # can only be applied to arrays and strings, found '$operandType'", unaryOp.getPosition)
           }
         } else {
-          Operators.unaryOperatorSignatureFor(operator, operandType) match {
+          Operators.unaryOperatorSignatureFor(operator, operandType)(using ctx.toSubcapturingCtx) match {
             case Some(sig) => sig.retType
             case None =>
               reportError(s"no definition of operator '$operator' found for operand '$operandType'", unaryOp.getPosition)
@@ -270,15 +260,15 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val smartCasts = if operator == Operator.And then detectSmartCasts(lhs, ctx) else Map.empty
         val rhsType = check(rhs, ctx.copyWithSmartCasts(smartCasts))
         binOp.setSmartCasts(smartCasts)
+        val subCapCtx = ctx.toSubcapturingCtx
         if (operator == Equality || operator == Inequality) {
-          val subCapCtx = ctx.toSubcapturingCtx
           val isSubOrSupertype = lhsType.subtypeOf(rhsType)(using subCapCtx) || rhsType.subtypeOf(lhsType)(using subCapCtx)
           if (!isSubOrSupertype) {
             reportError(s"cannot compare '$lhsType' and '$rhsType' using ${Equality.str} or ${Inequality.str}", binOp.getPosition)
           }
           BoolType
         } else {
-          mustExistOperator(lhsType, operator, rhsType, binOp.getPosition)
+          mustExistOperator(lhsType, operator, rhsType, binOp.getPosition)(using subCapCtx)
         }
 
       case select@Select(lhs, selected) =>
@@ -317,20 +307,20 @@ final class TypeChecker(errorReporter: ErrorReporter)
           case varRef@VariableRef(name) =>
             ctx.varIsAssigned(name)
             val inPlaceModifiedType = mustBeReassignable(name, ctx, varModif.getPosition)
-            val operatorRetType = mustExistOperator(inPlaceModifiedType, op, rhsType, varModif.getPosition)
+            val operatorRetType = mustExistOperator(inPlaceModifiedType, op, rhsType, varModif.getPosition)(using ctx.toSubcapturingCtx)
             checkSubtypingConstraint(inPlaceModifiedType, operatorRetType, varModif.getPosition, "", ctx)
             varRef.setType(inPlaceModifiedType)
           case indexing@Indexing(indexed, _) =>
             ctx.mutIsUsed(indexing)
             check(indexing, ctx)
             val inPlaceModifiedElemType = exprMustBeArray(indexed.getType, ctx, varModif.getPosition, mustUpdate = true)
-            val operatorRetType = mustExistOperator(inPlaceModifiedElemType, op, rhsType, varModif.getPosition)
+            val operatorRetType = mustExistOperator(inPlaceModifiedElemType, op, rhsType, varModif.getPosition)(using ctx.toSubcapturingCtx)
             checkSubtypingConstraint(inPlaceModifiedElemType, operatorRetType, varModif.getPosition, "", ctx)
           case select@Select(structExpr, selected) =>
             ctx.mutIsUsed(select)
             val structType = check(structExpr, ctx)
             val inPlaceModifiedFieldType = exprMustBeStructWithField(structType, selected, ctx, varModif.getPosition, mustUpdateField = true)
-            val operatorRetType = mustExistOperator(inPlaceModifiedFieldType, op, rhsType, varModif.getPosition)
+            val operatorRetType = mustExistOperator(inPlaceModifiedFieldType, op, rhsType, varModif.getPosition)(using ctx.toSubcapturingCtx)
             checkSubtypingConstraint(inPlaceModifiedFieldType, operatorRetType, varModif.getPosition, "", ctx)
             select.setType(inPlaceModifiedFieldType)
           case _ =>
@@ -471,11 +461,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
   private def structCastResult(srcType: Type, destType: Type, ctx: TypeCheckingContext): Option[NamedType] = {
     (srcType, destType) match {
-      case (NamedType(_, srcIsModifiable, srcCDescr), NamedType(destTypeName, destIsModifiable, destCDescr))
+      case (NamedType(_, srcCDescr), NamedType(destTypeName, destCDescr))
         if destType.subtypeOf(srcType.unmodifiable)(using ctx.toSubcapturingCtx)
-          && logicalImplies(destIsModifiable, srcIsModifiable)
           && srcCDescr.subcaptureOf(destCDescr)(using ctx.toSubcapturingCtx)
-      => Some(NamedType(destTypeName, srcIsModifiable, destCDescr))
+      => Some(NamedType(destTypeName, destCDescr))
       case _ => None
     }
   }
@@ -631,7 +620,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         reportError(s"expected an array, found '$exprType'", posOpt)
   }
 
-  private def mustExistOperator(lhsType: Type, operator: Operator, rhsType: Type, position: Option[Position]): Type = {
+  private def mustExistOperator(lhsType: Type, operator: Operator, rhsType: Type, position: Option[Position])(using ctx: SubcapturingContext): Type = {
     Operators.binaryOperatorSigFor(lhsType, operator, rhsType) match {
       case Some(sig) => sig.retType
       case None =>
@@ -647,14 +636,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
                                          mustUpdateField: Boolean
                                        ): Type = {
     exprType match {
-      case NamedType(typeName, modifiable) =>
+      case NamedType(typeName, captureDescr) =>
         ctx.structs.apply(typeName) match {
           case StructSignature(_, fields, _, _) if fields.contains(fieldName) =>
             val FieldInfo(fieldType, fieldIsReassig) = fields.apply(fieldName)
-            val missingModifPrivilege = mustUpdateField && !modifiable
-            if (missingModifPrivilege) {
-              reportError(s"cannot update field '$fieldName': missing modification privileges on owner struct", posOpt)
-            }
             val missingFieldMutability = mustUpdateField && !fieldIsReassig
             if (missingFieldMutability) {
               reportError(s"cannot update immutable field '$fieldName'", posOpt)
@@ -698,7 +683,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       val commonDirectSupertypes = directSupertypesSets.reduceLeft(_.intersect(_))
       Some(
         if commonDirectSupertypes.size == 1
-        then NamedType(commonDirectSupertypes.head, modifiable = types.forall(_.isModifiableForSure))
+        then NamedType(commonDirectSupertypes.head, )
         else UnionType(types)
       )
     } else {
@@ -728,8 +713,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
         ctx.mutIsUsed(name)
       case _ => ()
   }
-
-  private def asUnmodifiableType(tid: TypeIdentifier): NamedType = NamedType(tid, modifiable = false)
 
   private def logicalImplies(p: Boolean, q: Boolean): Boolean = !p || q
 

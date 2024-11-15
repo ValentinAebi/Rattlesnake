@@ -27,7 +27,7 @@ final case class AnalysisContext(
   def knowsType(tpe: Type): Boolean = {
     tpe match {
       case _: Types.PrimitiveType => true
-      case Types.NamedType(typeName, _, captureDescr) => knowsUserDefType(typeName)
+      case Types.NamedType(typeName, captureDescr) => knowsUserDefType(typeName)
       case Types.ArrayType(elemType, _) => knowsType(elemType)
       case Types.UnionType(unitedTypes) => unitedTypes.forall(knowsType)
       case Types.UndefinedType => true

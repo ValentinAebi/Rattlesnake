@@ -36,7 +36,7 @@ object SubcaptureRelation {
       case VarPath(root) => roots.get(root)
       case SelectPath(lhs, field) =>
         pathLookup(lhs).flatMap {
-          case NamedType(typeName, modifiable, cDescr) if !modifiable =>
+          case NamedType(typeName, cDescr) =>
             for {
               sig <- structs.get(typeName)
               fieldInfo <- sig.fields.get(field)
@@ -48,7 +48,7 @@ object SubcaptureRelation {
   }
   
   private def captureDescrOf(tpe: Type): Option[CaptureDescriptor] = tpe match {
-    case NamedType(typeName, modifiable, captureDescr) => Some(captureDescr)
+    case NamedType(typeName, captureDescr) => Some(captureDescr)
     case _ => None
   }
 

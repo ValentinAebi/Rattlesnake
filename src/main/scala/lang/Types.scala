@@ -22,6 +22,7 @@ object Types {
     case CharType extends PrimitiveType("Char")
     case BoolType extends PrimitiveType("Bool")
     case StringType extends PrimitiveType("String")
+    case RegionType extends PrimitiveType("Region")
 
     case VoidType extends PrimitiveType("Void")
     case NothingType extends PrimitiveType("Nothing")
@@ -37,21 +38,9 @@ object Types {
   def primTypeFor(name: TypeIdentifier): Option[PrimitiveType] = {
     PrimitiveType.values.find(_.str == name.stringId)
   }
-
-  /**
-   * @param modifiable whether or not the fields of the struct are allowed to be modified from this reference
-   */
-  final case class NamedType(typeName: TypeIdentifier, modifiable: Boolean, captureDescr: CaptureDescriptor) extends Type {
-
-    override def maybeModifiable: Boolean = modifiable
-
-    override def isModifiableForSure: Boolean = modifiable
-
-    override def unmodifiable: Type = copy(modifiable = false)
-
-    override def toString: String = {
-      (if modifiable then (Keyword.Mut.str ++ " ") else "") ++ typeName.stringId
-    }
+  
+  final case class NamedType(typeName: TypeIdentifier, captureDescr: CaptureDescriptor) extends Type {
+    override def toString: String = typeName.stringId + captureDescr.toHatNotation
   }
 
   /**
