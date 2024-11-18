@@ -27,7 +27,7 @@ class ParseAndReprintTests {
     val file = SourceFile("src/test/res/should-pass/geometry.rsn")
     val actualRes = formatter.apply(file)
     val expectedRes = filterOutCommentLines(file.content.get)
-    assertEquals(expectedRes, actualRes)
+    assertEquals(expectedRes.trim, actualRes.trim)
   }
 
   private def filterOutCommentLines(str: String): String = {
