@@ -1,7 +1,7 @@
 package compiler.parser
 
 import compiler.CompilationStep.Parsing
-import compiler.Errors.{ErrorReporter, Fatal}
+import compiler.Errors.{Err, ErrorReporter, Fatal}
 import compiler.irs.Asts.*
 import compiler.irs.Tokens.*
 import compiler.parser.ParseTree.^:
@@ -11,6 +11,7 @@ import identifiers.*
 import lang.Captures.*
 import lang.Keyword.*
 import lang.Operator.*
+import lang.Types.PrimitiveType.RegionType
 import lang.Types.{ArrayType, NamedType, Type}
 import lang.{Keyword, Operator, Operators, Types}
 
@@ -179,7 +180,14 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
       val capDescr = capDescrTokensOpt.map {
         case hat ^: descrOpt => descrOpt.getOrElse(CaptureSet.singletonOfRoot)
       }.getOrElse(CaptureSet.empty)
-      NamedType(shape, capDescr)
+      val primTypeOpt = Types.primTypeFor(shape)
+      if (primTypeOpt.isDefined && capDescrTokensOpt.isDefined){
+        errorReporter.push(Err(Parsing,
+          s"primitive type $shape is not allowed to specify a capture set (the capture set of $RegionType is implicit)",
+          ll1Iterator.current.position
+        ))
+      }
+      primTypeOpt.getOrElse(NamedType(shape, capDescr))
     }
   } setName "atomicType"
 
