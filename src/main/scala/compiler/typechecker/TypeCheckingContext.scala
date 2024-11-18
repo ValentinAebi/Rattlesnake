@@ -109,28 +109,12 @@ final case class TypeCheckingContext(
     }
   }
 
-  def mutIsUsed(localId: FunOrVarId): Unit = {
-    locals.get(localId).foreach { l =>
-      l.usesCollector.mutUsed = true
-    }
-  }
-
-  def mutIsUsed(assigLhs: Expr): Unit = {
-    assigLhs match
-      case Indexing(VariableRef(name), _) => mutIsUsed(name)
-      case Select(VariableRef(name), _) => mutIsUsed(name)
-      case _ => ()
-  }
-
   def writeLocalsRelatedWarnings(errorReporter: ErrorReporter): Unit = {
     for (_, LocalInfo(name, tpe, isReassignable, defPos, declHasTypeAnnot, usesCollector)) <- locals if ownedLocals.contains(name) do {
       if (!usesCollector.queried) {
         errorReporter.push(Warning(TypeChecking, s"unused local: '$name' is never queried", defPos))
       } else if (isReassignable && !usesCollector.reassigned) {
         errorReporter.push(Warning(TypeChecking, s"value declared as variable: '$name' could be a ${Keyword.Val}", defPos))
-      }
-      if (tpe.maybeModifiable && !usesCollector.mutUsed && declHasTypeAnnot) {
-        errorReporter.push(Warning(TypeChecking, s"unused modification privilege: '$name' could have type '${tpe.unmodifiable}'", defPos))
       }
     }
   }
@@ -174,7 +158,6 @@ object TypeCheckingContext {
   final class LocalUsesCollector {
     var queried = false
     var reassigned = false
-    var mutUsed = false
   }
 
 }

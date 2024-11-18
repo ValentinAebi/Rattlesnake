@@ -2,17 +2,11 @@ package lang
 
 import identifiers.TypeIdentifier
 import lang.Captures.{Brand, CaptureDescriptor, CaptureSet}
-import lang.Types.PrimitiveType.NothingType
 
 
 object Types {
 
   sealed trait Type {
-
-    def maybeModifiable: Boolean
-    def isModifiableForSure: Boolean
-
-    def unmodifiable: Type
     
     def captureDescr: CaptureDescriptor
     def isPure: Boolean = captureDescr.isCapSetOfPureType
@@ -35,11 +29,6 @@ object Types {
     case VoidType extends PrimitiveType("Void", CaptureSet.empty)
     case NothingType extends PrimitiveType("Nothing", CaptureSet.empty)
 
-    override def maybeModifiable: Boolean = false
-
-    override def isModifiableForSure: Boolean = false
-    override def unmodifiable: Type = this
-
     override def toString: String = str
   }
   
@@ -49,9 +38,7 @@ object Types {
   
   final case class NamedType(typeName: TypeIdentifier, captureDescr: CaptureDescriptor) extends Type {
 
-    override def maybeModifiable: Boolean = ???
-    override def isModifiableForSure: Boolean = ???
-    override def unmodifiable: Type = ???
+    def shape: NamedType = NamedType(typeName, CaptureSet.empty)
 
     override def toString: String = typeName.stringId + captureDescr.toHatNotation
   }
@@ -63,11 +50,6 @@ object Types {
    */
   final case class ArrayType(elemType: Type, modifiable: Boolean) extends Type {
 
-    override def maybeModifiable: Boolean = modifiable
-
-    override def isModifiableForSure: Boolean = modifiable
-    override def unmodifiable: Type = copy(modifiable = false)
-
     override def captureDescr: CaptureDescriptor = CaptureSet.empty
 
     override def toString: String = {
@@ -76,9 +58,6 @@ object Types {
   }
   
   final case class UnionType(unitedTypes: Set[Type]) extends Type {
-    override def maybeModifiable: Boolean = unitedTypes.exists(_.maybeModifiable)
-    override def isModifiableForSure: Boolean = unitedTypes.forall(_.isModifiableForSure)
-    override def unmodifiable: Type = UnionType(unitedTypes.map(_.unmodifiable))
 
     override def captureDescr: CaptureDescriptor = unitedTypes.foldLeft[CaptureDescriptor](CaptureSet.empty){
       (accCs, currType) => accCs.union(currType.captureDescr)
@@ -91,11 +70,6 @@ object Types {
    * Type of a malformed/incorrect expression
    */
   case object UndefinedType extends Type {
-
-    override def maybeModifiable: Boolean = true  // to avoid false positives with warnings for useless mut
-
-    override def isModifiableForSure: Boolean = false
-    override def unmodifiable: Type = this
 
     override def captureDescr: CaptureDescriptor = Brand
 

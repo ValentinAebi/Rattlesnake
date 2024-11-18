@@ -8,7 +8,7 @@ import compiler.typechecker.TypeCheckingContext.LocalInfo
 import compiler.{AnalysisContext, CompilerStep, Position}
 import identifiers.{FunOrVarId, IntrinsicsPackageId, TypeIdentifier}
 import lang.*
-import lang.Captures.{Capturable, CaptureDescriptor, CaptureSet, DevicePath, MePath, PackagePath, ProperPath, SelectPath, VarPath}
+import lang.Captures.*
 import lang.Operator.{Equality, Inequality, Sharp}
 import lang.StructSignature.FieldInfo
 import lang.SubcaptureRelation.*
@@ -139,7 +139,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
           }, forbiddenTypeCallback = { () =>
             reportError(s"${localDef.keyword} '$localName' has type '$actualType', which is forbidden", localDef.getPosition)
           })
-        markMutPropagation(actualType, rhs, ctx)
         VoidType
 
       case _: IntLit => IntType
@@ -209,15 +208,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val types = arrayElems.map(check(_, ctx))
         computeJoinOf(types.toSet, ctx) match {
           case Some(elemsJoin) =>
-            for arrayElem <- arrayElems do {
-              markMutPropagation(elemsJoin, arrayElem, ctx)
-            }
             ArrayType(elemsJoin, modifiable)
           case None =>
-            arrayElems.foreach {
-              case VariableRef(name) => ctx.mutIsUsed(name) // avoid false positives
-              case _ => ()
-            }
             reportError("cannot infer array type", filledArrayInit.getPosition)
         }
 
@@ -284,12 +276,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
             checkSubtypingConstraint(varType, rhsType, varAssig.getPosition, "", ctx)
             varRef.setType(varType)
           case indexing@Indexing(indexed, _) =>
-            ctx.mutIsUsed(indexing)
             check(indexing, ctx)
             val lhsType = exprMustBeArray(indexed.getType, ctx, varAssig.getPosition, mustUpdate = true)
             checkSubtypingConstraint(lhsType, rhsType, varAssig.getPosition, "", ctx)
           case select@Select(structExpr, selected) =>
-            ctx.mutIsUsed(select)
             val structType = check(structExpr, ctx)
             val fieldType = exprMustBeStructWithField(structType, selected, ctx, varAssig.getPosition, mustUpdateField = true)
             checkSubtypingConstraint(fieldType, rhsType, varAssig.getPosition, "", ctx)
@@ -297,7 +287,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
           case _ =>
             reportError("syntax error: only variables, struct fields and array elements can be assigned", varAssig.getPosition)
         }
-        markMutPropagation(lhs.getType, rhs, ctx)
         VoidType
 
       case varModif@VarModif(lhs, rhs, op) =>
@@ -311,13 +300,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
             checkSubtypingConstraint(inPlaceModifiedType, operatorRetType, varModif.getPosition, "", ctx)
             varRef.setType(inPlaceModifiedType)
           case indexing@Indexing(indexed, _) =>
-            ctx.mutIsUsed(indexing)
             check(indexing, ctx)
             val inPlaceModifiedElemType = exprMustBeArray(indexed.getType, ctx, varModif.getPosition, mustUpdate = true)
             val operatorRetType = mustExistOperator(inPlaceModifiedElemType, op, rhsType, varModif.getPosition)(using ctx.toSubcapturingCtx)
             checkSubtypingConstraint(inPlaceModifiedElemType, operatorRetType, varModif.getPosition, "", ctx)
           case select@Select(structExpr, selected) =>
-            ctx.mutIsUsed(select)
             val structType = check(structExpr, ctx)
             val inPlaceModifiedFieldType = exprMustBeStructWithField(structType, selected, ctx, varModif.getPosition, mustUpdateField = true)
             val operatorRetType = mustExistOperator(inPlaceModifiedFieldType, op, rhsType, varModif.getPosition)(using ctx.toSubcapturingCtx)
@@ -349,8 +336,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val thenIsSubtype = thenType.subtypeOf(elseType)(using subCapCtx)
         computeJoinOf(Set(thenType, elseType), ctx) match {
           case Some(ternaryType) =>
-            markMutPropagation(ternaryType, thenBr, ctx)
-            markMutPropagation(ternaryType, elseBr, ctx)
             ternaryType
           case None =>
             reportError(s"cannot infer type of ternary operator: then branch has type '$thenType', " +
@@ -379,15 +364,13 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case ReturnStat(valueOpt) =>
         valueOpt.foreach { value =>
           check(value, ctx)
-          value match {
-            case VariableRef(name) if ctx.expectedRetType.get.maybeModifiable =>
-              ctx.mutIsUsed(name)
-            case _ => ()
-          }
         }
         VoidType
 
       case cast@Cast(expr, tpe) =>
+        if (!tpe.isPure){
+          reportError("cast destination type is not allowed to carry a capture set", cast.getPosition)
+        }
         val exprType = check(expr, ctx)
         if (exprType.subtypeOf(tpe)(using ctx.toSubcapturingCtx)) {
           reportError(s"useless conversion: '$exprType' --> '$tpe'", cast.getPosition, isWarning = true)
@@ -396,13 +379,9 @@ final class TypeChecker(errorReporter: ErrorReporter)
         } else if (TypeConversion.conversionFor(exprType, tpe).isDefined) {
           tpe
         } else {
-          structCastResult(exprType, tpe, ctx)
-            .map { tpe =>
-              markMutPropagation(tpe, expr, ctx)
-              tpe
-            }.getOrElse {
-              reportError(s"cannot cast '${expr.getType}' to '$tpe'", cast.getPosition)
-            }
+          structCastResult(exprType, tpe, ctx).getOrElse {
+            reportError(s"cannot cast '${expr.getType}' to '$tpe'", cast.getPosition)
+          }
         }
 
       case typeTest@TypeTest(expr, tpe) =>
@@ -462,10 +441,9 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
   private def structCastResult(srcType: Type, destType: Type, ctx: TypeCheckingContext): Option[NamedType] = {
     (srcType, destType) match {
-      case (NamedType(_, srcCDescr), NamedType(destTypeName, destCDescr))
-        if destType.subtypeOf(srcType.unmodifiable)(using ctx.toSubcapturingCtx)
-          && srcCDescr.subcaptureOf(destCDescr)(using ctx.toSubcapturingCtx)
-      => Some(NamedType(destTypeName, destCDescr))
+      case (srcType@NamedType(_, srcCDescr), destType@NamedType(destTypeName, _))
+        if destType.shape.subtypeOf(srcType.shape)(using ctx.toSubcapturingCtx)
+      => Some(NamedType(destTypeName, srcCDescr))
       case _ => None
     }
   }
@@ -478,14 +456,9 @@ final class TypeChecker(errorReporter: ErrorReporter)
       val expType = expTypesIter.next()
       val arg = argsIter.next()
       val actType = check(arg, ctx)
-      markMutPropagation(expType, arg, ctx)
       if (!actType.subtypeOf(expType)(using ctx.toSubcapturingCtx)) {
         reportError(s"expected '$expType', found '$actType'", arg.getPosition)
         errorFound = true
-        args.foreach {
-          case VariableRef(name) => ctx.mutIsUsed(name) // minimize false positives
-          case _ => ()
-        }
       }
     }
     if (expTypesIter.hasNext && !errorFound) {
@@ -700,26 +673,12 @@ final class TypeChecker(errorReporter: ErrorReporter)
     UndefinedType
   }
 
-  private def markMutPropagation(assignedLocalName: FunOrVarId, rhs: Expr, ctx: TypeCheckingContext): Unit = {
-    rhs match
-      case VariableRef(name) if ctx.getLocalOrConst(assignedLocalName).exists(_.tpe.maybeModifiable) =>
-        ctx.mutIsUsed(name)
-      case _ => ()
-  }
-
-  private def markMutPropagation(expectedType: Type, rhs: Expr, ctx: TypeCheckingContext): Unit = {
-    rhs match
-      case VariableRef(name) if expectedType.maybeModifiable =>
-        ctx.mutIsUsed(name)
-      case _ => ()
-  }
-  
   private def mostPreciseCaptureDescrFromArgsList(args: List[Expr], ctx: TypeCheckingContext): CaptureDescriptor =
     args.foldLeft[CaptureDescriptor](CaptureSet.empty)((accCd, arg) => accCd.union(mostPreciseCaptureDescrFromArg(arg, ctx)))
-  
+
   private def mostPreciseCaptureDescrFromArg(arg: Expr, ctx: TypeCheckingContext): CaptureDescriptor =
     maybeBuildPath(arg, ctx).map(CaptureSet(_)).getOrElse(arg.getType.captureDescr)
-  
+
   private def maybeBuildPath(expr: Expr, ctx: TypeCheckingContext): Option[ProperPath] = expr match {
     case VariableRef(name) if ctx.getLocalOnly(name).exists(!_.isReassignable) => Some(VarPath(name))
     case MeRef() => Some(MePath)
