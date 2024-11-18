@@ -2,9 +2,10 @@ package compiler.typechecker
 
 import identifiers.TypeIdentifier
 import lang.Device
+import lang.Types.NamedType
 
 final case class Environment(
-                              currentModule: TypeIdentifier,
+                              currentModuleType: NamedType,
                               allowedPackages: Set[TypeIdentifier],
                               allowedDevices: Set[Device]
                             ) {

@@ -1,6 +1,6 @@
 package lang
 
-import identifiers.FunOrVarId
+import identifiers.{FunOrVarId, TypeIdentifier}
 
 object Captures {
 
@@ -17,6 +17,11 @@ object Captures {
     }
 
     def removed(rem: Iterable[Capturable]): CaptureDescriptor
+    
+    def union(that: CaptureDescriptor): CaptureDescriptor = (this, that) match {
+      case (CaptureSet(l), CaptureSet(r)) => CaptureSet(l ++ r)
+      case _ => Brand
+    }
 
   }
 
@@ -42,6 +47,8 @@ object Captures {
     def apply(capt: Capturable*): CaptureSet = CaptureSet(capt.toSet)
 
     def empty: CaptureSet = CaptureSet(Set.empty)
+    
+    def singletonOfRoot: CaptureSet = CaptureSet(Set(RootCapability))
   }
 
   case object Brand extends CaptureDescriptor {
@@ -68,6 +75,20 @@ object Captures {
     override def isRootedIn(varId: FunOrVarId): Boolean = (varId == root)
 
     override def toString: String = root.toString
+  }
+  
+  case object MePath extends ProperPath {
+    override def isRootedIn(varId: FunOrVarId): Boolean = false
+
+    override def toString: String = Keyword.Me.str
+  }
+  
+  case class PackagePath(packageName: TypeIdentifier) extends ProperPath {
+    override def isRootedIn(varId: FunOrVarId): Boolean = false
+  }
+  
+  case class DevicePath(device: Device) extends ProperPath {
+    override def isRootedIn(varId: FunOrVarId): Boolean = false
   }
 
   case class SelectPath(lhs: ProperPath, field: FunOrVarId) extends ProperPath {

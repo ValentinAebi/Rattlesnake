@@ -1,7 +1,7 @@
 package lang
 
 import identifiers.TypeIdentifier
-import lang.Captures.CaptureDescriptor
+import lang.Captures.{Brand, CaptureDescriptor, CaptureSet}
 import lang.Types.PrimitiveType.NothingType
 
 
@@ -13,19 +13,27 @@ object Types {
     def isModifiableForSure: Boolean
     
     def unmodifiable: Type
+    
+    def captureDescr: CaptureDescriptor
+    def isPure: Boolean = captureDescr.isCapSetOfPureType
+    
+    def equalsIgnoringCaptures(that: Type): Boolean = (this, that) match {
+      case (NamedType(tid1, cd1), NamedType(tid2, cd2)) => tid1 == tid2
+      case _ => this == that
+    }
 
   }
   
-  enum PrimitiveType(val str: String) extends Type {
-    case IntType extends PrimitiveType("Int")
-    case DoubleType extends PrimitiveType("Double")
-    case CharType extends PrimitiveType("Char")
-    case BoolType extends PrimitiveType("Bool")
-    case StringType extends PrimitiveType("String")
-    case RegionType extends PrimitiveType("Region")
+  enum PrimitiveType(val str: String, override val captureDescr: CaptureDescriptor) extends Type {
+    case IntType extends PrimitiveType("Int", CaptureSet.empty)
+    case DoubleType extends PrimitiveType("Double", CaptureSet.empty)
+    case CharType extends PrimitiveType("Char", CaptureSet.empty)
+    case BoolType extends PrimitiveType("Bool", CaptureSet.empty)
+    case StringType extends PrimitiveType("String", CaptureSet.empty)
+    case RegionType extends PrimitiveType("Region", CaptureSet.singletonOfRoot)
 
-    case VoidType extends PrimitiveType("Void")
-    case NothingType extends PrimitiveType("Nothing")
+    case VoidType extends PrimitiveType("Void", CaptureSet.empty)
+    case NothingType extends PrimitiveType("Nothing", CaptureSet.empty)
 
     override def maybeModifiable: Boolean = false
 
@@ -55,6 +63,8 @@ object Types {
     override def isModifiableForSure: Boolean = modifiable
     override def unmodifiable: Type = copy(modifiable = false)
 
+    override def captureDescr: CaptureDescriptor = CaptureSet.empty
+
     override def toString: String = {
       (if modifiable then (Keyword.Mut.str ++ " ") else "") ++ s"arr $elemType"
     }
@@ -64,6 +74,10 @@ object Types {
     override def maybeModifiable: Boolean = unitedTypes.exists(_.maybeModifiable)
     override def isModifiableForSure: Boolean = unitedTypes.forall(_.isModifiableForSure)
     override def unmodifiable: Type = UnionType(unitedTypes.map(_.unmodifiable))
+
+    override def captureDescr: CaptureDescriptor = unitedTypes.foldLeft[CaptureDescriptor](CaptureSet.empty){
+      (accCs, currType) => accCs.union(currType.captureDescr)
+    }
 
     override def toString: String = unitedTypes.toSeq.sortBy(_.toString).mkString(" | ")
   }
@@ -77,6 +91,8 @@ object Types {
 
     override def isModifiableForSure: Boolean = false
     override def unmodifiable: Type = this
+
+    override def captureDescr: CaptureDescriptor = Brand
 
     override def toString: String = "[undefined type]"
   }

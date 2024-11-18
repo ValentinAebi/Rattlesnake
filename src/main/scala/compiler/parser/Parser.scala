@@ -8,7 +8,7 @@ import compiler.parser.ParseTree.^:
 import compiler.parser.TreeParsers.*
 import compiler.{CompilerStep, Errors, Position}
 import identifiers.*
-import lang.Captures.{Brand, CaptureSet}
+import lang.Captures.*
 import lang.Keyword.*
 import lang.Operator.*
 import lang.Types.{ArrayType, NamedType, Type}
@@ -119,8 +119,8 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     }
   } setName "funDef"
 
-  private lazy val moduleImport = lowName ::: colon ::: highName map {
-    case instanceId ^: moduleId => ModuleImport(instanceId, moduleId)
+  private lazy val moduleImport = lowName ::: colon ::: tpe map {
+    case paramId ^: paramType => ParamImport(paramId, paramType)
   } setName "moduleImport"
 
   private lazy val packageImport = {
@@ -174,13 +174,20 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     noParenthType OR (openParenth ::: tpe ::: closeParenth)
   } setName "tpe"
 
-  private lazy val atomicType = {
-    highName map (name => Types.primTypeFor(name).getOrElse(NamedType(name, )))
+  private lazy val atomicType = highName ::: opt(op(Hat) ::: opt(captureDescr)) map {
+    case shape ^: capDescrTokensOpt => {
+      val capDescr = capDescrTokensOpt.map {
+        case hat ^: descrOpt => descrOpt.getOrElse(CaptureSet.singletonOfRoot)
+      }.getOrElse(CaptureSet.empty)
+      NamedType(shape, capDescr)
+    }
   } setName "atomicType"
 
-  private lazy val capturablePath: P[CaptureSet] = ???
+  private lazy val properPath: P[ProperPath] = lowName ::: repeat(dot ::: lowName) map {
+    case root ^: selects => selects.foldLeft[ProperPath](VarPath(root))(SelectPath(_, _))
+  } setName "properPath"
 
-  private lazy val captureSet = openBrace ::: repeatWithSep(capturablePath, comma) ::: closeBrace map {
+  private lazy val captureSet = openBrace ::: repeatWithSep(properPath, comma) ::: closeBrace map {
     case paths => CaptureSet(paths.toSet)
   } setName "captureSet"
 
@@ -188,7 +195,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     op(Sharp) map (_ => Brand)
   } setName "brand"
 
-  private lazy val captureDescr = {
+  private lazy val captureDescr: P[CaptureDescriptor] = {
     captureSet OR brand
   } setName "captureDescr"
 
@@ -198,7 +205,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     }
   } setName "arrayType"
 
-  private lazy val device = kw(lang.Device.kwToDevice.keys.toSeq*) map {
+  private lazy val device = kw(lang.Device.kwToDevice.keys.toSeq *) map {
     deviceKw => lang.Device.kwToDevice.apply(deviceKw)
   } setName "device"
 

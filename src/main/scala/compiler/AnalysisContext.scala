@@ -9,7 +9,7 @@ import lang.*
 import lang.SubcaptureRelation.SubcapturingContext
 import lang.SubtypeRelation.subtypeOf
 import lang.Types.PrimitiveType.{NothingType, VoidType}
-import lang.Types.Type
+import lang.Types.{NamedType, Type}
 
 import scala.collection.mutable
 
@@ -157,12 +157,12 @@ object AnalysisContext {
     }
 
     private def analyzeImports(moduleDef: ModuleDef) = {
-      val importsMap = new mutable.LinkedHashMap[FunOrVarId, TypeIdentifier]()
+      val importsMap = new mutable.LinkedHashMap[FunOrVarId, Type]()
       val packagesSet = new mutable.LinkedHashSet[TypeIdentifier]()
       val devicesSet = new mutable.LinkedHashSet[Device]()
       moduleDef.imports.foreach {
-        case ModuleImport(instanceId, moduleId) =>
-          importsMap.put(instanceId, moduleId)
+        case ParamImport(instanceId, moduleType) =>
+          importsMap.put(instanceId, moduleType)
         case PackageImport(packageId) =>
           packagesSet.add(packageId)
         case DeviceImport(device) =>

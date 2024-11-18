@@ -4,7 +4,7 @@ import compiler.Position
 import identifiers.*
 import lang.Types.*
 import lang.Types.PrimitiveType.*
-import lang.{Device, FunctionSignature, Keyword, Operator}
+import lang.{Device, FunctionSignature, Keyword, Operator, TypeConversion}
 
 object Asts {
 
@@ -140,7 +140,7 @@ object Asts {
 
   sealed trait Import extends Ast
 
-  final case class ModuleImport(instanceId: FunOrVarId, moduleId: TypeIdentifier) extends Import {
+  final case class ParamImport(paramId: FunOrVarId, paramType: Type) extends Import {
     override def children: List[Ast] = Nil
   }
 
@@ -414,6 +414,14 @@ object Asts {
    * Cast, e.g. `x as Int`
    */
   final case class Cast(expr: Expr, tpe: Type) extends Expr {
+    private var _isTransparentCast: Boolean = false
+    
+    def isTransparentCast: Boolean = _isTransparentCast
+
+    def markTransparent(): Unit = {
+      _isTransparentCast = true
+    }
+    
     override def children: List[Ast] = List(expr)
   }
 

@@ -8,6 +8,7 @@ import compiler.typechecker.TypeCheckingContext.LocalInfo
 import compiler.{AnalysisContext, CompilerStep, Position}
 import identifiers.{FunOrVarId, IntrinsicsPackageId, TypeIdentifier}
 import lang.*
+import lang.Captures.CaptureSet
 import lang.Operator.{Equality, Inequality, Sharp}
 import lang.StructSignature.FieldInfo
 import lang.SubcaptureRelation.*
@@ -51,7 +52,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         }
         val moduleSig = ctx.resolveType(moduleName).get.asInstanceOf[ModuleSignature]
         val newCtx = ctx.copyForModuleOrPackage(Environment(
-          moduleName,
+          NamedType(moduleName, moduleSig.rawCaptureSet),
           moduleSig.importedPackages.toSet,
           moduleSig.importedDevices.toSet
         ))
@@ -61,11 +62,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
         VoidType
 
       case PackageDef(packageName, functions) =>
-        val sig = ctx.resolveType(packageName).get.asInstanceOf[PackageSignature]
+        val packageSig = ctx.resolveType(packageName).get.asInstanceOf[PackageSignature]
         val newCtx = ctx.copyForModuleOrPackage(Environment(
-          packageName,
-          sig.importedPackages.toSet,
-          sig.importedDevices.toSet
+          NamedType(packageName, packageSig.captureSet),
+          packageSig.importedPackages.toSet,
+          packageSig.importedDevices.toSet
         ))
         for func <- functions do {
           check(func, newCtx)
@@ -152,14 +153,14 @@ final class TypeChecker(errorReporter: ErrorReporter)
         mustBeKnown(name, ctx, varRef.getPosition)
 
       case MeRef() =>
-        asUnmodifiableType(ctx.currentEnvironment.get.currentModule)
+        ctx.currentEnvironment.get.currentModuleType
 
       case pkg@PackageRef(packageName) =>
         if (!ctx.currentEnvironment.get.allowsPackage(packageName)) {
           reportError(s"illegal reference to $packageName, which is not imported in this module", pkg.getPosition)
         }
         ctx.resolveType(packageName) match {
-          case Some(packageSignature: PackageSignature) => asUnmodifiableType(packageName)
+          case Some(packageSignature: PackageSignature) => NamedType(packageName, packageSignature.captureSet)
           case Some(_) => reportError(s"$packageName is not a package and is thus not allowed here", pkg.getPosition)
           case None => reportError(s"not found: $packageName", pkg.getPosition)
         }
@@ -168,7 +169,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         if (!ctx.currentEnvironment.get.allowsDevice(device)) {
           reportError(s"illegal reference to device $device, which is not imported in this module", devRef.getPosition)
         }
-        asUnmodifiableType(device.sig.tpe)
+        NamedType(device.sig.typeId, CaptureSet.singletonOfRoot)
 
       case call@Call(None, funName, args) =>
         checkFunCall(IntrinsicsPackageId, funName, args, call.getPosition, ctx)
@@ -231,7 +232,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
             checkCallArgs(structSig.fields.values.map(_.tpe).toList, args, ctx, instantiation.getPosition)
             NamedType(tid, )
           case Some(moduleSig: ModuleSignature) =>
-            val expectedTypes = moduleSig.importedModules.map((_, tpe) => asUnmodifiableType(tpe)).toList
+            val expectedTypes = moduleSig.paramImports.map((_, tpe) => asUnmodifiableType(tpe)).toList
             checkCallArgs(expectedTypes, args, ctx, instantiation.getPosition)
             asUnmodifiableType(tid)
           case _ => reportError(s"not found: structure or module '$tid'", instantiation.getPosition)
@@ -391,6 +392,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val exprType = check(expr, ctx)
         if (exprType.subtypeOf(tpe)(using ctx.toSubcapturingCtx)) {
           reportError(s"useless conversion: '$exprType' --> '$tpe'", cast.getPosition, isWarning = true)
+          cast.markTransparent()
           tpe
         } else if (TypeConversion.conversionFor(exprType, tpe).isDefined) {
           tpe
@@ -418,12 +420,12 @@ final class TypeChecker(errorReporter: ErrorReporter)
         checkSubtypingConstraint(StringType, msgType, panicStat.getPosition, "panic", ctx)
         NothingType
 
-      case modImp@ModuleImport(instanceId, moduleId) =>
-        typeMustBeKnown(asUnmodifiableType(moduleId), ctx, modImp.getPosition)
+      case modImp@ParamImport(paramName, paramType) =>
+        typeMustBeKnown(paramType, ctx, modImp.getPosition)
         VoidType
 
       case pkgImp@PackageImport(packageId) =>
-        typeMustBeKnown(asUnmodifiableType(packageId), ctx, pkgImp.getPosition)
+        typeMustBeKnown(NamedType(packageId, CaptureSet.empty), ctx, pkgImp.getPosition)
         VoidType
 
       case DeviceImport(device) => VoidType

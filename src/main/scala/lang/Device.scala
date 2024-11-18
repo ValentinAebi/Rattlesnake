@@ -16,6 +16,6 @@ object Device {
 
   val kwToDevice: Map[Keyword, Device] = values.map(d => d.keyword -> d).toMap
 
-  val deviceTypeToSig: Map[TypeIdentifier, DeviceSignature] = values.map(d => d.sig.tpe -> d.sig).toMap
+  val deviceTypeToSig: Map[TypeIdentifier, DeviceSignature] = values.map(d => d.sig.typeId -> d.sig).toMap
 
 }

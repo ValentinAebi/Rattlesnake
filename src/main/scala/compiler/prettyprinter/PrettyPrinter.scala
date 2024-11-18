@@ -124,11 +124,11 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         }
         pps.add(tpe.toString)
 
-      case ModuleImport(instanceId, moduleId) =>
+      case ParamImport(paramName, paramType) =>
         pps
-          .add(instanceId)
+          .add(paramName)
           .add(": ")
-          .add(moduleId)
+          .add(paramType.toString)
 
       case PackageImport(packageId) =>
         pps

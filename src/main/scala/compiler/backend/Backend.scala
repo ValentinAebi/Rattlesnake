@@ -9,6 +9,7 @@ import compiler.irs.Asts.*
 import compiler.{AnalysisContext, CompilerStep, FileExtensions, NamesForGeneratedClasses}
 import identifiers.{BackendGeneratedVarId, FunOrVarId, MeVarId, TypeIdentifier}
 import lang.*
+import lang.Captures.CaptureSet
 import lang.Operator.*
 import lang.SubtypeRelation.subtypeOf
 import lang.Types.PrimitiveType.*
@@ -118,12 +119,12 @@ final class Backend[V <: ClassVisitor](
     val cv: V = mode.createVisitor(path)
     cv.visit(javaVersionCode, ACC_PUBLIC | ACC_FINAL, modOrPkg.name.stringId, null, objectTypeStr, null)
     addConstructor(cv)
-    val pkgTypeDescr = descriptorForType(NamedType(modOrPkg.name, false))
+    val pkgTypeDescr = descriptorForType(NamedType(modOrPkg.name, CaptureSet.empty))
     if (modOrPkg.isInstanceOf[PackageDef]) {
       addInstanceFieldAndInitializer(modOrPkg, cv, pkgTypeDescr)
     }
-    for (varId, moduleId) <- ctx.resolveType(modOrPkg.name).get.asInstanceOf[ModuleOrPackageSignature].importedModules do {
-      cv.visitField(ACC_PRIVATE, varId.stringId, descriptorForType(asUnmodifiableType(moduleId)), null, null)
+    for (varId, moduleId) <- ctx.resolveType(modOrPkg.name).get.asInstanceOf[ModuleOrPackageSignature].paramImports do {
+      cv.visitField(ACC_PRIVATE, varId.stringId, descriptorForType(NamedType(moduleId, CaptureSet.empty)), null, null)
     }
     for func <- modOrPkg.functions do {
       val desc = descriptorForFunc(func.signature)
@@ -162,7 +163,7 @@ final class Backend[V <: ClassVisitor](
 
   private def addFunction(owner: TypeIdentifier, funDef: FunDef, mv: MethodVisitor, analysisContext: AnalysisContext): Unit = {
     val ctx = CodeGenerationContext.from(analysisContext, owner)
-    ctx.addLocal(MeVarId, asUnmodifiableType(owner))
+    ctx.addLocal(MeVarId, NamedType(owner, CaptureSet.empty))
     val unnamedParamIdx = new AtomicInteger(0)
     for param <- funDef.params do {
       param.paramNameOpt match {
@@ -347,12 +348,12 @@ final class Backend[V <: ClassVisitor](
       }
 
       case MeRef() =>
-        mv.visitIntInsn(opcodeFor(asUnmodifiableType(ctx.currentModule), Opcodes.ILOAD, Opcodes.ALOAD), 0)
+        mv.visitIntInsn(opcodeFor(NamedType(ctx.currentModule, CaptureSet.empty), Opcodes.ILOAD, Opcodes.ALOAD), 0)
 
       case PackageRef(name) =>
-        val packageType = asUnmodifiableType(name)
-        val internalName = internalNameOf(packageType)
-        val descr = descriptorForType(packageType)
+        val packageShapeType = NamedType(name, CaptureSet.empty)
+        val internalName = internalNameOf(packageShapeType)
+        val descr = descriptorForType(packageShapeType)
         mv.visitFieldInsn(Opcodes.GETSTATIC, internalName, packageInstanceName, descr)
 
       case Call(None, funName, args) => {
@@ -393,8 +394,8 @@ final class Backend[V <: ClassVisitor](
           case Types.UndefinedType => shouldNotHappen()
         }
 
-      case StructOrModuleInstantiation(tid, args, modifiable) =>
-        val instantiatedType = NamedType(tid, modifiable)
+      case StructOrModuleInstantiation(tid, args) =>
+        val instantiatedType = NamedType(tid, CaptureSet.empty)
         val tmpVarIdx = ctx.currLocalIdx
         val tempLocalName = BackendGeneratedVarId(tmpVarIdx)
         ctx.addLocal(tempLocalName, instantiatedType)
@@ -606,9 +607,9 @@ final class Backend[V <: ClassVisitor](
       case ReturnStat(None) =>
         mv.visitInsn(Opcodes.RETURN)
 
-      case Cast(expr, tpe) => {
+      case cast@Cast(expr, tpe) => {
         generateCode(expr, ctx)
-        if (!expr.getType.subtypeOf(tpe)(using ctx.structs)) {
+        if (!cast.isTransparentCast) {
           TypeConversion.conversionFor(expr.getType, tpe) match
             case Some(TypeConversion.Int2Double) => mv.visitInsn(Opcodes.I2D)
             case Some(TypeConversion.Double2Int) => mv.visitInsn(Opcodes.D2I)
@@ -692,11 +693,9 @@ final class Backend[V <: ClassVisitor](
     case StructSignature(name, fields, directSupertypes, isInterface) =>
       fields.toList.map((id, infos) => (id.stringId, infos.tpe))
     case ModuleSignature(name, importedModules, importedPackages, importedDevices, functions) =>
-      importedModules.toList.map((id, tpe) => (id.stringId, asUnmodifiableType(tpe)))
+      importedModules.toList.map((id, tpe) => (id.stringId, tpe))
     case _ => shouldNotHappen()
   }
-
-  private def asUnmodifiableType(tid: TypeIdentifier): NamedType = NamedType(tid, modifiable = false)
 
   private def shouldNotHappen(): Nothing = assert(false)
 
