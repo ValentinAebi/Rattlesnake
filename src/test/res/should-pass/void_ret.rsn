@@ -1,18 +1,22 @@
 
-fn foo() -> Int {
-    2 + 1;
-    4 + 3;
-    return 42
-}
+package Test {
 
-fn bar(a: Int, b: Int, c: Int) -> arr Int {
-    val array = arr Int[3];
-    array[0] = a;
-    array[1] = b;
-    array[2] = c;
-    return array
-}
-
-fn main() -> arr Int {
-    return bar(-10, -20, foo())
+    fn foo() -> Int {
+        2 + 1;
+        4 + 3;
+        return 42
+    }
+    
+    fn bar(a: Int, b: Int, c: Int) -> arr Int {
+        val array = arr Int[3];
+        array[0] = a;
+        array[1] = b;
+        array[2] = c;
+        return array
+    }
+    
+    fn main() -> arr Int {
+        return me.bar(-10, -20, Test.foo())
+    }
+    
 }

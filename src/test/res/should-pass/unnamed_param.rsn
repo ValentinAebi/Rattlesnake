@@ -1,27 +1,31 @@
 
-fn f1(String, i: Int, j: Int) -> Int {
-    return i + j
-}
+package Test {
 
-fn f2(i: Int, String, j: Int) -> Int {
-    return i - j
-}
+    fn f1(String, i: Int, j: Int) -> Int {
+        return i + j
+    }
+    
+    fn f2(i: Int, String, j: Int) -> Int {
+        return i - j
+    }
+    
+    fn f3(i: Int, j: Int, String) -> Int {
+        return i * j
+    }
+    
+    fn f4(Int, s: String, Int) -> Int {
+        return #s
+    }
+    
+    fn testF(array: mut arr Int){
+        if #array != 4 {
+            panic "wrong length"
+        };
+        array[0] = me.f1("abcd", 15, 22);
+        array[1] = me.f2(37, "efghi", 11);
+        array[2] = me.f3(14, -12, "abcdefghijkl");
+        array[3] = me.f4(15, "hey", 31);
+        // expected array: [37, 26, -168, 3]
+    }
 
-fn f3(i: Int, j: Int, String) -> Int {
-    return i * j
-}
-
-fn f4(Int, s: String, Int) -> Int {
-    return #s
-}
-
-fn testF(array: mut arr Int){
-    if #array != 4 {
-        panic "wrong length"
-    };
-    array[0] = f1("abcd", 15, 22);
-    array[1] = f2(37, "efghi", 11);
-    array[2] = f3(14, -12, "abcdefghijkl");
-    array[3] = f4(15, "hey", 31);
-    // expected array: [37, 26, -168, 3]
 }

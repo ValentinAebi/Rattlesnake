@@ -1,4 +1,8 @@
 
-fn testFunc(str: String) -> Int {
-    return #str
+package Test {
+
+    fn testFunc(str: String) -> Int {
+        return #str
+    }
+
 }

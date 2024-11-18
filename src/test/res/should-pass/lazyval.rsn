@@ -1,13 +1,17 @@
 
-fn bar() -> Bool {
-    panic "abc"
-}
+package Test {
 
-fn testFunc() -> arr Bool {
-    val res = arr Bool[4];
-    res[0] = true || bar();
-    res[1] = false && bar();
-    res[2] = false || true;
-    res[3] = true && true;
-    return res
+    fn bar() -> Bool {
+        panic "abc"
+    }
+    
+    fn testFunc() -> arr Bool {
+        val res = arr Bool[4];
+        res[0] = true || me.bar();
+        res[1] = false && me.bar();
+        res[2] = false || true;
+        res[3] = true && true;
+        return res
+    }
+
 }

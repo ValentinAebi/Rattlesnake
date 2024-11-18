@@ -1,20 +1,24 @@
 
-fn testFunc() -> arr Bool {
-    val opt = optionOf(42);
-    return [
-        opt is Some && opt.value > 10,  // true
-        opt is Some && opt.value > 50,  // false
-        isEmpty(opt),                   // false
-        isEmpty(new None {})            // true
-    ];
-}
+package Test {
 
-fn optionOf(i: Int) -> Option {
-    return new Some { i };
-}
-
-fn isEmpty(opt: Option) -> Bool {
-    return opt is None;
+    fn testFunc() -> arr Bool {
+        val opt = me.optionOf(42);
+        return [
+            opt is Some && opt.value > 10,  // true
+            opt is Some && opt.value > 50,  // false
+            me.isEmpty(opt),                // false
+            me.isEmpty(new None())          // true
+        ];
+    }
+    
+    fn optionOf(i: Int) -> Option {
+        return new Some(i);
+    }
+    
+    fn isEmpty(opt: Option) -> Bool {
+        return opt is None;
+    }
+    
 }
 
 interface Option {

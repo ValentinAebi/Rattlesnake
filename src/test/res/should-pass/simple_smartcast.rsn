@@ -1,16 +1,20 @@
 
-fn testFunc() -> Int {
-    val tree = new Fork {
-        new Fork {
-            new Leaf { 1 },
-            new Fork {
-                new Leaf { 2 },
-                new Leaf { 3 }
-            }
-        },
-        new Leaf { 4 }
-    };
-    return sum(tree);
+package Test {
+
+    fn testFunc() -> Int {
+        val tree = new Fork(
+            new Fork(
+                new Leaf(1),
+                new Fork(
+                    new Leaf(2),
+                    new Leaf(3)
+                )
+            ),
+            new Leaf(4)
+        );
+        return Trees.sum(tree);
+    }
+    
 }
 
 interface Tree {}
@@ -22,10 +26,14 @@ struct Leaf : Tree {
     value: Int
 }
 
-fn sum(tree: Tree) -> Int {
-    if tree is Fork {
-        return sum(tree.left) + sum(tree.right)
-    } else {
-        return (tree as Leaf).value
+package Trees {
+
+    fn sum(tree: Tree) -> Int {
+        if tree is Fork {
+            return me.sum(tree.left) + Trees.sum(tree.right)
+        } else {
+            return (tree as Leaf).value
+        }
     }
+
 }

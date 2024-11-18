@@ -15,11 +15,16 @@ struct S2 : I {
     foo: Int
 }
 
-fn testF(a: arr Bool) -> Int {
-    val x = when a[0] then new S1 { 15, -8, "Hello" } else new S2 { "Bonjour", 955 };
-    return f(x.foo, #x.bar);
-}
 
-fn f(i: Int, j: Int) -> Int {
-    return 9*i - j*j;
+package Test {
+
+    fn testF(a: arr Bool) -> Int {
+        val x = when a[0] then new S1(15, -8, "Hello") else new S2("Bonjour", 955);
+        return me.f(x.foo, #x.bar);
+    }
+    
+    fn f(i: Int, j: Int) -> Int {
+        return 9*i - j*j;
+    }
+    
 }

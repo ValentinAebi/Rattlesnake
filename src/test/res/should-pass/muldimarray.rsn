@@ -3,8 +3,12 @@ struct Cell {
   content: Int
 }
 
-fn testF() -> arr arr Cell {
-  val a = arr arr Cell[1];
-  a[0] = [new Cell { 42 }];
-  return a;
+package Test {
+
+    fn testF() -> arr arr Cell {
+      val a = arr arr Cell[1];
+      a[0] = [new Cell(42)];
+      return a;
+    }
+
 }

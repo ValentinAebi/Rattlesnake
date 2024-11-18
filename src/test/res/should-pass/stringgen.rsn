@@ -1,4 +1,8 @@
 
-fn generateString() -> String {
-    return "Hello!"
+package Test {
+
+    fn generateString() -> String {
+        return "Hello!"
+    }
+
 }

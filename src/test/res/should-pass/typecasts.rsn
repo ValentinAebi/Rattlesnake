@@ -1,13 +1,17 @@
 
-fn testFunc() -> String {
+package Test {
 
-    val ch = 'a';
-    val int = 98;
-    val chC: Int = ch as Int;
-    val intC = int as Char;   // 'b'
-    val str = charToString(ch) + " " + charToString(intC);
+    fn testFunc() -> String {
     
-    val x = 10.89 + (2 as Double);
+        val ch = 'a';
+        val int = 98;
+        val chC: Int = ch as Int;
+        val intC = int as Char;   // 'b'
+        val str = charToString(ch) + " " + charToString(intC);
+        
+        val x = 10.89 + (2 as Double);
+        
+        return str + intToString(chC + int) + doubleToString(x) + intToString(x as Int); // expected: "a b19512.8912"
+    }
     
-    return str + intToString(chC + int) + doubleToString(x) + intToString(x as Int); // expected: "a b19512.8912"
 }

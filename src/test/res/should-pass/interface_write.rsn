@@ -12,14 +12,18 @@ interface I {
    var x: Int
 }
 
-fn mulX(z: mut I, factor: Int){
-    z.x *= factor;
-}
+package Test {
 
-fn testF() -> Int {
-    val a = new mut A { 25, 12.5 };
-    var t = a.x;
-    mulX(a, 32);
-    t -= a.x;
-    return t;
+    fn mulX(z: I, factor: Int){
+        z.x *= factor;
+    }
+    
+    fn testF() -> Int {
+        val a = new A(25, 12.5);
+        var t = a.x;
+        me.mulX(a, 32);
+        t -= a.x;
+        return t;
+    }
+
 }

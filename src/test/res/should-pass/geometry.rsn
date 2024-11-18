@@ -12,24 +12,25 @@ package Geometry {
     
 }
 
-package Main {
-    
-    fn main(arr String){
-        var width = 0.1 - 0.05 * (2.41 + 1.2) * 0.3;
-        var alternate = true;
-        while width < 4.0 {
-            if alternate {
-                width = width + 0.3
-            } else {
-                width = width * 1.4
-            };
-            alternate = !alternate
+package Test {
+
+    // creates the rectangles described by rectDims (leftUpperX, leftUpperY, width, height) and returns them
+    // fills 'areas' with their areas
+    fn createRectangles(rectDims: arr Double, areas: mut arr Double) -> arr Rectangle {
+        if #rectDims % 4 != 0 {
+            panic "length of rectDims should be a multiple of 4"
         };
-        val r = new Rectangle(new Vertex(11.5, 9.0), width, 2.5);
-        val area = Geometry.computeArea(r);
-        print(doubleToString(area))
+        val rectangles = arr Rectangle[#rectDims / 4];
+        var i = 0;
+        for ; i < #rectDims; i += 4 {
+            rectangles[i / 4] = new Rectangle(new Vertex(rectDims[i], rectDims[i + 1]), rectDims[i + 2], rectDims[i + 3])
+        };
+        for i = 0; i < #rectangles; i += 1 {
+            areas[i] = Geometry.computeArea(rectangles[i])
+        };
+        return rectangles
     }
-    
+
 }
 
 struct Rectangle {

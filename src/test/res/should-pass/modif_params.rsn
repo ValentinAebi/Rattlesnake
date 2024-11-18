@@ -1,18 +1,22 @@
 
-fn gcd(var a: Int, var b: Int) -> Int {
-    while a != 0 && b != 0 {
-        if a > b {
-            a %= b
-        } else {
-            b %= a
-        }
-    };
-    return when a == 0 then b else a
-}
+package Test {
 
-fn wrapper(inputs: arr Int) -> Int {
-    if #inputs != 2 {
-        panic "unexpected array length"
-    };
-    return gcd(inputs[0], inputs[1])
+    fn gcd(var a: Int, var b: Int) -> Int {
+        while a != 0 && b != 0 {
+            if a > b {
+                a %= b
+            } else {
+                b %= a
+            }
+        };
+        return when a == 0 then b else a
+    }
+    
+    fn wrapper(inputs: arr Int) -> Int {
+        if #inputs != 2 {
+            panic "unexpected array length"
+        };
+        return Test.gcd(inputs[0], inputs[1])
+    }
+    
 }

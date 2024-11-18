@@ -1,29 +1,33 @@
 
-fn testFunc(args: arr Int) -> arr Int {
-    val counter = new mut Counter { 0, -1 };
-    counter.odds = 0;
-    for var k = 0; k < #args; k += 1 {
-        add(counter, args[k]);
-    };
-    return counterToArray(counter);
+package Test {
+
+    fn testFunc(args: arr Int) -> arr Int {
+        val counter = new Counter(0, -1);
+        counter.odds = 0;
+        for var k = 0; k < #args; k += 1 {
+            me.add(counter, args[k]);
+        };
+        return Test.counterToArray(counter);
+    }
+    
+    fn add(counter: Counter, n: Int){
+        if n % 2 == 0 {
+            counter.evens += 1;
+        } else {
+            counter.odds += 1;
+        }
+    }
+    
+    fn counterToArray(counter: Counter) -> arr Int {
+        val array = arr Int[2];
+        array[0] = counter.evens;
+        array[1] = counter.odds;
+        return array;
+    }
+
 }
 
 struct Counter {
     var evens: Int,
     var odds: Int
-}
-
-fn add(counter: mut Counter, n: Int){
-    if n % 2 == 0 {
-        counter.evens += 1;
-    } else {
-        counter.odds += 1;
-    }
-}
-
-fn counterToArray(counter: Counter) -> arr Int {
-    val array = arr Int[2];
-    array[0] = counter.evens;
-    array[1] = counter.odds;
-    return array;
 }

@@ -1,28 +1,45 @@
 
-fn swap(array: mut arr Int, i1: Int, i2: Int) -> Void {
-    val tmp = array[i1];
-    array[i1] = array[i2];
-    array[i2] = tmp;
-}
+package Arrays {
 
-fn selectionSort(array: mut arr Int) {
-    for var i = 0; i < #array; i += 1 {
-        val maxIdx = maxIdx(array, i);
-        swap(array, i, maxIdx)
-    };
-}
-
-// returns the index of the maximal element of the array
-fn maxIdx(array: arr Int, firstIdx: Int) -> Int {
-    if #array == 0 {
-        panic "max of empty array"
-    } else {
-        var maxIdx = firstIdx;
-        for val len = #array, var i = firstIdx + 1; i < len; i += 1 {
-            if array[i] > array[maxIdx] {
-                maxIdx = i;
-            }
-        };
-        return maxIdx
+    // returns the index of the maximal element of the array
+    fn maxIdx(array: arr Int, firstIdx: Int) -> Int {
+        if #array == 0 {
+            panic "max of empty array"
+        } else {
+            var maxIdx = firstIdx;
+            for val len = #array, var i = firstIdx + 1; i < len; i += 1 {
+                if array[i] > array[maxIdx] {
+                    maxIdx = i;
+                }
+            };
+            return maxIdx
+        }
     }
+
+}
+
+module Sorting(package Arrays) {
+
+    fn swap(array: mut arr Int, i1: Int, i2: Int) -> Void {
+        val tmp = array[i1];
+        array[i1] = array[i2];
+        array[i2] = tmp;
+    }
+
+    fn selectionSort(array: mut arr Int) {
+        for var i = 0; i < #array; i += 1 {
+            val maxIdx = Arrays.maxIdx(array, i);
+            me.swap(array, i, maxIdx)
+        };
+    }
+
+}
+
+package Main {
+
+    fn selectionSort(array: mut arr Int) {
+        val s = new Sorting();
+        s.selectionSort(array);
+    }
+
 }

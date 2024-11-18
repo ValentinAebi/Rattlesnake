@@ -1,12 +1,16 @@
 
-fn testF(array: mut arr Double){
-    if #array != 1 {
-        panic "wrong length"
-    };
-    val v0 = 12.74;
-    val x0 = 915.38;
-    val a = -7.32;
-    val t = 315.49;
-    val x = 1.0/2.0 * a*t*t - v0*(-t) + x0;
-    array[0] = x;
+package Test {
+
+    fn testF(array: mut arr Double){
+        if #array != 1 {
+            panic "wrong length"
+        };
+        val v0 = 12.74;
+        val x0 = 915.38;
+        val a = -7.32;
+        val t = 315.49;
+        val x = 1.0/2.0 * a*t*t - v0*(-t) + x0;
+        array[0] = x;
+    }
+
 }
