@@ -118,6 +118,7 @@ object Asts {
   
   sealed trait ModuleOrPackageDefTree extends TypeDefTree {
     def functions: List[FunDef]
+    def isPackage: Boolean
   }
   
   final case class PackageDef(packageName: TypeIdentifier, functions: List[FunDef]) extends ModuleOrPackageDefTree {
@@ -125,6 +126,7 @@ object Asts {
     override def directSupertypes: Seq[TypeIdentifier] = Nil
     override def isInterface: Boolean = false
     override def children: List[Ast] = functions
+    override def isPackage: Boolean = true
   }
 
   final case class ModuleDef(
@@ -136,6 +138,7 @@ object Asts {
     override def directSupertypes: Seq[TypeIdentifier] = Nil
     override def isInterface: Boolean = false
     override def children: List[Ast] = imports ++ functions
+    override def isPackage: Boolean = false
   }
 
   sealed trait Import extends Ast

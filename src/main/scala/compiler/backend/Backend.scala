@@ -118,7 +118,8 @@ final class Backend[V <: ClassVisitor](
   private def generateModuleOrPackageFile(modOrPkg: ModuleOrPackageDefTree, path: Path)(using ctx: AnalysisContext): Unit = {
     val cv: V = mode.createVisitor(path)
     cv.visit(javaVersionCode, ACC_PUBLIC | ACC_FINAL, modOrPkg.name.stringId, null, objectTypeStr, null)
-    addConstructor(cv)
+    val constructorVisibility = if modOrPkg.isPackage then ACC_PRIVATE else ACC_PUBLIC
+    addConstructor(cv, constructorVisibility)
     val pkgTypeDescr = descriptorForType(NamedType(modOrPkg.name, CaptureSet.empty))
     if (modOrPkg.isInstanceOf[PackageDef]) {
       addInstanceFieldAndInitializer(modOrPkg, cv, pkgTypeDescr)
@@ -219,7 +220,7 @@ final class Backend[V <: ClassVisitor](
     cv.visit(javaVersionCode, classMods, structDef.structName.stringId, null, objectTypeStr, superInterfaces)
     if (!isInterface) {
       addFields(structDef, cv)
-      addConstructor(cv)
+      addConstructor(cv, Opcodes.ACC_PUBLIC)
     }
     val fieldsWithAccessors = if isInterface then sig.fields.keySet else getInterfaceFieldsForStruct(structName, ctx.structs)
     for (fld <- fieldsWithAccessors) {
@@ -274,8 +275,8 @@ final class Backend[V <: ClassVisitor](
     setterVisitor.visitEnd()
   }
 
-  private def addConstructor(cv: ClassVisitor): Unit = {
-    val constructorVisitor = cv.visitMethod(Opcodes.ACC_PUBLIC, "<init>", "()V", null, null)
+  private def addConstructor(cv: ClassVisitor, visibility: Int): Unit = {
+    val constructorVisitor = cv.visitMethod(visibility, "<init>", "()V", null, null)
     constructorVisitor.visitCode()
     constructorVisitor.visitVarInsn(Opcodes.ALOAD, 0)
     constructorVisitor.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false)
