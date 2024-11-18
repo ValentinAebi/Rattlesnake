@@ -15,22 +15,20 @@ final case class FunctionSignature(
                                   )
 
 sealed trait TypeSignature {
+  
   def isInterface: Boolean
-
   def isModuleOrPackage: Boolean
 
   def functions: Map[FunOrVarId, FunctionSignature]
 }
 
 sealed trait ModuleOrPackageSignature extends TypeSignature {
-  def paramImports: mutable.LinkedHashMap[FunOrVarId, TypeIdentifier]
-
+  
+  def paramImports: mutable.LinkedHashMap[FunOrVarId, Type]
   def importedPackages: mutable.LinkedHashSet[TypeIdentifier]
-
   def importedDevices: mutable.LinkedHashSet[Device]
-
+  
   override def isInterface: Boolean = false
-
   override def isModuleOrPackage: Boolean = true
 }
 
@@ -54,7 +52,7 @@ final case class PackageSignature(
                                    importedDevices: mutable.LinkedHashSet[Device],
                                    functions: Map[FunOrVarId, FunctionSignature]
                                  ) extends ModuleOrPackageSignature {
-  override def paramImports: mutable.LinkedHashMap[FunOrVarId, TypeIdentifier] = mutable.LinkedHashMap.empty
+  override def paramImports: mutable.LinkedHashMap[FunOrVarId, Type] = mutable.LinkedHashMap.empty
 
   def captureSet: CaptureSet = CaptureSet(
     importedPackages.map(pkgName => PackagePath(pkgName)).toSet ++

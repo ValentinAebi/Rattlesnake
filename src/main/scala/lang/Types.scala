@@ -8,10 +8,10 @@ import lang.Types.PrimitiveType.NothingType
 object Types {
 
   sealed trait Type {
-    
+
     def maybeModifiable: Boolean
     def isModifiableForSure: Boolean
-    
+
     def unmodifiable: Type
     
     def captureDescr: CaptureDescriptor
@@ -48,6 +48,11 @@ object Types {
   }
   
   final case class NamedType(typeName: TypeIdentifier, captureDescr: CaptureDescriptor) extends Type {
+
+    override def maybeModifiable: Boolean = ???
+    override def isModifiableForSure: Boolean = ???
+    override def unmodifiable: Type = ???
+
     override def toString: String = typeName.stringId + captureDescr.toHatNotation
   }
 

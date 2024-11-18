@@ -8,7 +8,7 @@ import compiler.typechecker.TypeCheckingContext.LocalInfo
 import compiler.{AnalysisContext, CompilerStep, Position}
 import identifiers.{FunOrVarId, IntrinsicsPackageId, TypeIdentifier}
 import lang.*
-import lang.Captures.CaptureSet
+import lang.Captures.{Capturable, CaptureDescriptor, CaptureSet, DevicePath, MePath, PackagePath, ProperPath, SelectPath, VarPath}
 import lang.Operator.{Equality, Inequality, Sharp}
 import lang.StructSignature.FieldInfo
 import lang.SubcaptureRelation.*
@@ -230,16 +230,15 @@ final class TypeChecker(errorReporter: ErrorReporter)
             )
           case Some(structSig: StructSignature) =>
             checkCallArgs(structSig.fields.values.map(_.tpe).toList, args, ctx, instantiation.getPosition)
-            NamedType(tid, )
+            NamedType(tid, mostPreciseCaptureDescrFromArgsList(args, ctx))
           case Some(moduleSig: ModuleSignature) =>
-            val expectedTypes = moduleSig.paramImports.map((_, tpe) => asUnmodifiableType(tpe)).toList
+            val expectedTypes = moduleSig.paramImports.values.toList
             checkCallArgs(expectedTypes, args, ctx, instantiation.getPosition)
-            asUnmodifiableType(tid)
+            NamedType(tid, mostPreciseCaptureDescrFromArgsList(args, ctx))
           case _ => reportError(s"not found: structure or module '$tid'", instantiation.getPosition)
         }
 
       case unaryOp@UnaryOp(operator, operand) =>
-        // no check for unused mut because no unary operator requires mutability on its argument
         val operandType = check(operand, ctx)
         if (operator == Sharp) {
           if (operandType.isInstanceOf[ArrayType] || operandType == StringType) {
@@ -512,12 +511,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
   }
 
-  private def markWithUndefinedType(expressions: Expr*): Unit = {
-    for expr <- expressions do {
-      expr.setType(UndefinedType)
-    }
-  }
-
   /**
    * @param returned      types of all the expressions found after a `return`
    * @param alwaysStopped indicates whether the control-flow can reach the end of the considered construct without
@@ -685,8 +678,13 @@ final class TypeChecker(errorReporter: ErrorReporter)
       val commonDirectSupertypes = directSupertypesSets.reduceLeft(_.intersect(_))
       Some(
         if commonDirectSupertypes.size == 1
-        then NamedType(commonDirectSupertypes.head, )
-        else UnionType(types)
+        then {
+          val superT = commonDirectSupertypes.head
+          val csUnion = types.foldLeft[CaptureDescriptor](CaptureSet.empty)(
+            (accCs, indivType) => accCs.union(indivType.captureDescr)
+          )
+          NamedType(superT, csUnion)
+        } else UnionType(types)
       )
     } else {
       // type Nothing should be accepted
@@ -714,6 +712,32 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case VariableRef(name) if expectedType.maybeModifiable =>
         ctx.mutIsUsed(name)
       case _ => ()
+  }
+  
+  private def mostPreciseCaptureDescrFromArgsList(args: List[Expr], ctx: TypeCheckingContext): CaptureDescriptor =
+    args.foldLeft[CaptureDescriptor](CaptureSet.empty)((accCd, arg) => accCd.union(mostPreciseCaptureDescrFromArg(arg, ctx)))
+  
+  private def mostPreciseCaptureDescrFromArg(arg: Expr, ctx: TypeCheckingContext): CaptureDescriptor =
+    maybeBuildPath(arg, ctx).map(CaptureSet(_)).getOrElse(arg.getType.captureDescr)
+  
+  private def maybeBuildPath(expr: Expr, ctx: TypeCheckingContext): Option[ProperPath] = expr match {
+    case VariableRef(name) if ctx.getLocalOnly(name).exists(!_.isReassignable) => Some(VarPath(name))
+    case MeRef() => Some(MePath)
+    case Select(lhs, selected) => lhs.getType match {
+      case NamedType(lhsTypeName, _) =>
+        val lhsTypeSig = ctx.resolveType(lhsTypeName)
+        lhsTypeSig match {
+          case Some(structSig: StructSignature) if structSig.fields.get(selected).exists(!_.isReassignable) =>
+            maybeBuildPath(lhs, ctx).map(SelectPath(_, selected))
+          case Some(moduleSig: ModuleSignature) if moduleSig.paramImports.contains(selected) =>
+            maybeBuildPath(lhs, ctx).map(SelectPath(_, selected))
+          case _ => None
+        }
+      case _ => None
+    }
+    case PackageRef(pkgName) => Some(PackagePath(pkgName))
+    case DeviceRef(device) => Some(DevicePath(device))
+    case _ => None
   }
 
   private def logicalImplies(p: Boolean, q: Boolean): Boolean = !p || q

@@ -123,8 +123,8 @@ final class Backend[V <: ClassVisitor](
     if (modOrPkg.isInstanceOf[PackageDef]) {
       addInstanceFieldAndInitializer(modOrPkg, cv, pkgTypeDescr)
     }
-    for (varId, moduleId) <- ctx.resolveType(modOrPkg.name).get.asInstanceOf[ModuleOrPackageSignature].paramImports do {
-      cv.visitField(ACC_PRIVATE, varId.stringId, descriptorForType(NamedType(moduleId, CaptureSet.empty)), null, null)
+    for (varId, moduleType) <- ctx.resolveType(modOrPkg.name).get.asInstanceOf[ModuleOrPackageSignature].paramImports do {
+      cv.visitField(ACC_PRIVATE, varId.stringId, descriptorForType(moduleType), null, null)
     }
     for func <- modOrPkg.functions do {
       val desc = descriptorForFunc(func.signature)
