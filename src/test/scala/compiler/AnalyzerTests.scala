@@ -1,13 +1,13 @@
 package compiler
 
-import compiler.CompilationStep.{ContextCreation, TailrecChecking}
+import compiler.CompilationStep.ContextCreation
 import compiler.Errors.*
 import compiler.TasksPipelines.frontend
 import compiler.ctxcreator.ContextCreator
 import compiler.io.SourceFile
 import compiler.lowerer.Lowerer
 import compiler.typechecker.TypeChecker
-import org.junit.Assert.{assertEquals, fail}
+import org.junit.Assert.fail
 import org.junit.Test
 
 import scala.collection.mutable.ListBuffer
@@ -17,34 +17,10 @@ class AnalyzerTests {
 
   private val srcDir = "src/test/res/analyzer-tests"
 
-  @Test def modifiableArrayShouldNotBeCovariant(): Unit = {
-    runAndExpectErrors("mut_covariance")(
-      ErrorMatcher("modifiable array should not be covariant",
-        line = 8, col = 9,
-        msgMatcher = _.contains("expected 'mut arr arr Int', found 'mut arr mut arr Int'"),
-        errorClass = classOf[Err]
-      ),
-      warningMatcher(7, "mut is redundant"),
-      warningMatcher(6, "unused local")
-    )
-  }
-
-  @Test def shouldNotAssignNonModifToArrayOfModif(): Unit = {
-    runAndExpectErrors("array_of_mut")(
-      ErrorMatcher("array of modifiable array should not accept unmodifiable array",
-        line = 6, col = 5,
-        msgMatcher = _.contains("expected 'mut arr Y', found 'arr Y'"),
-        errorClass = classOf[Err]
-      ),
-      warningMatcher(4, "unused local"),
-      warningMatcher(5, "mut is redundant")
-    )
-  }
-
   @Test def expectWarningForUnusedLocal(): Unit = {
     runAndExpectErrors("unused_local") {
       ErrorMatcher("expect warning for unused local",
-        line = 2, col = 8,
+        line = 4, col = 12,
         msgMatcher = _.contains("unused local: 'x' is never queried"),
         errorClass = classOf[Warning]
       )
@@ -54,134 +30,62 @@ class AnalyzerTests {
   @Test def expectWarningForVarNotReassigned(): Unit = {
     runAndExpectErrors("var_never_reassigned") {
       ErrorMatcher("expect warning when variable is never reassigned",
-        line = 4, col = 5,
+        line = 6, col = 9,
         msgMatcher = _.contains("value declared as variable: 'k' could be a val"),
         errorClass = classOf[Warning]
       )
     }
   }
 
-  @Test def expectWarningForUnnecessaryMut(): Unit = {
-    runAndExpectErrors("unnecessary_mut") {
-      ErrorMatcher("expect warning for unnecessary mut",
-        line = 2, col = 17,
-        msgMatcher = _.contains("unused modification privilege: 'a' could have type 'arr String'"),
-        errorClass = classOf[Warning]
-      )
-    }
-  }
-
-  @Test def expectNoWarningWhenMutIsNecessaryBecauseOfSubcall(): Unit = {
-    runAndExpectCorrect("seemingly_unnecessary_mut", failOnWarning = true)
-  }
-  
-  @Test def expectNoErrorWhenMutInFrontOfCall(): Unit = {
-    runAndExpectCorrect("mut_call", failOnWarning = false)
-  }
-
-  @Test def expectErrorWhenMutLeakOnLocal(): Unit = {
-    runAndExpectErrors("mut_leak_local")(
-      ErrorMatcher("local with mut type should be rejected when no mut permission",
-        line = 3, col = 5,
-        msgMatcher = _.contains("expected 'mut arr Int', found 'arr Int'"),
-        errorClass = classOf[Err]
-      ),
-      warningMatcher(3, "unused modification privilege"),
-      warningMatcher(3, "unused local")
-    )
-  }
-
-  @Test def expectErrorWhenMutLeakOnParam(): Unit = {
-    runAndExpectErrors("mut_leak_param") {
-      ErrorMatcher("param with mut type should be rejected when no mut permission",
-        line = 8, col = 9,
-        msgMatcher = _.contains("expected 'mut arr String', found 'arr String'"),
-        errorClass = classOf[Err]
-      )
-    }
-  }
-
-  @Test def expectErrorWhenMutLeakOnRet(): Unit = {
-    runAndExpectErrors("mut_leak_ret")(
-      ErrorMatcher("mutation on returned unmodifiable array should be rejected",
-        line = 8, col = 5,
-        msgMatcher = _.contains("update impossible: missing modification privileges on array"),
-        errorClass = classOf[Err]
-      ),
-      warningMatcher(6, "unused local")
-    )
-  }
-
-  @Test def expectErrorWhenMutLeakOnFieldGet(): Unit = {
-    runAndExpectErrors("mut_leak_fld_get"){
-      ErrorMatcher("modification an unmodifiable struct accessed as a field should be rejected",
-        line = 12, col = 5,
-        msgMatcher = _.contains("cannot update field 'x': missing modification privileges on owner struct"),
-        errorClass = classOf[Err]
-      )
-    }
-  }
-
-  @Test def expectErrorWhenMutLeakOnFieldInit(): Unit = {
-    runAndExpectErrors("mut_leak_fld_init")(
-      ErrorMatcher("passing an unmodifiable struct as a mut field of another struct should result in an error",
-        line = 8, col = 23,
-        msgMatcher = _.contains("expected 'mut arr Int', found 'arr Int'"),
-        errorClass = classOf[Err]
-      ),
-      warningMatcher(8, "unused local")
-    )
-  }
-
   @Test def typingErrorsInSortingProgram(): Unit = {
     runAndExpectErrors("sorting_bad_types", matchersListShouldBeComplete = false)(
       ErrorMatcher("i2 is String",
-        line = 4, col = 17,
+        line = 6, col = 21,
         msgMatcher = _.contains("expected 'Int', found 'String'"),
         errorClass = classOf[Err]
       ),
       ErrorMatcher("swap expects an array of Double as its first argument",
-        line = 11, col = 14,
+        line = 13, col = 21,
         msgMatcher = _.contains("expected 'mut arr Double', found 'mut arr Int'"),
         errorClass = classOf[Err]
       ),
       ErrorMatcher("type Index is unknown",
-        line = 16, col = 27,
+        line = 18, col = 31,
         msgMatcher = _.contains("unknown type: 'Index'"),
         errorClass = classOf[Err]
       ),
-      ErrorMatcher("no struct Baz known",
-        line = 17, col = 13,
-        msgMatcher = _.contains("not found: struct 'Baz'"),
+      ErrorMatcher("type Baz is unknown",
+        line = 19, col = 17,
+        msgMatcher = _.contains("not found: structure or module 'Baz'"),
         errorClass = classOf[Err]
       ),
       ErrorMatcher("panic expects String, not Int",
-        line = 19, col = 9,
+        line = 21, col = 13,
         msgMatcher = _.contains("expected 'String', found 'Int'"),
         errorClass = classOf[Err]
       ),
       ErrorMatcher("#array is Int",
-        line = 22, col = 13,
+        line = 24, col = 17,
         msgMatcher = _.contains("expected 'Char', found 'Int'"),
         errorClass = classOf[Err]
       ),
       ErrorMatcher("expect Int, not String",
-        line = 24, col = 17,
+        line = 26, col = 21,
         msgMatcher = _.contains("expected 'Int', found 'String'"),
         errorClass = classOf[Err]
       ),
       ErrorMatcher("Fake is unknown",
-        line = 32, col = 15,
+        line = 34, col = 19,
         msgMatcher = _.contains("unknown type: 'Fake'"),
         errorClass = classOf[Err]
       ),
       ErrorMatcher("no operator Int + String -> Int",
-        line = 33, col = 28,
+        line = 35, col = 32,
         msgMatcher = _.contains("no definition of operator '+' found for operands 'Int' and 'String'"),
         errorClass = classOf[Err]
       ),
       ErrorMatcher("expect array of Int, not array of String",
-        line = 37, col = 19,
+        line = 39, col = 26,
         msgMatcher = _.contains("expected 'mut arr Int', found 'mut arr String'"),
         errorClass = classOf[Err]
       )
@@ -191,7 +95,7 @@ class AnalyzerTests {
   @Test def shouldRejectModifOfConstField(): Unit = {
     runAndExpectErrors("modif_const_field"){
       ErrorMatcher("should reject modification of constant field",
-        line = 8, col = 5,
+        line = 10, col = 9,
         msgMatcher = _.contains("cannot update immutable field"),
         errorClass = classOf[Err]
       )
@@ -211,17 +115,17 @@ class AnalyzerTests {
   @Test def shouldRejectUnrelatedEqualities(): Unit = {
     runAndExpectErrors("subtype_equality_check")(
       ErrorMatcher("should reject second argument in test1",
-        line = 3, col = 37,
+        line = 5, col = 60,
         msgMatcher = _.contains("expected 'S', found 'I'"),
         errorClass = classOf[Err]
       ),
       ErrorMatcher("should reject first argument in test2",
-        line = 7, col = 26,
+        line = 9, col = 41,
         msgMatcher = _.contains("expected 'S', found 'I'"),
         errorClass = classOf[Err]
       ),
       ErrorMatcher("should reject first argument in test3 (second argument is thus ignored)",
-        line = 11, col = 26,
+        line = 13, col = 41,
         msgMatcher = _.contains("expected 'S', found 'I'"),
         errorClass = classOf[Err]
       )
@@ -230,48 +134,33 @@ class AnalyzerTests {
 
   @Test def explicitCastTest(): Unit = {
     runAndExpectErrors("explicit_cast")(
-      ErrorMatcher("should reject setXSub on non mutable struct",
-        line = 26, col = 13,
-        msgMatcher = _.contains("expected 'mut Sub', found 'Sub'"),
-        errorClass = classOf[Err]
-      ),
-      ErrorMatcher("should reject cast from Super to mut Sub",
-        line = 27, col = 13,
-        msgMatcher = _.contains("cannot cast 'Super' to 'mut Sub'"),
-        errorClass = classOf[Err]
-      ),
       ErrorMatcher("should reject unrelated cast to String",
-        line = 29, col = 13,
-        msgMatcher = _.contains("cannot cast 'mut Sub' to 'String'"),
+        line = 26, col = 17,
+        msgMatcher = _.contains("cannot cast 'Sub' to 'String'"),
         errorClass = classOf[Err]
       ),
       ErrorMatcher("should warn on cast to supertype",
-        line = 31, col = 13,
-        msgMatcher = _.contains("useless conversion: 'mut Sub' --> 'Super'"),
+        line = 28, col = 17,
+        msgMatcher = _.contains("useless conversion: 'Sub' --> 'Super'"),
         errorClass = classOf[Warning]
       ),
-      ErrorMatcher("should reject missing modification permission on arg f passed to setX",
-        line = 32, col = 10,
-        msgMatcher = _.contains("expected 'mut Super', found 'Super'"),
-        errorClass = classOf[Err]
-      ),
       ErrorMatcher("should reject unrelated cast of struct to struct",
-        line = 35, col = 13,
+        line = 32, col = 17,
         msgMatcher = _.contains("cannot cast 'Sub' to 'Indep'"),
         errorClass = classOf[Err]
       ),
       ErrorMatcher("should reject unrelated cast of interface to struct",
-        line = 36, col = 13,
+        line = 33, col = 17,
         msgMatcher = _.contains("cannot cast 'Super' to 'Indep'"),
         errorClass = classOf[Err]
       ),
       ErrorMatcher("should reject unrelated cast of struct to interface",
-        line = 38, col = 13,
+        line = 35, col = 17,
         msgMatcher = _.contains("cannot cast 'Sub' to 'I'"),
         errorClass = classOf[Err]
       ),
       ErrorMatcher("should reject unrelated cast of interface to interface",
-        line = 39, col = 13,
+        line = 36, col = 17,
         msgMatcher = _.contains("cannot cast 'Super' to 'I'"),
         errorClass = classOf[Err]
       )
@@ -322,34 +211,13 @@ class AnalyzerTests {
   @Test def smartcastAnd(): Unit = {
     runAndExpectErrors("smartcast_and")(
       ErrorMatcher("access to possibly missing field should be rejected",
-        line = 5, col = 9,
+        line = 7, col = 13,
         msgMatcher = _.contains("struct 'Option' has no field named 'value'"),
         errorClass = classOf[Err]
       ),
       ErrorMatcher("access to value on value smartcasted to None should be rejected",
-        line = 6, col = 24,
+        line = 8, col = 28,
         msgMatcher = _.contains("struct 'None' has no field named 'value'"),
-        errorClass = classOf[Err]
-      )
-    )
-  }
-
-  @Test def tailrec1Test(): Unit = {
-    runAndExpectErrors("tailrec1")(
-      ErrorMatcher("should detect tail call not in tail position",
-        line = 3, col = 44,
-        msgMatcher = _.contains("call to 'isDivisibleBy' is not in tail position"),
-        compilationStep = TailrecChecking,
-        errorClass = classOf[Err]
-      )
-    )
-  }
-
-  @Test def tailrec2Test(): Unit = {
-    runAndExpectErrors("tailrec2")(
-      ErrorMatcher("should detect tail call to other function",
-        line = 7, col = 12,
-        msgMatcher = _.contains("tail calls can only refer to the enclosing function"),
         errorClass = classOf[Err]
       )
     )
@@ -386,9 +254,6 @@ class AnalyzerTests {
 
   }
 
-  /**
-   * Quick matcher for warnings due to the artificial nature of test programs
-   */
   private def warningMatcher(line: Int, keywords: String*): ErrorMatcher = ErrorMatcher(
     "warning matcher with keyword(s) " ++ keywords.map("'" + _ + "'").mkString(", "),
     line = line, errorClass = classOf[Warning], msgMatcher = msg => keywords.forall(msg.contains(_)),

@@ -4,9 +4,9 @@ interface Tree {
 }
 
 struct Fork : Tree {
-    var left: mut Tree,
+    var left: Tree,
     value: Int,         // ERROR: overrides a var field
-    var right: mut Tree
+    var right: Tree
 }
 
 struct Leaf : Tree {
@@ -41,7 +41,7 @@ struct Message {
 }
 
 interface Messageable1 {
-    msg: mut Message
+    msg: Message
 }
 
 interface Messageable2 {

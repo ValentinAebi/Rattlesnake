@@ -1,42 +1,46 @@
 
-fn swap(array: mut arr Double, i1: Int, i2: String) -> Void {
-    val tmp = array[i1];
-    array[i1] = array[i2];  // SHOULD FAIL: i2 is String
-    array[i2] = tmp;
-}
+package Test {
 
-fn selectionSort(array: mut arr Int) {
-    for var i = 0; i < #array; i += 1 {
-        val maxIdx = maxIdx(array, i);
-        swap(array, i, maxIdx)      // SHOULD FAIL: swap expects an array of Double as its first argument
-    };
-}
-
-// returns the index of the maximal element of the array
-fn maxIdx(array: arr Int, firstIdx: Index) -> Int {         // SHOULD FAIL: type Index is unknown
-    val t = new Baz { firstIndex };     // SHOULD FAIL: no struct Baz known
-    if #array == 0 {
-        panic -1    // SHOULD FAIL: panic expects String, not Int
-    } else {
-        var maxIdx: Int = firstIdx;
-        for val len: Char = #array, var i = firstIdx + 1; i < len; i += 1 {     // SHOULD FAIL: #array is Int
-            if array[i] > array[maxIdx] {
-                maxIdx = intToString(i);    // SHOULD FAIL: expect Int, not String
-            }
+    fn swap(array: mut arr Double, i1: Int, i2: String) -> Void {
+        val tmp = array[i1];
+        array[i1] = array[i2];  // SHOULD FAIL: i2 is String
+        array[i2] = tmp;
+    }
+    
+    fn selectionSort(array: mut arr Int) {
+        for var i = 0; i < #array; i += 1 {
+            val maxIdx = me.maxIdx(array, i);
+            me.swap(array, i, maxIdx)      // SHOULD FAIL: swap expects an array of Double as its first argument
         };
-        return maxIdx
     }
-}
+    
+    // returns the index of the maximal element of the array
+    fn maxIdx(array: arr Int, firstIdx: Index) -> Int {         // SHOULD FAIL: type Index is unknown
+        val t = new Baz(firstIndex);     // SHOULD FAIL: no struct Baz known
+        if #array == 0 {
+            panic -1    // SHOULD FAIL: panic expects String, not Int
+        } else {
+            var maxIdx: Int = firstIdx;
+            for val len: Char = #array, var i = firstIdx + 1; i < len; i += 1 {     // SHOULD FAIL: #array is Int
+                if array[i] > array[maxIdx] {
+                    maxIdx = intToString(i);    // SHOULD FAIL: expect Int, not String
+                }
+            };
+            return maxIdx
+        }
+    }
+    
+    fn main(args: arr String) {
+        val nbs = arr Fake[10];     // SHOULD FAIL: Fake is unknown
+        for var i = 0; i < 10; i += "1" {   // SHOULD FAIL: no operator Int + String -> Int
+            nbs[i] = (2*i - i*i + 200) % 25;
+            nbs[i] += 1;
+        };
+        me.selectionSort(mut ["abcdefghijk"]); // SHOULD FAIL: expect array of Int, not array of String
+        for var i = 0; i < 10; i += 1 {
+            print(intToString(nbs[i]));
+            print(" ")
+        }
+    }
 
-fn main(args: arr String) {
-    val nbs = arr Fake[10];     // SHOULD FAIL: Fake is unknown
-    for var i = 0; i < 10; i += "1" {   // SHOULD FAIL: no operator Int + String -> Int
-        nbs[i] = (2*i - i*i + 200) % 25;
-        nbs[i] += 1;
-    };
-    selectionSort(mut ["abcdefghijk"]); // SHOULD FAIL: expect array of Int, not array of String
-    for var i = 0; i < 10; i += 1 {
-        print(intToString(nbs[i]));
-        print(" ")
-    }
 }

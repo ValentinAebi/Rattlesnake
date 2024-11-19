@@ -1,4 +1,8 @@
 
-fn foo(x: Int, y: Double) -> Double {
-    return y + 1.0;
+package Test {
+
+    fn foo(x: Int, y: Double) -> Double {
+        return y + 1.0;
+    }
+
 }

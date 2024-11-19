@@ -1,9 +1,0 @@
-
-struct Baz {
-    a: mut arr Int
-}
-
-fn bar(){
-    val foo = [20, 40, 60, 80, 100];
-    val b = new Baz { foo };
-}

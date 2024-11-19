@@ -4,6 +4,10 @@ struct Bar {
     var y: Int
 }
 
-fn foo() {
-    (new mut Bar { 10, 20 }).x = 15;
+package Test {
+
+    fn foo() {
+        (new Bar(10, 20)).x = 15;
+    }
+
 }

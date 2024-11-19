@@ -1,8 +1,0 @@
-
-struct Y { p: Int }
-
-fn main(args: arr String){
-    val x = mut arr mut arr Y[5];
-    x[0] = [new Y { 11 }];
-    x[0][0] = new Y { 25 };     // modifying unmodifiable array [Y { 11 }];
-}

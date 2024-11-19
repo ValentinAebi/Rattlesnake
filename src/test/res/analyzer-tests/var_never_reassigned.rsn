@@ -1,10 +1,13 @@
 
-fn testFunc(foo: Int){
-    val u = foo;
-    var k = u;      // could be a val
-    var j = k;
-    while j < 10 {
-        j += k;
-    }
-}
+package Test {
 
+    fn testFunc(foo: Int){
+        val u = foo;
+        var k = u;      // could be a val
+        var j = k;
+        while j < 10 {
+            j += k;
+        }
+    }
+
+}

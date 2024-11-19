@@ -1,41 +1,53 @@
 
-fn test1() -> Bool {
-    return compareSupSub(createS(), createI());  // wrong on second argument
-}
+package Test {
 
-fn test2() -> Bool {
-    return compareSubSup(createI(), createI());  // wrong on first argument
-}
+    fn test1() -> Bool {
+        return Comparator.compareSupSub(Creator.createS(), Creator.createI());  // wrong on second argument
+    }
 
-fn test3() -> Bool {
-    return compareSubSub(createI(), createI());  // wrong on both arguments
+    fn test2() -> Bool {
+        return Comparator.compareSubSup(Creator.createI(), Creator.createI());  // wrong on first argument
+    }
+
+    fn test3() -> Bool {
+        return Comparator.compareSubSub(Creator.createI(), Creator.createI());  // wrong on both arguments
+    }
+
 }
 
 interface I { i: Int }
 
 struct S : I { i: Int }
 
-fn createI() -> I {
-    val s: I = createS();
-    return new S { s.i };
+package Creator {
+
+    fn createI() -> I {
+        val s: I = me.createS();
+        return new S(s.i);
+    }
+
+    fn createS() -> S {
+        return new S(42);
+    }
+
 }
 
-fn createS() -> S {
-    return new S { 42 };
-}
+package Comparator {
 
-fn compareSupSup(a: I, b: I) -> Bool {
-    return a == b;
-}
+    fn compareSupSup(a: I, b: I) -> Bool {
+        return a == b;
+    }
 
-fn compareSupSub(a: I, b: S) -> Bool {
-    return a == b;
-}
+    fn compareSupSub(a: I, b: S) -> Bool {
+        return a == b;
+    }
 
-fn compareSubSup(a: S, b: I) -> Bool {
-    return a == b;
-}
+    fn compareSubSup(a: S, b: I) -> Bool {
+        return a == b;
+    }
 
-fn compareSubSub(a: S, b: S) -> Bool {
-    return a == b;
+    fn compareSubSub(a: S, b: S) -> Bool {
+        return a == b;
+    }
+
 }

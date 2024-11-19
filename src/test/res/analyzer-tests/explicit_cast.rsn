@@ -1,4 +1,3 @@
-
 interface Super {
     x: Int
 }
@@ -14,45 +13,45 @@ struct Indep {
 
 interface I {}
 
-fn create() -> mut Super {
-    return new mut Sub { 10, "Hello" };
-}
+package Test {
 
-fn testFunc() -> String {
-    val a = create() as mut Sub;
-    var s = readY(a) + " ";     // s: "Hello "
-    val b: mut Super = a;
-    val c: Super = a;
-    setXSub(c as Sub);    // ERROR: missing modification permission
-    val d = c as mut Sub; // ERROR: cannot be cast to mut
-    setX(d);
-    val e = a as String;  // ERROR: unrelated types
-    print(e);
-    val f = a as Super;   // WARNING: useless cast
-    setX(f);              // ERROR: missing modification permission
-    val aPrime: Sub = a;
-    val bPrime: Super = b;
-    val g = aPrime as Indep;   // ERROR: unrelated types
-    val h = bPrime as Indep;   // ERROR: unrelated types
-    print(boolToString(g == h));
-    val i = aPrime as I;    // ERROR: unrelated types
-    val j = bPrime as I;    // ERROR: unrelated types
-    print(boolToString(i == j));
-    setX(b);
-    s += readY(b as Sub);       // s: "Hello Hello"
-    s += " ";                   // s: "Hello Hello "
-    s += intToString(a.x);      // s: "Hello Hello 42"
-    return s;
-}
+    fn create() -> Super {
+        return new Sub(10, "Hello");
+    }
 
-fn setX(s: mut Super){
-    (s as Sub).x = 42;
-}
+    fn testFunc() -> String {
+        val a = me.create() as Sub;
+        val b: Super = a;
+        var s = me.readY(a) + " ";     // s: "Hello "
+        val e = a as String;  // ERROR: unrelated types
+        print(e);
+        val f = a as Super;   // WARNING: useless cast
+        me.setX(f);
+        val aPrime: Sub = a;
+        val bPrime: Super = b;
+        val g = aPrime as Indep;   // ERROR: unrelated types
+        val h = bPrime as Indep;   // ERROR: unrelated types
+        print(boolToString(g == h));
+        val i = aPrime as I;    // ERROR: unrelated types
+        val j = bPrime as I;    // ERROR: unrelated types
+        print(boolToString(i == j));
+        me.setX(b);
+        s += me.readY(b as Sub);       // s: "Hello Hello"
+        s += " ";                   // s: "Hello Hello "
+        s += intToString(a.x);      // s: "Hello Hello 42"
+        return s;
+    }
 
-fn setXSub(s: mut Sub){
-    s.x = 50;
-}
+    fn setX(s: Super){
+        (s as Sub).x = 42;
+    }
 
-fn readY(s: Sub) -> String {
-    return s.y;
+    fn setXSub(s: Sub){
+        s.x = 50;
+    }
+
+    fn readY(s: Sub) -> String {
+        return s.y;
+    }
+
 }
