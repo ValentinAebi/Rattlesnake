@@ -368,7 +368,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         VoidType
 
       case cast@Cast(expr, tpe) =>
-        if (!tpe.isPure){
+        if (!tpe.isPure) {
           reportError("cast destination type is not allowed to carry a capture set", cast.getPosition)
         }
         val exprType = check(expr, ctx)
@@ -467,9 +467,9 @@ final class TypeChecker(errorReporter: ErrorReporter)
     if (argsIter.hasNext && !errorFound) {
       val arg = argsIter.next()
       reportError(s"expected end of arguments list, found argument of type '${check(arg, ctx)}'", arg.getPosition)
-      for arg <- argsIter do {
-        check(arg, ctx)
-      }
+    }
+    for arg <- argsIter do {
+      check(arg, ctx)
     }
   }
 
@@ -682,18 +682,19 @@ final class TypeChecker(errorReporter: ErrorReporter)
   private def maybeBuildPath(expr: Expr, ctx: TypeCheckingContext): Option[ProperPath] = expr match {
     case VariableRef(name) if ctx.getLocalOnly(name).exists(!_.isReassignable) => Some(VarPath(name))
     case MeRef() => Some(MePath)
-    case Select(lhs, selected) => lhs.getType match {
-      case NamedType(lhsTypeName, _) =>
-        val lhsTypeSig = ctx.resolveType(lhsTypeName)
-        lhsTypeSig match {
-          case Some(structSig: StructSignature) if structSig.fields.get(selected).exists(!_.isReassignable) =>
-            maybeBuildPath(lhs, ctx).map(SelectPath(_, selected))
-          case Some(moduleSig: ModuleSignature) if moduleSig.paramImports.contains(selected) =>
-            maybeBuildPath(lhs, ctx).map(SelectPath(_, selected))
-          case _ => None
-        }
-      case _ => None
-    }
+    case Select(lhs, selected) =>
+      lhs.getType match {
+        case NamedType(lhsTypeName, _) =>
+          val lhsTypeSig = ctx.resolveType(lhsTypeName)
+          lhsTypeSig match {
+            case Some(structSig: StructSignature) if structSig.fields.get(selected).exists(!_.isReassignable) =>
+              maybeBuildPath(lhs, ctx).map(SelectPath(_, selected))
+            case Some(moduleSig: ModuleSignature) if moduleSig.paramImports.contains(selected) =>
+              maybeBuildPath(lhs, ctx).map(SelectPath(_, selected))
+            case _ => None
+          }
+        case _ => None
+      }
     case PackageRef(pkgName) => Some(PackagePath(pkgName))
     case DeviceRef(device) => Some(DevicePath(device))
     case _ => None
