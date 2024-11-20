@@ -39,7 +39,7 @@ struct S : I { i: Int }
 module ICreator(scr: SCreator) {
 
     fn createI() -> I {
-        val s1 = scr.createS();
+        val s1 = me.scr.createS();
         val s2: I = new S(s1.i);
         return new S(s2.i);
     }

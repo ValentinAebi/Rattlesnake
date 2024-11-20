@@ -525,13 +525,15 @@ final class Backend[V <: ClassVisitor](
 
       case Select(lhs, selected) =>
         generateCode(lhs, ctx)
-        val structName = lhs.getType.asInstanceOf[NamedType].typeName
-        val fieldInfo = analysisContext.structs.apply(structName).fields.apply(selected)
-        if (ctx.structs.apply(structName).isInterface) {
-          val getterDescriptor = descriptorForFunc(FunctionSignature(selected, List.empty, fieldInfo.tpe))
-          mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, structName.stringId, selected.stringId, getterDescriptor, true)
+        val typeName = lhs.getType.asInstanceOf[NamedType].typeName
+        val fieldType =
+          analysisContext.structs.get(typeName).map(_.fields.apply(selected).tpe)
+            .getOrElse(analysisContext.modules.apply(typeName).paramImports.apply(selected))
+        if (ctx.structs.get(typeName).exists(_.isInterface)) {
+          val getterDescriptor = descriptorForFunc(FunctionSignature(selected, List.empty, fieldType))
+          mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, typeName.stringId, selected.stringId, getterDescriptor, true)
         } else {
-          mv.visitFieldInsn(Opcodes.GETFIELD, structName.stringId, selected.stringId, descriptorForType(fieldInfo.tpe))
+          mv.visitFieldInsn(Opcodes.GETFIELD, typeName.stringId, selected.stringId, descriptorForType(fieldType))
         }
 
       case VarAssig(lhs, rhs) =>

@@ -265,7 +265,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case select@Select(lhs, selected) =>
         val lhsType = check(lhs, ctx)
-        exprMustBeStructWithField(lhsType, selected, ctx, select.getPosition, mustUpdateField = false)
+        exprMustHaveField(lhs, selected, ctx, select.getPosition, mustUpdateField = false)
 
       case varAssig@VarAssig(lhs, rhs) =>
         val rhsType = check(rhs, ctx)
@@ -281,7 +281,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
             checkSubtypingConstraint(lhsType, rhsType, varAssig.getPosition, "", ctx)
           case select@Select(structExpr, selected) =>
             val structType = check(structExpr, ctx)
-            val fieldType = exprMustBeStructWithField(structType, selected, ctx, varAssig.getPosition, mustUpdateField = true)
+            val fieldType = exprMustHaveField(structExpr, selected, ctx, varAssig.getPosition, mustUpdateField = true)
             checkSubtypingConstraint(fieldType, rhsType, varAssig.getPosition, "", ctx)
             select.setType(fieldType)
           case _ =>
@@ -306,7 +306,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
             checkSubtypingConstraint(inPlaceModifiedElemType, operatorRetType, varModif.getPosition, "", ctx)
           case select@Select(structExpr, selected) =>
             val structType = check(structExpr, ctx)
-            val inPlaceModifiedFieldType = exprMustBeStructWithField(structType, selected, ctx, varModif.getPosition, mustUpdateField = true)
+            val inPlaceModifiedFieldType = exprMustHaveField(structExpr, selected, ctx, varModif.getPosition, mustUpdateField = true)
             val operatorRetType = mustExistOperator(inPlaceModifiedFieldType, op, rhsType, varModif.getPosition)(using ctx.toSubcapturingCtx)
             checkSubtypingConstraint(inPlaceModifiedFieldType, operatorRetType, varModif.getPosition, "", ctx)
             select.setType(inPlaceModifiedFieldType)
@@ -596,28 +596,37 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
   }
 
-  private def exprMustBeStructWithField(
-                                         exprType: Type,
-                                         fieldName: FunOrVarId,
-                                         ctx: TypeCheckingContext,
-                                         posOpt: Option[Position],
-                                         mustUpdateField: Boolean
-                                       ): Type = {
+  private def exprMustHaveField(
+                                 expr: Expr,
+                                 fieldName: FunOrVarId,
+                                 ctx: TypeCheckingContext,
+                                 posOpt: Option[Position],
+                                 mustUpdateField: Boolean
+                               ): Type = {
+    val exprType = expr.getType
     exprType match {
       case NamedType(typeName, captureDescr) =>
-        ctx.structs.apply(typeName) match {
-          case StructSignature(_, fields, _, _) if fields.contains(fieldName) =>
+        ctx.resolveType(typeName) match {
+          case Some(StructSignature(_, fields, _, _)) if fields.contains(fieldName) =>
             val FieldInfo(fieldType, fieldIsReassig) = fields.apply(fieldName)
             val missingFieldMutability = mustUpdateField && !fieldIsReassig
             if (missingFieldMutability) {
               reportError(s"cannot update immutable field '$fieldName'", posOpt)
             }
             fieldType
+          case Some(ModuleSignature(_, paramImports, _, _, _)) if paramImports.contains(fieldName) =>
+            if (!expr.isInstanceOf[MeRef]){
+              reportError(s"references to module imports are only allowed when using the '${Keyword.Me}' keyword", posOpt)
+            }
+            if (mustUpdateField) {
+              reportError("cannot update module field", posOpt)
+            }
+            paramImports.apply(fieldName)
           case _ =>
-            reportError(s"struct '$typeName' has no field named '$fieldName'", posOpt)
+            reportError(s"'$exprType' has no field named '$fieldName'", posOpt)
         }
       case _ =>
-        reportError(s"expected a struct, found '$exprType'", posOpt)
+        reportError(s"'$exprType' has no field named '$fieldName'", posOpt)
     }
   }
 

@@ -206,12 +206,12 @@ class AnalyzerTests {
     runAndExpectErrors("smartcast_and")(
       ErrorMatcher("access to possibly missing field should be rejected",
         line = 7, col = 13,
-        msgMatcher = _.contains("struct 'Option' has no field named 'value'"),
+        msgMatcher = _.contains("'Option' has no field named 'value'"),
         errorClass = classOf[Err]
       ),
       ErrorMatcher("access to value on value smartcasted to None should be rejected",
         line = 8, col = 28,
-        msgMatcher = _.contains("struct 'None' has no field named 'value'"),
+        msgMatcher = _.contains("'None' has no field named 'value'"),
         errorClass = classOf[Err]
       )
     )
