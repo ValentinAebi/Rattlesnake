@@ -36,7 +36,7 @@ package Test {
             nbs[i] = (2*i - i*i + 200) % 25;
             nbs[i] += 1;
         };
-        me.selectionSort(mut ["abcdefghijk"]); // SHOULD FAIL: expect array of Int, not array of String
+        selectionSort(mut ["abcdefghijk"]); // SHOULD FAIL: expect array of Int, not array of String
         for var i = 0; i < 10; i += 1 {
             print(intToString(nbs[i]));
             print(" ")

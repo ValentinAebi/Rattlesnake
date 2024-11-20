@@ -14,7 +14,7 @@ package Hello {
 
     fn main(arr String){
         val msgWords = ["Hello", "world"];
-        val msg = me.joinWords(msgWords, '!');
+        val msg = joinWords(msgWords, '!');
         print(msg)   // displays "Hello world!"
     }
 

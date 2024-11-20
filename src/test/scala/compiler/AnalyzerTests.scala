@@ -85,7 +85,7 @@ class AnalyzerTests {
         errorClass = classOf[Err]
       ),
       ErrorMatcher("expect array of Int, not array of String",
-        line = 39, col = 26,
+        line = 39, col = 23,
         msgMatcher = _.contains("expected 'mut arr Int', found 'mut arr String'"),
         errorClass = classOf[Err]
       )

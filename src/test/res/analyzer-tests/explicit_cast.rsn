@@ -20,13 +20,13 @@ package Test {
     }
 
     fn testFunc() -> String {
-        val a = me.create() as Sub;
+        val a = create() as Sub;
         val b: Super = a;
-        var s = me.readY(a) + " ";     // s: "Hello "
+        var s = readY(a) + " ";     // s: "Hello "
         val e = a as String;  // ERROR: unrelated types
         print(e);
         val f = a as Super;   // WARNING: useless cast
-        me.setX(f);
+        setX(f);
         val aPrime: Sub = a;
         val bPrime: Super = b;
         val g = aPrime as Indep;   // ERROR: unrelated types
@@ -35,8 +35,8 @@ package Test {
         val i = aPrime as I;    // ERROR: unrelated types
         val j = bPrime as I;    // ERROR: unrelated types
         print(boolToString(i == j));
-        me.setX(b);
-        s += me.readY(b as Sub);       // s: "Hello Hello"
+        setX(b);
+        s += readY(b as Sub);       // s: "Hello Hello"
         s += " ";                   // s: "Hello Hello "
         s += intToString(a.x);      // s: "Hello Hello 42"
         return s;

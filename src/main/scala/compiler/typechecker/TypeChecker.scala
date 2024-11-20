@@ -171,12 +171,16 @@ final class TypeChecker(errorReporter: ErrorReporter)
         NamedType(device.sig.typeId, CaptureSet.singletonOfRoot)
 
       case call@Call(None, funName, args) =>
-        checkFunCall(IntrinsicsPackageId, funName, args, call.getPosition, ctx)
+        val fallback = Some(ctx.currentEnvironment.get.currentModuleType)
+        val (meType, callType) = checkFunCall(NamedType(IntrinsicsPackageId, CaptureSet.empty), fallback,
+          funName, args, call.getPosition, ctx)
+        call.setImplicitMeType(meType)
+        callType
 
       case call@Call(Some(lhs), funName, args) =>
         check(lhs, ctx) match {
-          case NamedType(typeName, _) =>
-            checkFunCall(typeName, funName, args, call.getPosition, ctx)
+          case namedType: NamedType =>
+            checkFunCall(namedType, None, funName, args, call.getPosition, ctx)._2
           case lhsType =>
             reportError(s"expected a module or package type, found $lhsType", lhs.getPosition)
         }
@@ -424,18 +428,27 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
   }
 
-  private def checkFunCall(owner: TypeIdentifier, funName: FunOrVarId, args: List[Expr],
-                           pos: Option[Position], ctx: TypeCheckingContext): Type = {
-    ctx.resolveFunc(owner, funName) match {
+  /**
+   * @return (meType, callType)
+   */
+  private def checkFunCall(owner: NamedType, fallbackOwnerOpt: Option[NamedType],
+                           funName: FunOrVarId, args: List[Expr],
+                           pos: Option[Position], ctx: TypeCheckingContext): (Type, Type) = {
+    ctx.resolveFunc(owner.typeName, funName) match {
       case FunctionFound(funSig) =>
         checkCallArgs(funSig.argTypes, args, ctx, pos)
-        funSig.retType
+        (owner, funSig.retType)
       case ModuleNotFound =>
         args.foreach(check(_, ctx))
         reportError(s"not found: package or module $owner", pos)
+        (UndefinedType, UndefinedType)
       case FunctionNotFound =>
-        args.foreach(check(_, ctx))
-        reportError(s"package or module $owner has no function named $funName", pos)
+        fallbackOwnerOpt.map { fallbackOwner =>
+          checkFunCall(fallbackOwner, None, funName, args, pos, ctx)
+        }.getOrElse {
+          args.foreach(check(_, ctx))
+          (owner, reportError(s"function not found: '$funName'", pos))
+        }
     }
   }
 

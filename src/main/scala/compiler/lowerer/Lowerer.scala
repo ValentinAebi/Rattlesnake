@@ -2,9 +2,12 @@ package compiler.lowerer
 
 import compiler.irs.Asts.*
 import compiler.{AnalysisContext, CompilerStep}
+import identifiers.IntrinsicsPackageId
+import lang.Captures.CaptureSet
+import lang.Intrinsics
 import lang.Operator.*
 import lang.Types.PrimitiveType.*
-import lang.Types.{ArrayType, UndefinedType}
+import lang.Types.{ArrayType, NamedType, UndefinedType}
 
 /**
  * Lowering replaces (this list may not be complete):
@@ -112,6 +115,9 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
       case meRef: MeRef => meRef
       case packageRef: PackageRef => packageRef
       case deviceRef: DeviceRef => deviceRef
+      case call: Call if call.receiverOpt.isEmpty && !Intrinsics.intrinsics.contains(call.function) =>
+        val receiver = MeRef().setTypeOpt(call.implicitMeTypeOpt)
+        lower(call.copy(receiverOpt = Some(receiver)))
       case call: Call => Call(call.receiverOpt.map(lower), call.function, call.args.map(lower))
       case indexing: Indexing => Indexing(lower(indexing.indexed), lower(indexing.arg))
       case arrayInit: ArrayInit => ArrayInit(arrayInit.elemType, lower(arrayInit.size))

@@ -87,32 +87,32 @@ package Cells {
     
     fn treeSize(tree: Tree) -> Int {
         return when tree is Fork
-        then 1 + me.treeSize(tree.left) + me.treeSize(tree.right)
+        then 1 + treeSize(tree.left) + treeSize(tree.right)
         else 1;
     }
     
     fn toArray(t: Tree) -> arr Int {
-        val size = me.treeSize(t);
+        val size = treeSize(t);
         val array = arr Int[size];
-        me.populateArray(t, array, 0);
+        populateArray(t, array, 0);
         return array;
     }
     
     fn populateArray(t: Tree, array: mut arr Int, var idx: Int) -> Int {
         if (t is Fork){
-            idx = me.populateArray(t.left, array, idx);
+            idx = populateArray(t.left, array, idx);
         };
         array[idx] = t.value;
         idx += 1;
         if (t is Fork){
-            idx = me.populateArray(t.right, array, idx);
+            idx = populateArray(t.right, array, idx);
         };
         return idx;
     }
     
     fn setRightmost(t: Tree, n: Int){
         if (t is Fork){
-            me.setRightmost(t.right, n);
+            setRightmost(t.right, n);
         } else {
             t.value = n;
         }

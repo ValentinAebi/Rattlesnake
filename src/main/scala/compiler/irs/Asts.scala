@@ -275,6 +275,14 @@ object Asts {
    * Function call: `callee(args)`
    */
   final case class Call(receiverOpt: Option[Expr], function: FunOrVarId, args: List[Expr]) extends Expr {
+    private var _implicitMeTypeOpt: Option[Type] = None
+    
+    def setImplicitMeType(meType: Type): Unit = {
+      _implicitMeTypeOpt = Some(meType)
+    }
+    
+    def implicitMeTypeOpt: Option[Type] = _implicitMeTypeOpt
+    
     override def children: List[Ast] = receiverOpt.toList ++ args
   }
 

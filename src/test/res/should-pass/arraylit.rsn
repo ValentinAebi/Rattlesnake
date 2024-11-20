@@ -2,7 +2,7 @@
 package Test {
 
     fn createArray() -> arr Double {
-        return [me.f(10.0), 14.31, -2.1, 11.0+9.4, -5.0*28.0, 94.35*32.21]
+        return [f(10.0), 14.31, -2.1, 11.0+9.4, -5.0*28.0, 94.35*32.21]
     }
 
     fn f(x: Double) -> Double {
