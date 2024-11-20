@@ -203,9 +203,6 @@ final class Backend[V <: ClassVisitor](
 
   private def generateStruct(structDef: StructDef, superInterfaces: Array[String],
                              structFilePath: Path)(using ctx: AnalysisContext): Unit = {
-
-    given Map[TypeIdentifier, StructSignature] = ctx.structs
-
     val structName = structDef.structName
     val sig = ctx.structs.apply(structName)
     val isInterface = sig.isInterface
@@ -559,8 +556,9 @@ final class Backend[V <: ClassVisitor](
             generateCode(ownerStruct, ctx)
             generateCode(rhs, ctx)
             val ownerTypeName = ownerStruct.getType.asInstanceOf[NamedType].typeName
-            val fieldType = ctx.structs(ownerTypeName).fields(fieldName).tpe
-            if (ctx.structs.apply(ownerTypeName).isInterface) {
+            val structSig = ctx.structs.apply(ownerTypeName)
+            val fieldType = structSig.fields.apply(fieldName).tpe
+            if (structSig.isInterface) {
               val setterSig = FunctionSignature(fieldName, List(fieldType), PrimitiveType.VoidType)
               val setterDescriptor = descriptorForFunc(setterSig)
               mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, ownerTypeName.stringId, fieldName.stringId, setterDescriptor, true)

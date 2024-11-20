@@ -664,7 +664,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   private def computeJoinOf(types: Set[Type], ctx: TypeCheckingContext): Option[Type] = {
     require(types.nonEmpty)
     if types.size == 1 then Some(types.head)
-    else if (types.forall(_.isInstanceOf[NamedType])) {
+    else if (areAllStructs(types, ctx)) {
       val structs = ctx.structs
       // if the structs have exactly 1 direct supertype in common, infer it as the result type
       val directSupertypesSets = types.map { tpe =>
@@ -687,6 +687,13 @@ final class TypeChecker(errorReporter: ErrorReporter)
       types.find { commonSuper =>
         types.forall(_.subtypeOf(commonSuper)(using ctx.toSubcapturingCtx))
       }
+    }
+  }
+  
+  private def areAllStructs(types: Set[Type], ctx: TypeCheckingContext): Boolean = {
+    types.forall {
+      case NamedType(typeName, captureDescr) => ctx.resolveType(typeName).exists(_.isInstanceOf[StructSignature])
+      case _ => false
     }
   }
 

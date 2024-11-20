@@ -44,6 +44,7 @@ object SubcaptureRelation {
             } yield fieldInfo.tpe
           case _ => None
         }
+      // FIXME other cases, don't limit subcapturing to structs
     }
   }
   
