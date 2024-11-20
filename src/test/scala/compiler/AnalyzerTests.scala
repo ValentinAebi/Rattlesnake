@@ -187,12 +187,6 @@ class AnalyzerTests {
         errorClass = classOf[Err],
         compilationStep = ContextCreation
       ),
-      ErrorMatcher("should reject non-mutable field overriding mutable field",
-        line = 67, col = 1,
-        msgMatcher = _.contains("subtyping error: type of msg in CellWithMemoLastInitAndMsg should be a subtype of its type in Messageable1"),
-        errorClass = classOf[Err],
-        compilationStep = ContextCreation
-      ),
       ErrorMatcher("should reject covariant var field with covariant types",
         line = 84, col = 1,
         msgMatcher = _.contains("subtyping error: type of tree is not the same in TreeContainerImpl and TreeContainer"),

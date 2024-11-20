@@ -78,7 +78,7 @@ package Test {
                 );
         Cells.setRightmost(t, 27);
         t.left = new Fork(new Leaf(x), (new SimpleCell(75)).value, t.left);
-        return me.toArray(t);  // expected: [42*42, 75, -1, 8, 9, 42, 27]
+        return Cells.toArray(t);  // expected: [42*42, 75, -1, 8, 9, 42, 27]
     }
 
 }
@@ -92,13 +92,13 @@ package Cells {
     }
     
     fn toArray(t: Tree) -> arr Int {
-        val size = treeSize(t);
+        val size = me.treeSize(t);
         val array = arr Int[size];
         me.populateArray(t, array, 0);
         return array;
     }
     
-    fn populateArray(t: Tree, array: arr Int, var idx: Int) -> Int {
+    fn populateArray(t: Tree, array: mut arr Int, var idx: Int) -> Int {
         if (t is Fork){
             idx = me.populateArray(t.left, array, idx);
         };

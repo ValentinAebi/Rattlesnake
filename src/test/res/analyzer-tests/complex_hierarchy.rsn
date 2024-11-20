@@ -68,7 +68,7 @@ struct CellWithMemoLastInitAndMsg : CellWithMemoLastAndInit, Messageable1 {
     value: Int,     // ERROR: overrides a var field
     var initValue: Int,
     var lastValue: Int,
-    var msg: Message    // ERROR, should be mutable
+    var msg: Message
 }
 
 struct CellWithTree : Cell, TreeCell {

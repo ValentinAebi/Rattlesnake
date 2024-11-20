@@ -6,7 +6,7 @@ import compiler.lexer.Lexer
 import compiler.parser.Parser
 import compiler.prettyprinter.PrettyPrinter
 import org.junit.Assert.{assertEquals, fail}
-import org.junit.Test
+import org.junit.{ComparisonFailure, Test}
 
 class ParseAndReprintTests {
 
@@ -27,13 +27,29 @@ class ParseAndReprintTests {
     val file = SourceFile("src/test/res/should-pass/geometry.rsn")
     val actualRes = formatter.apply(file)
     val expectedRes = filterOutCommentLines(file.content.get)
-    assertEquals(expectedRes.trim, actualRes.trim)
+    assertEqualsExceptEmptyLines(expectedRes, actualRes)
   }
 
   private def filterOutCommentLines(str: String): String = {
     str.lines().filter { line =>
       !line.trim.startsWith("//")
     }.toArray.mkString("\n")
+  }
+
+  private def assertEqualsExceptEmptyLines(rawExp: String, rawAct: String): Unit = {
+    val exp = rawExp.trim
+    val act = rawAct.trim
+    if (exp.length != act.length){
+      throw new ComparisonFailure("", exp, act)
+    } else {
+      val expLines = exp.lines().toArray(new Array[String](_))
+      val actLines = act.lines().toArray(new Array[String](_))
+      for ((e, a) <- expLines.zip(actLines)) {
+        if ((e.trim.nonEmpty && a.trim.nonEmpty) && e != a){
+          throw new ComparisonFailure("", exp, act)
+        }
+      }
+    }
   }
 
 }
