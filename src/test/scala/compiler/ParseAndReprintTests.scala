@@ -36,16 +36,14 @@ class ParseAndReprintTests {
     }.toArray.mkString("\n")
   }
 
-  private def assertEqualsExceptEmptyLines(rawExp: String, rawAct: String): Unit = {
-    val exp = rawExp.trim
-    val act = rawAct.trim
-    if (exp.length != act.length){
+  private def assertEqualsExceptEmptyLines(exp: String, act: String): Unit = {
+    val expLines = exp.trim.lines().toArray(new Array[String](_))
+    val actLines = act.trim.lines().toArray(new Array[String](_))
+    if (expLines.length != actLines.length){
       throw new ComparisonFailure("", exp, act)
     } else {
-      val expLines = exp.lines().toArray(new Array[String](_))
-      val actLines = act.lines().toArray(new Array[String](_))
       for ((e, a) <- expLines.zip(actLines)) {
-        if ((e.trim.nonEmpty && a.trim.nonEmpty) && e != a){
+        if (e.trim.nonEmpty && a.trim.nonEmpty && e != a){
           throw new ComparisonFailure("", exp, act)
         }
       }
