@@ -1,0 +1,6 @@
+
+TODO request region when instantiating mutable struct or array
+TODO add capture set to array type (to capture the region)
+TODO investigate problem of type-checking capture set in struct definitions (probably also records)
+    - A field can capture a previous field (as me.fld)
+    - A field can capture a global (package or device)
