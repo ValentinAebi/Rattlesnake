@@ -6,7 +6,7 @@ import compiler.Errors.{Err, ErrorReporter, Warning}
 import compiler.irs.Asts.*
 import compiler.typechecker.TypeCheckingContext.LocalInfo
 import compiler.{AnalysisContext, CompilerStep, Position}
-import identifiers.{FunOrVarId, IntrinsicsPackageId, TypeIdentifier}
+import identifiers.{FunOrVarId, IntrinsicsPackageId}
 import lang.*
 import lang.Captures.*
 import lang.Operator.{Equality, Inequality, Sharp}
@@ -22,7 +22,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   override def apply(input: (List[Source], AnalysisContext)): (List[Source], AnalysisContext) = {
     val (sources, analysisContext) = input
     for src <- sources do {
-      check(src, TypeCheckingContext(analysisContext, expectedRetType = None, currentEnvironment = None))
+      check(src, TypeCheckingContext(analysisContext, currentEnvironment = None))
     }
     errorReporter.displayAndTerminateIfErrors()
     sources.foreach(_.assertAllTypesAreSet())

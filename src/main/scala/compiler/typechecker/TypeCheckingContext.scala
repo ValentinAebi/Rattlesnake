@@ -20,7 +20,6 @@ import scala.collection.mutable
 final case class TypeCheckingContext(
                                       private val analysisContext: AnalysisContext,
                                       private val locals: mutable.Map[FunOrVarId, LocalInfo] = mutable.Map.empty,
-                                      expectedRetType: Option[Type],
                                       currentEnvironment: Option[Environment]
                                     ) {
   // Locals that have been created by this context (i.e. not obtained via copied)
@@ -37,16 +36,14 @@ final case class TypeCheckingContext(
   /**
    * @return a copy of this with empty locals map
    */
-  def copyForNewFunction(expectedRetType: Type): TypeCheckingContext = {
-    copy(locals = mutable.Map.empty, expectedRetType = Some(expectedRetType))
-  }
+  def copyForNewFunction(expectedRetType: Type): TypeCheckingContext =
+    copy(locals = mutable.Map.empty)
 
   /**
    * @return a (deep) copy of this
    */
-  def copied: TypeCheckingContext = {
+  def copied: TypeCheckingContext =
     copy(locals = mutable.Map.from(locals))
-  }
 
   // TODO keep smartcasts on vars, until reassignment, and re-enable them on loops
   def copyWithSmartCasts(smartCasts: Map[FunOrVarId, Type]): TypeCheckingContext = {
