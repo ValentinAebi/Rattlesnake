@@ -361,13 +361,26 @@ class CompilerTests {
     assertTrue(actRaw.isInstanceOf[Array[Boolean]])
     val act = actRaw.asInstanceOf[Array[Boolean]]
     val exp = Array(true, false, false, true)
-    def convert(b: Boolean) = if b then 1 else 0
-    assertArrayEquals(exp.map(convert), act.map(convert))
+    assertBoolArraysEqual(exp, act)
+  }
+
+  @Test def regionsTest(): Unit = {
+    val actRaw = compileAndExecOneIter("regions", "Test", "testF")
+    assertTrue(actRaw.isInstanceOf[Array[Boolean]])
+    val act = actRaw.asInstanceOf[Array[Boolean]]
+    val exp = Array(true, false, true, false, false, true)
+    assertBoolArraysEqual(exp, act)
   }
 
   private def failExit(exitCode: ExitCode): Nothing = {
     fail(s"exit called, exit code: $exitCode")
     throw new AssertionError("cannot happen")
+  }
+
+  private def assertBoolArraysEqual(exp: Array[Boolean], act: Array[Boolean]): Unit = {
+    def convert(b: Boolean) = if b then 1 else 0
+
+    assertArrayEquals(exp.map(convert), act.map(convert))
   }
 
   private def compileAndExecOneIter(

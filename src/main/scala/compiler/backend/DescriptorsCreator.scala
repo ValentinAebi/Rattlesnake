@@ -16,6 +16,7 @@ object DescriptorsCreator {
       case PrimitiveType.DoubleType => "D"
       case PrimitiveType.CharType => "C"
       case PrimitiveType.BoolType => "Z"
+      case PrimitiveType.RegionType => "I"
       case PrimitiveType.StringType => "Ljava/lang/String;"
       case PrimitiveType.VoidType => "V"
       case PrimitiveType.NothingType => "V"

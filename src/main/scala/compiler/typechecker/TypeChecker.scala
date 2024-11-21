@@ -236,6 +236,9 @@ final class TypeChecker(errorReporter: ErrorReporter)
           case _ => reportError(s"not found: structure or module '$tid'", instantiation.getPosition)
         }
 
+      case RegionCreation() =>
+        RegionType
+
       case unaryOp@UnaryOp(operator, operand) =>
         val operandType = check(operand, ctx)
         if (operator == Sharp) {

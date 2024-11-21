@@ -251,6 +251,10 @@ object Asts {
   final case class StringLit(value: String) extends NonNumericLiteral {
     override def getTypeOpt: Option[Type] = Some(StringType)
   }
+  
+  final case class RegionCreation() extends Expr {
+    override def children: List[Ast] = Nil
+  }
 
   /**
    * Occurence of a variable (`val`, `var`, function parameter, etc.)

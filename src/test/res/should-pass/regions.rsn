@@ -1,0 +1,22 @@
+
+package Test {
+
+    fn testF() -> arr Bool {
+        val r = newregion;
+        val s = newregion;
+        val a = mkArray(r);
+        val res = arr Bool[6];
+        res[0] = a[0] == r;     // true
+        res[1] = a[1] == r;     // false
+        res[2] = a[0] == a[2];  // true
+        res[3] = a[1] == a[2];  // false
+        res[4] = r == s;        // false
+        res[5] = r == r;        // true
+        return res;
+    }
+    
+    fn mkArray(x: Region) -> arr Region {
+        return [x, newregion, x];
+    }
+
+}

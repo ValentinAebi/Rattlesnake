@@ -39,6 +39,8 @@ final class Backend[V <: ClassVisitor](
                                         javaVersionCode: Int
                                       ) extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
 
+  private val runtimeClass = "Rattlesnake$runtime.class"
+
   import Backend.*
 
   override def apply(input: (List[Source], AnalysisContext)): List[Path] = {
@@ -78,10 +80,26 @@ final class Backend[V <: ClassVisitor](
         generatedClassFiles.addOne(constantsFilePath)
       }
 
+      if (mode.generateRuntime){
+        val runtimeFilePath = outputDir.resolve(mode.withExtension(NamesForGeneratedClasses.runtimeClassName))
+        copyRuntimeClass(runtimeFilePath)
+        generatedClassFiles.addOne(runtimeFilePath)
+      }
+
       errorReporter.displayAndTerminateIfErrors()
       generatedClassFiles.toList
     }
 
+  }
+
+  private def copyRuntimeClass(path: Path): Unit = {
+    val runtimeClassStream = getClass.getClassLoader.getResourceAsStream(runtimeClass)
+    if (runtimeClassStream == null){
+      throw new AssertionError("Compiler packaging error: runtime class not found.\n" +
+        s"Please make sure that the executable of the compiler contains $runtimeClass in a resource directory.\n" +
+        "Also see the Makefile in runtime_src.")
+    }
+    Using(new FileOutputStream(path.toFile))(runtimeClassStream.transferTo).get
   }
 
   /**
@@ -418,6 +436,9 @@ final class Backend[V <: ClassVisitor](
         }
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, tid.stringId, ConstructorFunId.stringId, constructorDescr, false)
 
+      case RegionCreation() =>
+        mv.visitMethodInsn(Opcodes.INVOKESTATIC, NamesForGeneratedClasses.runtimeClassName, "newRegion", "()I", false)
+
       case UnaryOp(operator, operand) =>
         generateCode(operand, ctx)
         operator match {
@@ -721,6 +742,8 @@ object Backend {
   sealed trait Mode[V <: ClassVisitor] {
     val extension: String
 
+    def generateRuntime: Boolean
+
     def createVisitor(path: Path): V
 
     def terminate(visitor: V, path: Path, errorReporter: ErrorReporter): Unit
@@ -734,6 +757,8 @@ object Backend {
   case object BinaryMode extends Mode[ClassWriter] {
 
     override val extension: String = FileExtensions.binary
+
+    override def generateRuntime: Boolean = true
 
     override def createVisitor(path: Path): ClassWriter = {
       new ClassWriter(ClassWriter.COMPUTE_FRAMES) {
@@ -761,6 +786,8 @@ object Backend {
   case object AssemblyMode extends Mode[TraceClassVisitor] {
 
     override val extension: String = FileExtensions.assembly
+
+    override def generateRuntime: Boolean = false
 
     override def createVisitor(path: Path): TraceClassVisitor = {
       val file = path.toFile

@@ -8,6 +8,8 @@ libraryDependencies += "com.novocode" % "junit-interface" % "0.11" % "test"
 libraryDependencies += "org.ow2.asm" % "asm" % "9.3"
 libraryDependencies += "org.ow2.asm" % "asm-util" % "9.3"
 
+Compile / unmanagedResourceDirectories += baseDirectory.value / "runtime"
+
 assembly / assemblyMergeStrategy := {
   case PathList("META-INF", _*) => MergeStrategy.discard
   case _                        => MergeStrategy.first

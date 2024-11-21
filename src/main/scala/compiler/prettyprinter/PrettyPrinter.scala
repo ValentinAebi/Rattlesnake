@@ -226,6 +226,9 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           .add(structName)
         addParenthList(args)
 
+      case RegionCreation() =>
+        pps.add(NewRegion.str)
+
       case UnaryOp(operator, operand) =>
         pps.add(operator.str)
         val displayParenth = operand.isInstanceOf[UnaryOp | BinaryOp]

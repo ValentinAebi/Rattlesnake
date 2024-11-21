@@ -16,6 +16,7 @@ enum Keyword(val str: String) {
   case Module extends Keyword("module")
   case Mut extends Keyword("mut")
   case New extends Keyword("new")
+  case NewRegion extends Keyword("newregion")
   case Package extends Keyword("package")
   case Panic extends Keyword("panic")
   case Return extends Keyword("return")

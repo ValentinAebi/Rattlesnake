@@ -231,7 +231,9 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "noBinopExpr"
 
   private lazy val binopArg = recursive {
-    (noBinopExpr OR mutPossiblyFilledArrayInit OR arrayInit OR structOrModuleInstantiation) ::: opt((kw(As) OR kw(Is)) ::: tpe) map {
+    (noBinopExpr OR mutPossiblyFilledArrayInit OR arrayInit OR structOrModuleInstantiation OR regionCreation)
+      ::: opt((kw(As) OR kw(Is)) ::: tpe
+    ) map {
       case expression ^: None => expression
       case expression ^: Some(As ^: tp) => Cast(expression, tp)
       case expression ^: Some(Is ^: tp) => TypeTest(expression, tp)
@@ -306,6 +308,8 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
       case tid ^: args => StructOrModuleInstantiation(tid, args)
     }
   } setName "structOrModuleInstantiation"
+
+  private lazy val regionCreation = kw(NewRegion) map (_ => RegionCreation()) setName "regionCreation"
 
   private lazy val stat: P[Statement] = {
     exprOrAssig OR valDef OR varDef OR whileLoop OR forLoop OR ifThenElse OR returnStat OR panicStat

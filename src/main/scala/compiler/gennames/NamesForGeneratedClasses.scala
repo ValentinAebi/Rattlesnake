@@ -6,4 +6,6 @@ object NamesForGeneratedClasses {
 
   val packageInstanceName: String = "$INSTANCE"
   
+  val runtimeClassName: String = "Rattlesnake$runtime"
+  
 }
