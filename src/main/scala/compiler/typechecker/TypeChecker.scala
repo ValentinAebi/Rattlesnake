@@ -7,12 +7,10 @@ import compiler.pipeline.CompilationStep.TypeChecking
 import compiler.pipeline.CompilerStep
 import compiler.reporting.Errors.{Err, ErrorReporter, Warning}
 import compiler.reporting.Position
-import compiler.typechecker.SubcaptureRelation.*
 import compiler.typechecker.SubtypeRelation.subtypeOf
 import compiler.typechecker.TypeCheckingContext.LocalInfo
-import identifiers.{FunOrVarId, IntrinsicsPackageId}
+import identifiers.{FunOrVarId, IntrinsicsPackageId, TypeIdentifier}
 import lang.*
-import lang.Captures.*
 import lang.Operator.{Equality, Inequality, Sharp}
 import lang.Operators.{BinaryOpSignature, UnaryOpSignature, binaryOperators, unaryOperators}
 import lang.StructSignature.FieldInfo
@@ -33,6 +31,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def check(ast: Ast, ctx: TypeCheckingContext): Type = {
+    given Map[TypeIdentifier, StructSignature] = ctx.structs
+
     val tpe: Type = ast match {
 
       case Source(defs) =>
@@ -55,7 +55,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         }
         val moduleSig = ctx.resolveType(moduleName).get.asInstanceOf[ModuleSignature]
         val newCtx = ctx.copyForModuleOrPackage(Environment(
-          NamedType(moduleName, moduleSig.rawCaptureSet),
+          NamedType(moduleName),
           moduleSig.importedPackages.toSet,
           moduleSig.importedDevices.toSet
         ))
@@ -67,7 +67,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case PackageDef(packageName, functions) =>
         val packageSig = ctx.resolveType(packageName).get.asInstanceOf[PackageSignature]
         val newCtx = ctx.copyForModuleOrPackage(Environment(
-          NamedType(packageName, packageSig.captureSet),
+          NamedType(packageName),
           packageSig.importedPackages.toSet,
           packageSig.importedDevices.toSet
         ))
@@ -101,11 +101,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
         }
         check(body, bodyCtx)
         val endStatus = checkReturns(body)
-        val subCapCtx = ctx.toSubcapturingCtx
-        if (!endStatus.alwaysStopped && !expRetType.subtypeOf(VoidType)(using subCapCtx)) {
+        if (!endStatus.alwaysStopped && !expRetType.subtypeOf(VoidType)) {
           reportError("missing return in non-Void function", funDef.getPosition)
         }
-        val faultyTypes = endStatus.returned.filter(!_.subtypeOf(expRetType)(using subCapCtx))
+        val faultyTypes = endStatus.returned.filter(!_.subtypeOf(expRetType))
         if (faultyTypes.nonEmpty) {
           val faultyTypeStr = faultyTypes.map("'" + _ + "'").mkString(", ")
           reportError(s"function '$funName' should return '$expRetType', found $faultyTypeStr", funDef.getPosition)
@@ -162,7 +161,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
           reportError(s"illegal reference to $packageName, which is not imported in this module", pkg.getPosition)
         }
         ctx.resolveType(packageName) match {
-          case Some(packageSignature: PackageSignature) => NamedType(packageName, packageSignature.captureSet)
+          case Some(packageSignature: PackageSignature) => NamedType(packageName)
           case Some(_) => reportError(s"$packageName is not a package and is thus not allowed here", pkg.getPosition)
           case None => reportError(s"not found: $packageName", pkg.getPosition)
         }
@@ -171,11 +170,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
         if (!ctx.currentEnvironment.get.allowsDevice(device)) {
           reportError(s"illegal reference to device $device, which is not imported in this module", devRef.getPosition)
         }
-        NamedType(device.sig.id, CaptureSet.singletonOfRoot)
+        NamedType(device.sig.id)
 
       case call@Call(None, funName, args) =>
         val fallback = Some(ctx.currentEnvironment.get.currentModuleType)
-        val (meType, callType) = checkFunCall(NamedType(IntrinsicsPackageId, CaptureSet.empty), fallback,
+        val (meType, callType) = checkFunCall(NamedType(IntrinsicsPackageId), fallback,
           funName, args, call.getPosition, ctx)
         call.setImplicitMeType(meType)
         callType
@@ -229,11 +228,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
             )
           case Some(structSig: StructSignature) =>
             checkCallArgs(structSig.fields.values.map(_.tpe).toList, args, ctx, instantiation.getPosition)
-            NamedType(tid, mostPreciseCaptureDescrFromArgsList(args, ctx))
+            NamedType(tid)
           case Some(moduleSig: ModuleSignature) =>
             val expectedTypes = moduleSig.paramImports.values.toList
             checkCallArgs(expectedTypes, args, ctx, instantiation.getPosition)
-            NamedType(tid, mostPreciseCaptureDescrFromArgsList(args, ctx))
+            NamedType(tid)
           case _ => reportError(s"not found: structure or module '$tid'", instantiation.getPosition)
         }
 
@@ -246,7 +245,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
             reportError(s"operator # can only be applied to arrays and strings, found '$operandType'", unaryOp.getPosition)
           }
         } else {
-          unaryOperatorSignatureFor(operator, operandType)(using ctx.toSubcapturingCtx) match {
+          unaryOperatorSignatureFor(operator, operandType) match {
             case Some(sig) => sig.retType
             case None =>
               reportError(s"no definition of operator '$operator' found for operand '$operandType'", unaryOp.getPosition)
@@ -259,15 +258,14 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val smartCasts = if operator == Operator.And then detectSmartCasts(lhs, ctx) else Map.empty
         val rhsType = check(rhs, ctx.copyWithSmartCasts(smartCasts))
         binOp.setSmartCasts(smartCasts)
-        val subCapCtx = ctx.toSubcapturingCtx
         if (operator == Equality || operator == Inequality) {
-          val isSubOrSupertype = lhsType.subtypeOf(rhsType)(using subCapCtx) || rhsType.subtypeOf(lhsType)(using subCapCtx)
+          val isSubOrSupertype = lhsType.subtypeOf(rhsType) || rhsType.subtypeOf(lhsType)
           if (!isSubOrSupertype) {
             reportError(s"cannot compare '$lhsType' and '$rhsType' using ${Equality.str} or ${Inequality.str}", binOp.getPosition)
           }
           BoolType
         } else {
-          mustExistOperator(lhsType, operator, rhsType, binOp.getPosition)(using subCapCtx)
+          mustExistOperator(lhsType, operator, rhsType, binOp.getPosition)
         }
 
       case select@Select(lhs, selected) =>
@@ -303,18 +301,18 @@ final class TypeChecker(errorReporter: ErrorReporter)
           case varRef@VariableRef(name) =>
             ctx.varIsAssigned(name)
             val inPlaceModifiedType = mustBeReassignable(name, ctx, varModif.getPosition)
-            val operatorRetType = mustExistOperator(inPlaceModifiedType, op, rhsType, varModif.getPosition)(using ctx.toSubcapturingCtx)
+            val operatorRetType = mustExistOperator(inPlaceModifiedType, op, rhsType, varModif.getPosition)
             checkSubtypingConstraint(inPlaceModifiedType, operatorRetType, varModif.getPosition, "", ctx)
             varRef.setType(inPlaceModifiedType)
           case indexing@Indexing(indexed, _) =>
             check(indexing, ctx)
             val inPlaceModifiedElemType = exprMustBeArray(indexed.getType, ctx, varModif.getPosition, mustUpdate = true)
-            val operatorRetType = mustExistOperator(inPlaceModifiedElemType, op, rhsType, varModif.getPosition)(using ctx.toSubcapturingCtx)
+            val operatorRetType = mustExistOperator(inPlaceModifiedElemType, op, rhsType, varModif.getPosition)
             checkSubtypingConstraint(inPlaceModifiedElemType, operatorRetType, varModif.getPosition, "", ctx)
           case select@Select(structExpr, selected) =>
             val structType = check(structExpr, ctx)
             val inPlaceModifiedFieldType = exprMustHaveField(structExpr, selected, ctx, varModif.getPosition, mustUpdateField = true)
-            val operatorRetType = mustExistOperator(inPlaceModifiedFieldType, op, rhsType, varModif.getPosition)(using ctx.toSubcapturingCtx)
+            val operatorRetType = mustExistOperator(inPlaceModifiedFieldType, op, rhsType, varModif.getPosition)
             checkSubtypingConstraint(inPlaceModifiedFieldType, operatorRetType, varModif.getPosition, "", ctx)
             select.setType(inPlaceModifiedFieldType)
           case _ =>
@@ -338,9 +336,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
         ternary.setSmartCasts(smartCasts)
         val thenType = check(thenBr, ctx.copyWithSmartCasts(smartCasts))
         val elseType = check(elseBr, ctx)
-        val subCapCtx = ctx.toSubcapturingCtx
-        val thenIsSupertype = elseType.subtypeOf(thenType)(using subCapCtx)
-        val thenIsSubtype = thenType.subtypeOf(elseType)(using subCapCtx)
+        val thenIsSupertype = elseType.subtypeOf(thenType)
+        val thenIsSubtype = thenType.subtypeOf(elseType)
         computeJoinOf(Set(thenType, elseType), ctx) match {
           case Some(ternaryType) =>
             ternaryType
@@ -375,11 +372,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
         VoidType
 
       case cast@Cast(expr, tpe) =>
-        if (!tpe.isPure) {
-          reportError("cast destination type is not allowed to carry a capture set", cast.getPosition)
-        }
         val exprType = check(expr, ctx)
-        if (exprType.subtypeOf(tpe)(using ctx.toSubcapturingCtx)) {
+        if (exprType.subtypeOf(tpe)) {
           reportError(s"useless conversion: '$exprType' --> '$tpe'", cast.getPosition, isWarning = true)
           cast.markTransparent()
           tpe
@@ -393,7 +387,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case typeTest@TypeTest(expr, tpe) =>
         val exprType = check(expr, ctx)
-        if (exprType.subtypeOf(tpe)(using ctx.toSubcapturingCtx)) {
+        if (exprType.subtypeOf(tpe)) {
           reportError(s"test will always be true, as '$exprType' is a subtype of '$tpe'", typeTest.getPosition, isWarning = true)
         } else if (structCastResult(exprType, tpe, ctx).isEmpty) {
           reportError(s"cannot check expression of type '$exprType' against type '$tpe'", typeTest.getPosition)
@@ -410,7 +404,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         VoidType
 
       case pkgImp@PackageImport(packageId) =>
-        typeMustBeKnown(NamedType(packageId, CaptureSet.empty), ctx, pkgImp.getPosition)
+        typeMustBeKnown(NamedType(packageId), ctx, pkgImp.getPosition)
         VoidType
 
       case DeviceImport(device) => VoidType
@@ -430,15 +424,15 @@ final class TypeChecker(errorReporter: ErrorReporter)
       typeMustBeKnown(tpe, ctx, param.getPosition)
     }
   }
-  
-  private def unaryOperatorSignatureFor(operator: Operator, operand: Type)(using ctx: SubcapturingContext): Option[UnaryOpSignature] = {
+
+  private def unaryOperatorSignatureFor(operator: Operator, operand: Type)(using Map[TypeIdentifier, StructSignature]): Option[UnaryOpSignature] = {
     unaryOperators.find {
       case UnaryOpSignature(op, operandType, _) =>
         operator == op && operand.subtypeOf(operandType)
     }
   }
-  
-  private def binaryOperatorSigFor(left: Type, operator: Operator, right: Type)(using ctx: SubcapturingContext): Option[BinaryOpSignature] = {
+
+  private def binaryOperatorSigFor(left: Type, operator: Operator, right: Type)(using Map[TypeIdentifier, StructSignature]): Option[BinaryOpSignature] = {
     binaryOperators.find {
       case BinaryOpSignature(leftOperandType, op, rightOperandType, _) =>
         left.subtypeOf(leftOperandType) && op == operator && right.subtypeOf(rightOperandType)
@@ -448,9 +442,14 @@ final class TypeChecker(errorReporter: ErrorReporter)
   /**
    * @return (meType, callType)
    */
-  private def checkFunCall(owner: NamedType, fallbackOwnerOpt: Option[NamedType],
-                           funName: FunOrVarId, args: List[Expr],
-                           pos: Option[Position], ctx: TypeCheckingContext): (Type, Type) = {
+  private def checkFunCall(
+                            owner: NamedType,
+                            fallbackOwnerOpt: Option[NamedType],
+                            funName: FunOrVarId,
+                            args: List[Expr],
+                            pos: Option[Position],
+                            ctx: TypeCheckingContext
+                          )(using Map[TypeIdentifier, StructSignature]): (Type, Type) = {
     ctx.resolveFunc(owner.typeName, funName) match {
       case FunctionFound(funSig) =>
         checkCallArgs(funSig.argTypes, args, ctx, pos)
@@ -469,16 +468,18 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
   }
 
-  private def structCastResult(srcType: Type, destType: Type, ctx: TypeCheckingContext): Option[NamedType] = {
+  private def structCastResult(srcType: Type, destType: Type, ctx: TypeCheckingContext)
+                              (using structs: Map[TypeIdentifier, StructSignature]): Option[NamedType] = {
     (srcType, destType) match {
-      case (srcType@NamedType(_, srcCDescr), destType@NamedType(destTypeName, _))
-        if destType.shape.subtypeOf(srcType.shape)(using ctx.toSubcapturingCtx)
-      => Some(NamedType(destTypeName, srcCDescr))
+      case (srcType: NamedType, destType: NamedType)
+        if destType.subtypeOf(srcType) || srcType.subtypeOf(destType)
+      => Some(destType)
       case _ => None
     }
   }
 
-  private def checkCallArgs(expTypes: List[Type], args: List[Expr], ctx: TypeCheckingContext, callPos: Option[Position]): Unit = {
+  private def checkCallArgs(expTypes: List[Type], args: List[Expr], ctx: TypeCheckingContext, callPos: Option[Position])
+                           (using Map[TypeIdentifier, StructSignature]): Unit = {
     val expTypesIter = expTypes.iterator
     val argsIter = args.iterator
     var errorFound = false
@@ -486,7 +487,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       val expType = expTypesIter.next()
       val arg = argsIter.next()
       val actType = check(arg, ctx)
-      if (!actType.subtypeOf(expType)(using ctx.toSubcapturingCtx)) {
+      if (!actType.subtypeOf(expType)) {
         reportError(s"expected '$expType', found '$actType'", arg.getPosition)
         errorFound = true
       }
@@ -607,7 +608,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
         tpe
   }
 
-  private def exprMustBeArray(exprType: Type, ctx: TypeCheckingContext, posOpt: Option[Position], mustUpdate: Boolean): Type = {
+  private def exprMustBeArray(exprType: Type, ctx: TypeCheckingContext, posOpt: Option[Position], mustUpdate: Boolean)
+                             (using Map[TypeIdentifier, StructSignature]): Type = {
     exprType match
       case ArrayType(elemType, modifiable) =>
         if (mustUpdate && !modifiable) {
@@ -618,7 +620,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
         reportError(s"expected an array, found '$exprType'", posOpt)
   }
 
-  private def mustExistOperator(lhsType: Type, operator: Operator, rhsType: Type, position: Option[Position])(using ctx: SubcapturingContext): Type = {
+  private def mustExistOperator(lhsType: Type, operator: Operator, rhsType: Type, position: Option[Position])
+                               (using Map[TypeIdentifier, StructSignature]): Type = {
     binaryOperatorSigFor(lhsType, operator, rhsType) match {
       case Some(sig) => sig.retType
       case None =>
@@ -635,7 +638,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
                                ): Type = {
     val exprType = expr.getType
     exprType match {
-      case NamedType(typeName, captureDescr) =>
+      case NamedType(typeName) =>
         ctx.resolveType(typeName) match {
           case Some(StructSignature(_, fields, _, _)) if fields.contains(fieldName) =>
             val FieldInfo(fieldType, fieldIsReassig) = fields.apply(fieldName)
@@ -645,7 +648,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
             }
             fieldType
           case Some(ModuleSignature(_, paramImports, _, _, _)) if paramImports.contains(fieldName) =>
-            if (!expr.isInstanceOf[MeRef]){
+            if (!expr.isInstanceOf[MeRef]) {
               reportError(s"references to module imports are only allowed when using the '${Keyword.Me}' keyword", posOpt)
             }
             if (mustUpdateField) {
@@ -661,10 +664,13 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def checkSubtypingConstraint(
-                                        expected: Type, actual: Type,
-                                        posOpt: Option[Position], msgPrefix: String,
-                                        ctx: TypeCheckingContext): Unit = {
-    if (expected != UndefinedType && actual != UndefinedType && !actual.subtypeOf(expected)(using ctx.toSubcapturingCtx)) {
+                                        expected: Type,
+                                        actual: Type,
+                                        posOpt: Option[Position],
+                                        msgPrefix: String,
+                                        ctx: TypeCheckingContext
+                                      )(using Map[TypeIdentifier, StructSignature]): Unit = {
+    if (expected != UndefinedType && actual != UndefinedType && !actual.subtypeOf(expected)) {
       val fullprefix = if msgPrefix == "" then "" else (msgPrefix ++ ": ")
       reportError(fullprefix ++ s"expected '$expected', found '$actual'", posOpt)
     }
@@ -678,7 +684,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
   }
 
-  private def computeJoinOf(types: Set[Type], ctx: TypeCheckingContext): Option[Type] = {
+  private def computeJoinOf(types: Set[Type], ctx: TypeCheckingContext)(using Map[TypeIdentifier, StructSignature]): Option[Type] = {
     require(types.nonEmpty)
     if types.size == 1 then Some(types.head)
     else if (areAllStructs(types, ctx)) {
@@ -692,24 +698,21 @@ final class TypeChecker(errorReporter: ErrorReporter)
         if commonDirectSupertypes.size == 1
         then {
           val superT = commonDirectSupertypes.head
-          val csUnion = types.foldLeft[CaptureDescriptor](CaptureSet.empty)(
-            (accCs, indivType) => accCs.union(indivType.captureDescr)
-          )
-          NamedType(superT, csUnion)
+          NamedType(superT)
         } else UnionType(types)
       )
     } else {
       // type Nothing should be accepted
       // e.g. in 'when ... then 0 else (panic "")'
       types.find { commonSuper =>
-        types.forall(_.subtypeOf(commonSuper)(using ctx.toSubcapturingCtx))
+        types.forall(_.subtypeOf(commonSuper))
       }
     }
   }
-  
+
   private def areAllStructs(types: Set[Type], ctx: TypeCheckingContext): Boolean = {
     types.forall {
-      case NamedType(typeName, captureDescr) => ctx.resolveType(typeName).exists(_.isInstanceOf[StructSignature])
+      case NamedType(typeName) => ctx.resolveType(typeName).exists(_.isInstanceOf[StructSignature])
       case _ => false
     }
   }
@@ -717,33 +720,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
   private def reportError(msg: String, pos: Option[Position], isWarning: Boolean = false): UndefinedType.type = {
     errorReporter.push(if isWarning then Warning(TypeChecking, msg, pos) else Err(TypeChecking, msg, pos))
     UndefinedType
-  }
-
-  private def mostPreciseCaptureDescrFromArgsList(args: List[Expr], ctx: TypeCheckingContext): CaptureDescriptor =
-    args.foldLeft[CaptureDescriptor](CaptureSet.empty)((accCd, arg) => accCd.union(mostPreciseCaptureDescrFromArg(arg, ctx)))
-
-  private def mostPreciseCaptureDescrFromArg(arg: Expr, ctx: TypeCheckingContext): CaptureDescriptor =
-    maybeBuildPath(arg, ctx).map(CaptureSet(_)).getOrElse(arg.getType.captureDescr)
-
-  private def maybeBuildPath(expr: Expr, ctx: TypeCheckingContext): Option[ProperPath] = expr match {
-    case VariableRef(name) if ctx.getLocalOnly(name).exists(!_.isReassignable) => Some(VarPath(name))
-    case MeRef() => Some(MePath)
-    case Select(lhs, selected) =>
-      lhs.getType match {
-        case NamedType(lhsTypeName, _) =>
-          val lhsTypeSig = ctx.resolveType(lhsTypeName)
-          lhsTypeSig match {
-            case Some(structSig: StructSignature) if structSig.fields.get(selected).exists(!_.isReassignable) =>
-              maybeBuildPath(lhs, ctx).map(SelectPath(_, selected))
-            case Some(moduleSig: ModuleSignature) if moduleSig.paramImports.contains(selected) =>
-              maybeBuildPath(lhs, ctx).map(SelectPath(_, selected))
-            case _ => None
-          }
-        case _ => None
-      }
-    case PackageRef(pkgName) => Some(PackagePath(pkgName))
-    case DeviceRef(device) => Some(DevicePath(device))
-    case _ => None
   }
 
   private def logicalImplies(p: Boolean, q: Boolean): Boolean = !p || q

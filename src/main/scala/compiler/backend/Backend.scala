@@ -1,19 +1,17 @@
 package compiler.backend
 
-import compiler.pipeline.CompilationStep.CodeGeneration
-import compiler.reporting.Errors.*
-import compiler.gennames.NamesForGeneratedClasses.packageInstanceName
 import compiler.analysisctx.AnalysisContext
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
 import compiler.backend.TypesConverter.{convertToAsmTypeCode, internalNameOf, numSlotsFor, opcodeFor}
-import compiler.irs.Asts.*
-import compiler.pipeline.CompilerStep
+import compiler.gennames.NamesForGeneratedClasses.packageInstanceName
 import compiler.gennames.{FileExtensions, NamesForGeneratedClasses}
-import identifiers.{BackendGeneratedVarId, ConstructorFunId, FunOrVarId, MeVarId, NormalFunOrVarId, TypeIdentifier}
+import compiler.irs.Asts.*
+import compiler.pipeline.CompilationStep.CodeGeneration
+import compiler.pipeline.CompilerStep
+import compiler.reporting.Errors.*
+import identifiers.*
 import lang.*
-import lang.Captures.CaptureSet
 import lang.Operator.*
-import compiler.typechecker.SubtypeRelation.subtypeOf
 import lang.Types.PrimitiveType.*
 import lang.Types.{ArrayType, NamedType, PrimitiveType, UnionType}
 import org.objectweb.asm
@@ -123,7 +121,7 @@ final class Backend[V <: ClassVisitor](
     cv.visit(javaVersionCode, ACC_PUBLIC | ACC_FINAL, modOrPkg.name.stringId, null, objectTypeStr, null)
     val constructorVisibility = if modOrPkg.isPackage then ACC_PRIVATE else ACC_PUBLIC
     addConstructor(cv, constructorVisibility, modOrPkgSig)
-    val pkgTypeDescr = descriptorForType(NamedType(modOrPkg.name, CaptureSet.empty))
+    val pkgTypeDescr = descriptorForType(NamedType(modOrPkg.name))
     if (modOrPkg.isInstanceOf[PackageDef]) {
       addInstanceFieldAndInitializer(modOrPkg, cv, pkgTypeDescr)
     }
@@ -167,7 +165,7 @@ final class Backend[V <: ClassVisitor](
 
   private def addFunction(owner: TypeIdentifier, funDef: FunDef, mv: MethodVisitor, analysisContext: AnalysisContext): Unit = {
     val ctx = CodeGenerationContext.from(analysisContext, owner)
-    ctx.addLocal(MeVarId, NamedType(owner, CaptureSet.empty))
+    ctx.addLocal(MeVarId, NamedType(owner))
     val unnamedParamIdx = new AtomicInteger(0)
     for param <- funDef.params do {
       param.paramNameOpt match {
@@ -364,10 +362,10 @@ final class Backend[V <: ClassVisitor](
       }
 
       case MeRef() =>
-        mv.visitIntInsn(opcodeFor(NamedType(ctx.currentModule, CaptureSet.empty), Opcodes.ILOAD, Opcodes.ALOAD), 0)
+        mv.visitIntInsn(opcodeFor(NamedType(ctx.currentModule), Opcodes.ILOAD, Opcodes.ALOAD), 0)
 
       case PackageRef(name) =>
-        val packageShapeType = NamedType(name, CaptureSet.empty)
+        val packageShapeType = NamedType(name)
         val internalName = internalNameOf(packageShapeType)
         val descr = descriptorForType(packageShapeType)
         mv.visitFieldInsn(Opcodes.GETSTATIC, internalName, packageInstanceName, descr)

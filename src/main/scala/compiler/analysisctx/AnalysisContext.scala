@@ -5,7 +5,6 @@ import compiler.pipeline.CompilationStep.ContextCreation
 import compiler.reporting.Errors.{Err, ErrorReporter, errorsExitCode}
 import compiler.irs.Asts.*
 import compiler.reporting.Position
-import compiler.typechecker.SubcaptureRelation.SubcapturingContext
 import compiler.typechecker.SubtypeRelation.subtypeOf
 import identifiers.{FunOrVarId, IntrinsicsPackageId, TypeIdentifier}
 import lang.*
@@ -28,7 +27,7 @@ final case class AnalysisContext(
   def knowsType(tpe: Type): Boolean = {
     tpe match {
       case _: Types.PrimitiveType => true
-      case Types.NamedType(typeName, captureDescr) => knowsUserDefType(typeName)
+      case Types.NamedType(typeName) => knowsUserDefType(typeName)
       case Types.ArrayType(elemType, _) => knowsType(elemType)
       case Types.UnionType(unitedTypes) => unitedTypes.forall(knowsType)
       case Types.UndefinedType => true
@@ -273,7 +272,7 @@ object AnalysisContext {
           s"subtyping error: type of $fldName is not the same in $structId and $directSupertypeId", posOpt))
       } else if (
         !superFldInfo.isReassignable
-          && !subFieldInfo.tpe.subtypeOf(superFldInfo.tpe)(using SubcapturingContext(previousFields, structs))) {
+          && !subFieldInfo.tpe.subtypeOf(superFldInfo.tpe)(using structs)) {
         errorReporter.push(Err(ContextCreation,
           s"subtyping error: type of $fldName in $structId should be a subtype of its type in $directSupertypeId", posOpt))
       }

@@ -5,13 +5,11 @@ import compiler.reporting.Errors.{ErrorReporter, Warning}
 import compiler.irs.Asts.{Expr, Indexing, Select, VariableRef}
 import compiler.typechecker.TypeCheckingContext.{LocalInfo, LocalUsesCollector}
 import identifiers.{FunOrVarId, TypeIdentifier}
-import lang.Captures.*
-import SubcaptureRelation.SubcapturingContext
 import compiler.analysisctx.AnalysisContext
 import compiler.reporting.{Errors, Position}
 import lang.Types.PrimitiveType.{NothingType, VoidType}
 import lang.Types.{NamedType, Type}
-import lang.{Captures, FunctionSignature, Keyword}
+import lang.{FunctionSignature, Keyword}
 
 import scala.collection.mutable
 
@@ -25,14 +23,6 @@ final case class TypeCheckingContext(
                                     ) {
   // Locals that have been created by this context (i.e. not obtained via copied)
   private val ownedLocals: mutable.Set[FunOrVarId] = mutable.Set.empty
-  
-  def toSubcapturingCtx: SubcapturingContext = SubcapturingContext(
-    (for {
-      (id, info) <- locals
-      if !info.isReassignable
-    } yield (id, info.tpe)).toMap,
-    structs
-  )
 
   /**
    * @return a copy of this with empty locals map

@@ -53,9 +53,9 @@ object TypesConverter {
       case PrimitiveType.StringType => "java/lang/String"
       case PrimitiveType.VoidType => "V"
       case PrimitiveType.NothingType => "V"
-      case NamedType(typeName, _) if !ctx.resolveType(typeName).get.isInterface => s"$typeName"
+      case NamedType(typeName) if !ctx.resolveType(typeName).get.isInterface => s"$typeName"
       case ArrayType(elemType, _) => s"[${descriptorForType(elemType)}"
-      case NamedType(_, _) | UnionType(_) => "java/lang/Object"
+      case NamedType(_) | UnionType(_) => "java/lang/Object"
       case UndefinedType => assert(false)
   }
 

@@ -1,7 +1,6 @@
 package lang
 
 import identifiers.*
-import lang.Captures.*
 import lang.StructSignature.FieldInfo
 import lang.Types.PrimitiveType.VoidType
 import lang.Types.{NamedType, Type}
@@ -43,12 +42,6 @@ final case class ModuleSignature(
                                   importedDevices: mutable.LinkedHashSet[Device],
                                   functions: Map[FunOrVarId, FunctionSignature]
                                 ) extends ModuleOrPackageSignature, StructOrModuleSignature {
-  def rawCaptureSet: CaptureSet = CaptureSet(
-    paramImports.map((id, tpe) => SelectPath(MePath, id)).toSet ++
-      importedPackages.map(pkgName => PackagePath(pkgName)).toSet ++
-      importedDevices.map(DevicePath(_)).toSet
-  )
-
   override def constructorSig: FunctionSignature =
     FunctionSignature(ConstructorFunId, paramImports.values.toList, VoidType)
 }
@@ -60,11 +53,6 @@ final case class PackageSignature(
                                    functions: Map[FunOrVarId, FunctionSignature]
                                  ) extends ModuleOrPackageSignature {
   override def paramImports: mutable.LinkedHashMap[FunOrVarId, Type] = mutable.LinkedHashMap.empty
-
-  def captureSet: CaptureSet = CaptureSet(
-    importedPackages.map(pkgName => PackagePath(pkgName)).toSet ++
-      importedDevices.map(DevicePath(_)).toSet
-  )
 }
 
 final case class StructSignature(

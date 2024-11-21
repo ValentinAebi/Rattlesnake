@@ -19,9 +19,9 @@ object DescriptorsCreator {
       case PrimitiveType.StringType => "Ljava/lang/String;"
       case PrimitiveType.VoidType => "V"
       case PrimitiveType.NothingType => "V"
-      case Types.NamedType(typeName, _) if !ctx.resolveType(typeName).get.isInterface => s"L$typeName;"
+      case Types.NamedType(typeName) if !ctx.resolveType(typeName).get.isInterface => s"L$typeName;"
+      case Types.NamedType(_) | Types.UnionType(_) => "Ljava/lang/Object;"
       case Types.ArrayType(elemType, _) => s"[${descriptorForType(elemType)}"
-      case Types.NamedType(_, _) | Types.UnionType(_) => "Ljava/lang/Object;"
       case Types.UndefinedType => assert(false)
   }
 

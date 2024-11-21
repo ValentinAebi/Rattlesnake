@@ -4,7 +4,6 @@ import compiler.irs.Asts.*
 import compiler.analysisctx.AnalysisContext
 import compiler.pipeline.CompilerStep
 import identifiers.IntrinsicsPackageId
-import lang.Captures.CaptureSet
 import lang.Intrinsics
 import lang.Operator.*
 import lang.Types.PrimitiveType.*

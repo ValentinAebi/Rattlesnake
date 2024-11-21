@@ -9,7 +9,6 @@ import compiler.parser.TreeParsers.*
 import compiler.pipeline.CompilerStep
 import compiler.reporting.{Errors, Position}
 import identifiers.*
-import lang.Captures.*
 import lang.Keyword.*
 import lang.Operator.*
 import lang.Types.PrimitiveType.RegionType
@@ -176,37 +175,12 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     noParenthType OR (openParenth ::: tpe ::: closeParenth)
   } setName "tpe"
 
-  private lazy val atomicType = highName ::: opt(op(Hat) ::: opt(captureDescr)) map {
-    case shape ^: capDescrTokensOpt => {
-      val capDescr = capDescrTokensOpt.map {
-        case hat ^: descrOpt => descrOpt.getOrElse(CaptureSet.singletonOfRoot)
-      }.getOrElse(CaptureSet.empty)
-      val primTypeOpt = Types.primTypeFor(shape)
-      if (primTypeOpt.isDefined && capDescrTokensOpt.isDefined){
-        errorReporter.push(Err(Parsing,
-          s"primitive type $shape is not allowed to specify a capture set (the capture set of $RegionType is implicit)",
-          ll1Iterator.current.position
-        ))
-      }
-      primTypeOpt.getOrElse(NamedType(shape, capDescr))
+  private lazy val atomicType = highName map {
+    typeName => {
+      val primTypeOpt = Types.primTypeFor(typeName)
+      primTypeOpt.getOrElse(NamedType(typeName))
     }
   } setName "atomicType"
-
-  private lazy val properPath: P[ProperPath] = lowName ::: repeat(dot ::: lowName) map {
-    case root ^: selects => selects.foldLeft[ProperPath](VarPath(root))(SelectPath(_, _))
-  } setName "properPath"
-
-  private lazy val captureSet = openBrace ::: repeatWithSep(properPath, comma) ::: closeBrace map {
-    case paths => CaptureSet(paths.toSet)
-  } setName "captureSet"
-
-  private lazy val brand = {
-    op(Sharp) map (_ => Brand)
-  } setName "brand"
-
-  private lazy val captureDescr: P[CaptureDescriptor] = {
-    captureSet OR brand
-  } setName "captureDescr"
 
   private lazy val arrayType = recursive {
     opt(kw(Mut)) ::: kw(Arr).ignored ::: tpe map {
