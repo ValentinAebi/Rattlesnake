@@ -3,6 +3,7 @@ package lang
 import identifiers.*
 import lang.Captures.*
 import lang.StructSignature.FieldInfo
+import lang.Types.PrimitiveType.VoidType
 import lang.Types.{NamedType, Type}
 
 import java.util
@@ -15,10 +16,9 @@ final case class FunctionSignature(
                                   )
 
 sealed trait TypeSignature {
-  
+  def id: TypeIdentifier
   def isInterface: Boolean
   def isModuleOrPackage: Boolean
-
   def functions: Map[FunOrVarId, FunctionSignature]
 }
 
@@ -32,22 +32,29 @@ sealed trait ModuleOrPackageSignature extends TypeSignature {
   override def isModuleOrPackage: Boolean = true
 }
 
+sealed trait StructOrModuleSignature extends TypeSignature {
+  def constructorSig: FunctionSignature
+}
+
 final case class ModuleSignature(
-                                  name: TypeIdentifier,
+                                  id: TypeIdentifier,
                                   paramImports: mutable.LinkedHashMap[FunOrVarId, Type],
                                   importedPackages: mutable.LinkedHashSet[TypeIdentifier],
                                   importedDevices: mutable.LinkedHashSet[Device],
                                   functions: Map[FunOrVarId, FunctionSignature]
-                                ) extends ModuleOrPackageSignature {
+                                ) extends ModuleOrPackageSignature, StructOrModuleSignature {
   def rawCaptureSet: CaptureSet = CaptureSet(
     paramImports.map((id, tpe) => SelectPath(MePath, id)).toSet ++
       importedPackages.map(pkgName => PackagePath(pkgName)).toSet ++
       importedDevices.map(DevicePath(_)).toSet
   )
+
+  override def constructorSig: FunctionSignature =
+    FunctionSignature(ConstructorFunId, paramImports.values.toList, VoidType)
 }
 
 final case class PackageSignature(
-                                   name: TypeIdentifier,
+                                   id: TypeIdentifier,
                                    importedPackages: mutable.LinkedHashSet[TypeIdentifier],
                                    importedDevices: mutable.LinkedHashSet[Device],
                                    functions: Map[FunOrVarId, FunctionSignature]
@@ -61,20 +68,24 @@ final case class PackageSignature(
 }
 
 final case class StructSignature(
-                                  name: TypeIdentifier,
+                                  id: TypeIdentifier,
                                   fields: mutable.LinkedHashMap[FunOrVarId, FieldInfo],
                                   directSupertypes: Seq[TypeIdentifier],
                                   isInterface: Boolean
-                                ) extends TypeSignature {
+                                ) extends StructOrModuleSignature {
   override def isModuleOrPackage: Boolean = false
 
   override def functions: Map[FunOrVarId, FunctionSignature] = Map.empty
+
+  override def constructorSig: FunctionSignature =
+    FunctionSignature(ConstructorFunId, fields.map(_._2.tpe).toList, VoidType)
 }
 
 final case class DeviceSignature(
-                                  typeId: TypeIdentifier,
+                                  id: TypeIdentifier,
                                   functions: Map[FunOrVarId, FunctionSignature]
                                 ) extends TypeSignature {
+
   override def isInterface: Boolean = false
 
   override def isModuleOrPackage: Boolean = false

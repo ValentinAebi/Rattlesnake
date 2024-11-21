@@ -168,7 +168,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         if (!ctx.currentEnvironment.get.allowsDevice(device)) {
           reportError(s"illegal reference to device $device, which is not imported in this module", devRef.getPosition)
         }
-        NamedType(device.sig.typeId, CaptureSet.singletonOfRoot)
+        NamedType(device.sig.id, CaptureSet.singletonOfRoot)
 
       case call@Call(None, funName, args) =>
         val fallback = Some(ctx.currentEnvironment.get.currentModuleType)

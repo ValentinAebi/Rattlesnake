@@ -4,10 +4,10 @@ import compiler.CompilationStep.CodeGeneration
 import compiler.Errors.*
 import compiler.NamesForGeneratedClasses.packageInstanceName
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
-import compiler.backend.TypesConverter.{convertToAsmTypeCode, internalNameOf, opcodeFor}
+import compiler.backend.TypesConverter.{convertToAsmTypeCode, internalNameOf, numSlotsFor, opcodeFor}
 import compiler.irs.Asts.*
 import compiler.{AnalysisContext, CompilerStep, FileExtensions, NamesForGeneratedClasses}
-import identifiers.{BackendGeneratedVarId, FunOrVarId, MeVarId, TypeIdentifier}
+import identifiers.{BackendGeneratedVarId, ConstructorFunId, FunOrVarId, MeVarId, NormalFunOrVarId, TypeIdentifier}
 import lang.*
 import lang.Captures.CaptureSet
 import lang.Operator.*
@@ -116,15 +116,16 @@ final class Backend[V <: ClassVisitor](
   }
 
   private def generateModuleOrPackageFile(modOrPkg: ModuleOrPackageDefTree, path: Path)(using ctx: AnalysisContext): Unit = {
+    val modOrPkgSig = ctx.resolveType(modOrPkg.name).get
     val cv: V = mode.createVisitor(path)
     cv.visit(javaVersionCode, ACC_PUBLIC | ACC_FINAL, modOrPkg.name.stringId, null, objectTypeStr, null)
     val constructorVisibility = if modOrPkg.isPackage then ACC_PRIVATE else ACC_PUBLIC
-    addConstructor(cv, constructorVisibility)
+    addConstructor(cv, constructorVisibility, modOrPkgSig)
     val pkgTypeDescr = descriptorForType(NamedType(modOrPkg.name, CaptureSet.empty))
     if (modOrPkg.isInstanceOf[PackageDef]) {
       addInstanceFieldAndInitializer(modOrPkg, cv, pkgTypeDescr)
     }
-    for (varId, moduleType) <- ctx.resolveType(modOrPkg.name).get.asInstanceOf[ModuleOrPackageSignature].paramImports do {
+    for (varId, moduleType) <- modOrPkgSig.asInstanceOf[ModuleOrPackageSignature].paramImports do {
       cv.visitField(ACC_PRIVATE, varId.stringId, descriptorForType(moduleType), null, null)
     }
     for func <- modOrPkg.functions do {
@@ -155,7 +156,7 @@ final class Backend[V <: ClassVisitor](
     mv.visitCode()
     mv.visitTypeInsn(Opcodes.NEW, pkgName)
     mv.visitInsn(Opcodes.DUP)
-    mv.visitMethodInsn(Opcodes.INVOKESPECIAL, pkgName, "<init>", "()V", false)
+    mv.visitMethodInsn(Opcodes.INVOKESPECIAL, pkgName, ConstructorFunId.stringId, "()V", false)
     mv.visitFieldInsn(Opcodes.PUTSTATIC, pkgName, packageInstanceName, pkgTypeDescr)
     mv.visitInsn(Opcodes.RETURN)
     mv.visitMaxs(0, 0)
@@ -204,8 +205,8 @@ final class Backend[V <: ClassVisitor](
   private def generateStruct(structDef: StructDef, superInterfaces: Array[String],
                              structFilePath: Path)(using ctx: AnalysisContext): Unit = {
     val structName = structDef.structName
-    val sig = ctx.structs.apply(structName)
-    val isInterface = sig.isInterface
+    val structSig = ctx.structs.apply(structName)
+    val isInterface = structSig.isInterface
     val cv = mode.createVisitor(structFilePath)
     var classMods = ACC_PUBLIC
     if (isInterface) {
@@ -217,14 +218,14 @@ final class Backend[V <: ClassVisitor](
     cv.visit(javaVersionCode, classMods, structDef.structName.stringId, null, objectTypeStr, superInterfaces)
     if (!isInterface) {
       addFields(structDef, cv)
-      addConstructor(cv, Opcodes.ACC_PUBLIC)
+      addConstructor(cv, Opcodes.ACC_PUBLIC, structSig)
     }
-    val fieldsWithAccessors = if isInterface then sig.fields.keySet else getInterfaceFieldsForStruct(structName, ctx.structs)
+    val fieldsWithAccessors = if isInterface then structSig.fields.keySet else getInterfaceFieldsForStruct(structName, ctx.structs)
     for (fld <- fieldsWithAccessors) {
-      val fldType = sig.fields.apply(fld).tpe
+      val fldType = structSig.fields.apply(fld).tpe
       val fieldDescr = descriptorForType(fldType)
       generateGetter(structName, fld, fldType, fieldDescr, cv, genImplementation = !isInterface)
-      if (sig.fields.apply(fld).isReassignable) {
+      if (structSig.fields.apply(fld).isReassignable) {
         generateSetter(structName, fld, fldType, fieldDescr, cv, genImplementation = !isInterface)
       }
     }
@@ -272,11 +273,26 @@ final class Backend[V <: ClassVisitor](
     setterVisitor.visitEnd()
   }
 
-  private def addConstructor(cv: ClassVisitor, visibility: Int): Unit = {
-    val constructorVisitor = cv.visitMethod(visibility, "<init>", "()V", null, null)
+  private def addConstructor(
+                              cv: ClassVisitor,
+                              visibility: Int,
+                              sig: TypeSignature
+                            )(using AnalysisContext): Unit = {
+    val fields = constructorParameters(sig)
+    val constructorSig = FunctionSignature(ConstructorFunId, fields.map(_._2), VoidType)
+    val constructorDescr = descriptorForFunc(constructorSig)
+    val constructorVisitor = cv.visitMethod(visibility, ConstructorFunId.stringId, constructorDescr, null, null)
     constructorVisitor.visitCode()
     constructorVisitor.visitVarInsn(Opcodes.ALOAD, 0)
-    constructorVisitor.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", "<init>", "()V", false)
+    constructorVisitor.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", ConstructorFunId.stringId, "()V", false)
+    var varIdx = 1
+    for ((fldName, tpe) <- fields) do {
+      val descr = descriptorForType(tpe)
+      constructorVisitor.visitVarInsn(Opcodes.ALOAD, 0)
+      constructorVisitor.visitIntInsn(opcodeFor(tpe, Opcodes.ILOAD, Opcodes.ALOAD), varIdx)
+      constructorVisitor.visitFieldInsn(Opcodes.PUTFIELD, sig.id.stringId, fldName, descr)
+      varIdx += numSlotsFor(tpe)
+    }
     constructorVisitor.visitInsn(Opcodes.RETURN)
     constructorVisitor.visitMaxs(0, 0) // parameters are ignored because mode is COMPUTE_FRAMES
     constructorVisitor.visitEnd()
@@ -393,23 +409,14 @@ final class Backend[V <: ClassVisitor](
         }
 
       case StructOrModuleInstantiation(tid, args) =>
-        val instantiatedType = NamedType(tid, CaptureSet.empty)
-        val tmpVarIdx = ctx.currLocalIdx
-        val tempLocalName = BackendGeneratedVarId(tmpVarIdx)
-        ctx.addLocal(tempLocalName, instantiatedType)
-        val storeTmpOpcode = opcodeFor(instantiatedType, Opcodes.ISTORE, Opcodes.ASTORE)
+        val constructorSig = ctx.resolveType(tid).get.asInstanceOf[StructOrModuleSignature].constructorSig
+        val constructorDescr = descriptorForFunc(constructorSig)
         mv.visitTypeInsn(Opcodes.NEW, tid.stringId)
         mv.visitInsn(Opcodes.DUP)
-        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, tid.stringId, "<init>", "()V", false)
-        mv.visitVarInsn(storeTmpOpcode, tmpVarIdx)
-        val sig = analysisContext.resolveType(tid).get
-        val loadTmpOpcode = opcodeFor(instantiatedType, Opcodes.ILOAD, Opcodes.ALOAD)
-        for (arg, (paramName, paramType)) <- args.zip(instantiationParameters(sig)) do {
-          mv.visitVarInsn(loadTmpOpcode, tmpVarIdx)
+        for (arg <- args) {
           generateCode(arg, ctx)
-          mv.visitFieldInsn(Opcodes.PUTFIELD, tid.stringId, paramName, descriptorForType(paramType))
         }
-        mv.visitVarInsn(loadTmpOpcode, tmpVarIdx)
+        mv.visitMethodInsn(Opcodes.INVOKESPECIAL, tid.stringId, ConstructorFunId.stringId, constructorDescr, false)
 
       case UnaryOp(operator, operand) =>
         generateCode(operand, ctx)
@@ -631,7 +638,7 @@ final class Backend[V <: ClassVisitor](
         mv.visitInsn(DUP)
         generateCode(msg, ctx)
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/RuntimeException",
-          "<init>", s"(L$stringTypeStr;)V", false)
+          ConstructorFunId.stringId, s"(L$stringTypeStr;)V", false)
         mv.visitInsn(Opcodes.ATHROW)
 
       case other => throw new AssertionError(s"unexpected in backend: ${other.getClass}")
@@ -690,11 +697,12 @@ final class Backend[V <: ClassVisitor](
     }
   }
 
-  private def instantiationParameters(typeSig: TypeSignature): List[(String, Types.Type)] = typeSig match {
+  private def constructorParameters(typeSig: TypeSignature): List[(String, Types.Type)] = typeSig match {
     case StructSignature(name, fields, directSupertypes, isInterface) =>
       fields.toList.map((id, infos) => (id.stringId, infos.tpe))
     case ModuleSignature(name, importedModules, importedPackages, importedDevices, functions) =>
       importedModules.toList.map((id, tpe) => (id.stringId, tpe))
+    case _: PackageSignature => List.empty
     case _ => shouldNotHappen()
   }
 

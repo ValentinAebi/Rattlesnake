@@ -22,6 +22,10 @@ final case class BackendGeneratedVarId(private val rawName: String) extends FunO
   override def stringId: String = "bck$" ++ rawName
 }
 
+case object ConstructorFunId extends FunOrVarId {
+  override def stringId: String = "<init>"
+}
+
 object BackendGeneratedVarId {
   def apply(varIdx: Int): BackendGeneratedVarId = new BackendGeneratedVarId(varIdx.toString)
 }

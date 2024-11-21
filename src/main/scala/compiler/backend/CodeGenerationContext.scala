@@ -2,6 +2,7 @@ package compiler.backend
 
 import compiler.AnalysisContext
 import compiler.backend.CodeGenerationContext.from
+import compiler.backend.TypesConverter.numSlotsFor
 import identifiers.{FunOrVarId, TypeIdentifier}
 import lang.Types.PrimitiveType.*
 import lang.Types.{PrimitiveType, Type}
@@ -54,12 +55,6 @@ final class CodeGenerationContext(
   }
 
   export analysisContext.*
-
-  private def numSlotsFor(tpe: Type): Int = {
-    tpe match
-      case DoubleType => 2
-      case _ => 1
-  }
 
 }
 

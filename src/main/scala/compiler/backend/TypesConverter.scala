@@ -4,6 +4,7 @@ import compiler.AnalysisContext
 import compiler.backend.DescriptorsCreator.descriptorForType
 import identifiers.TypeIdentifier
 import lang.Types.*
+import lang.Types.PrimitiveType.DoubleType
 import lang.{StructSignature, TypeSignature, Types}
 import org.objectweb.asm
 import org.objectweb.asm.Opcodes.*
@@ -56,6 +57,12 @@ object TypesConverter {
       case ArrayType(elemType, _) => s"[${descriptorForType(elemType)}"
       case NamedType(_, _) | UnionType(_) => "java/lang/Object"
       case UndefinedType => assert(false)
+  }
+
+  def numSlotsFor(tpe: Types.Type): Int = {
+    tpe match
+      case DoubleType => 2
+      case _ => 1
   }
 
   extension[T] (t: T) private def toSome = Some(t)

@@ -83,7 +83,7 @@ object AnalysisContext {
     private val modules: mutable.Map[TypeIdentifier, ModuleSignature] = mutable.Map.empty
     private val packages: mutable.Map[TypeIdentifier, PackageSignature] = mutable.Map(
       IntrinsicsPackageId -> PackageSignature(
-        name = IntrinsicsPackageId,
+        id = IntrinsicsPackageId,
         importedPackages = mutable.LinkedHashSet.empty,
         importedDevices = mutable.LinkedHashSet.empty,
         functions = Intrinsics.intrinsics
