@@ -38,7 +38,8 @@ module Sorting(package Arrays) {
 package Main {
 
     fn main(arr String) {
-        val nbs = arr Int[10];
+        val r = newregion;
+        val nbs = arr@r Int[10];
         for var i = 0; i < 10; i += 1 {
             nbs[i] = (2*i - i*i + 200) % 25;
             nbs[i] += 1;

@@ -7,7 +7,7 @@ import identifiers.IntrinsicsPackageId
 import lang.Intrinsics
 import lang.Operator.*
 import lang.Types.PrimitiveType.*
-import lang.Types.{ArrayType, NamedType, UndefinedType}
+import lang.Types.{ArrayType, NamedType, PrimitiveType, UndefinedType}
 
 /**
  * Lowering replaces (this list may not be complete):
@@ -120,17 +120,24 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
         lower(call.copy(receiverOpt = Some(receiver)))
       case call: Call => Call(call.receiverOpt.map(lower), call.function, call.args.map(lower))
       case indexing: Indexing => Indexing(lower(indexing.indexed), lower(indexing.arg))
-      case arrayInit: ArrayInit => ArrayInit(arrayInit.elemType, lower(arrayInit.size))
-      case instantiation: StructOrModuleInstantiation => StructOrModuleInstantiation(instantiation.typeId, instantiation.args.map(lower))
+      case arrayInit: ArrayInit => ArrayInit(lower(arrayInit.region), arrayInit.elemType, lower(arrayInit.size))
+      case instantiation: StructOrModuleInstantiation =>
+        StructOrModuleInstantiation(instantiation.regionOpt.map(lower), instantiation.typeId, instantiation.args.map(lower))
       case regionCreation: RegionCreation => regionCreation
       
       // [x_1, ... , x_n] ---> explicit assignments
-      case filledArrayInit@FilledArrayInit(arrayElems, _) =>
+      case filledArrayInit@FilledArrayInit(regionOpt, arrayElems) =>
+        /* Argument for soundness of creating a region here:
+         * This creation happens only when the region is not specified in the original AST, i.e. when the array is 
+         * meant to be immutable. The type of the expression is therefore an immutable array type that captures no 
+         * region, hence the region is known only by the non-terminal statements of the Sequence. */
+        val region = regionOpt.getOrElse(RegionCreation())
         val arrayType = filledArrayInit.getType.asInstanceOf[ArrayType]
         val elemType = arrayType.elemType
         val arrValId = uniqueIdGenerator.next()
         val arrValRef = VariableRef(arrValId).setType(arrayType)
-        val arrInit = ArrayInit(elemType, IntLit(arrayElems.size)).setType(filledArrayInit.getType)
+        val arrInit = ArrayInit(region, elemType, IntLit(arrayElems.size)).setType(filledArrayInit.getType)
+        // TODO the type of the temporary variable should capture the region (for consistency)
         val arrayValDefinition = LocalDef(arrValId, Some(arrayType), arrInit, isReassignable = false)
         val arrElemAssigStats = arrayElems.map(lower).zipWithIndex.map {
           (elem, idx) => VarAssig(Indexing(arrValRef, IntLit(idx)).setType(UndefinedType), elem)

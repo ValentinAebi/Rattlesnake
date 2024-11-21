@@ -33,6 +33,7 @@ sealed trait ModuleOrPackageSignature extends TypeSignature {
 
 sealed trait StructOrModuleSignature extends TypeSignature {
   def constructorSig: FunctionSignature
+  def isShallowMutable: Boolean
 }
 
 final case class ModuleSignature(
@@ -44,6 +45,8 @@ final case class ModuleSignature(
                                 ) extends ModuleOrPackageSignature, StructOrModuleSignature {
   override def constructorSig: FunctionSignature =
     FunctionSignature(ConstructorFunId, paramImports.values.toList, VoidType)
+
+  override def isShallowMutable: Boolean = false
 }
 
 final case class PackageSignature(
@@ -67,6 +70,8 @@ final case class StructSignature(
 
   override def constructorSig: FunctionSignature =
     FunctionSignature(ConstructorFunId, fields.map(_._2.tpe).toList, VoidType)
+
+  override def isShallowMutable: Boolean = fields.exists(_._2.isReassignable)
 }
 
 final case class DeviceSignature(

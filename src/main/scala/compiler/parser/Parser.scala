@@ -77,6 +77,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private val `=>` = (op(Assig) ::: op(GreaterThan)).ignored
   private val lessThan = op(LessThan).ignored
   private val greaterThan = op(GreaterThan).ignored
+  private val at = op(At).ignored
 
   private val unaryOperator = op(Minus, ExclamationMark, Sharp)
   private val assignmentOperator = op(PlusEq, MinusEq, TimesEq, DivEq, ModuloEq, Assig)
@@ -153,7 +154,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     (numericLiteralValue OR (op(Minus) ::: numericLiteralValue)) map {
       case _ ^: IntLit(value) => IntLit(-value)
       case _ ^: DoubleLit(value) => DoubleLit(-value)
-      case (lit: NumericLiteral) => lit
+      case lit: NumericLiteral => lit
     }
   } setName "possiblyNegativeNumericLiteralValue"
 
@@ -278,34 +279,34 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val parenthesizedExpr = recursive {
     openParenth ::: expr ::: closeParenth
   } setName "parenthesizedExpr"
-
+  
   private lazy val mutPossiblyFilledArrayInit = recursive {
-    kw(Mut).ignored ::: (arrayInit OR filledArrayInit) map {
+    kw(Mut).ignored ::: (arrayInit OR (at ::: expr ::: filledArrayInit)) map {
       case arrayInit: ArrayInit =>
         errorReporter.push(Errors.Warning(Parsing,
           s"${Mut.str} is redundant in front of an uninitialized array declaration", arrayInit.getPosition))
         arrayInit
-      case filledArrayInit: FilledArrayInit =>
-        filledArrayInit.copy(modifiable = true)
+      case (region: Expr) ^: (filledArrayInit: FilledArrayInit) =>
+        filledArrayInit.copy(regionOpt = Some(region))
     }
   } setName "mutPossiblyFilledArrayInit"
 
   private lazy val arrayInit = recursive {
-    kw(Arr).ignored ::: tpe ::: openingBracket ::: expr ::: closingBracket map {
-      case elemType ^: size =>
-        ArrayInit(elemType, size)
+    kw(Arr).ignored ::: at ::: expr ::: tpe ::: openingBracket ::: expr ::: closingBracket map {
+      case region ^: elemType ^: size =>
+        ArrayInit(region, elemType, size)
     }
   } setName "arrayInit"
 
   private lazy val filledArrayInit = recursive {
     openingBracket ::: repeatWithSep(expr, comma) ::: closingBracket map {
-      case arrElems => FilledArrayInit(arrElems, false)
+      case arrElems => FilledArrayInit(None, arrElems)
     }
   } setName "filledArrayInit"
 
   private lazy val structOrModuleInstantiation = recursive {
-    kw(New).ignored ::: highName ::: openParenth ::: repeatWithSep(expr, comma) ::: closeParenth map {
-      case tid ^: args => StructOrModuleInstantiation(tid, args)
+    kw(New).ignored ::: opt(at ::: expr) ::: highName ::: openParenth ::: repeatWithSep(expr, comma) ::: closeParenth map {
+      case optReg ^: tid ^: args => StructOrModuleInstantiation(optReg, tid, args)
     }
   } setName "structOrModuleInstantiation"
 

@@ -28,8 +28,8 @@ import scala.util.{Failure, Success, Using}
 /**
  * Generates the output files: 1 core file, containing the program, and 1 file per struct
  *
- * @param mode              cf nested class [[Backend.Mode]]
- * @param outputDirBase     output directory path (will be extended with `/out`)
+ * @param mode          cf nested class [[Backend.Mode]]
+ * @param outputDirBase output directory path (will be extended with `/out`)
  * @tparam V depends on the mode
  */
 final class Backend[V <: ClassVisitor](
@@ -39,7 +39,7 @@ final class Backend[V <: ClassVisitor](
                                         javaVersionCode: Int
                                       ) extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
 
-  private val runtimeClass = "Rattlesnake$runtime.class"
+  private val runtimeClass = s"${NamesForGeneratedClasses.runtimeClassName}.class"
 
   import Backend.*
 
@@ -74,13 +74,13 @@ final class Backend[V <: ClassVisitor](
       generateTypes(modulesAndPackages, outputDir, generatedClassFiles)
       generateTypes(structs, outputDir, generatedClassFiles)
 
-      if (consts.nonEmpty){
+      if (consts.nonEmpty) {
         val constantsFilePath = outputDir.resolve(mode.withExtension(NamesForGeneratedClasses.constantsClassName))
         generateConstantsFile(consts, constantsFilePath)
         generatedClassFiles.addOne(constantsFilePath)
       }
 
-      if (mode.generateRuntime){
+      if (mode.generateRuntime) {
         val runtimeFilePath = outputDir.resolve(mode.withExtension(NamesForGeneratedClasses.runtimeClassName))
         copyRuntimeClass(runtimeFilePath)
         generatedClassFiles.addOne(runtimeFilePath)
@@ -94,7 +94,7 @@ final class Backend[V <: ClassVisitor](
 
   private def copyRuntimeClass(path: Path): Unit = {
     val runtimeClassStream = getClass.getClassLoader.getResourceAsStream(runtimeClass)
-    if (runtimeClassStream == null){
+    if (runtimeClassStream == null) {
       throw new AssertionError("Compiler packaging error: runtime class not found.\n" +
         s"Please make sure that the executable of the compiler contains $runtimeClass in a resource directory.\n" +
         "Also see the Makefile in runtime_src.")
@@ -346,6 +346,7 @@ final class Backend[V <: ClassVisitor](
                           (using mv: MethodVisitor): Unit = {
 
     val analysisContext = ctx.analysisContext
+
     given AnalysisContext = analysisContext
 
     ast match {
@@ -415,7 +416,8 @@ final class Backend[V <: ClassVisitor](
         val opcode = opcodeFor(elemType, Opcodes.IALOAD, Opcodes.AALOAD)
         mv.visitInsn(opcode)
 
-      case ArrayInit(elemType, size) =>
+      case ArrayInit(region, elemType, size) =>
+        generateCode(region, ctx)
         generateCode(size, ctx)
         elemType match {
           case _: (PrimitiveType.StringType.type | NamedType | ArrayType | UnionType) =>
@@ -425,19 +427,27 @@ final class Backend[V <: ClassVisitor](
             mv.visitIntInsn(Opcodes.NEWARRAY, elemTypeCode)
           case Types.UndefinedType => shouldNotHappen()
         }
+        mv.visitInsn(Opcodes.DUP_X1)
+        mv.visitInsn(Opcodes.SWAP)
+        RuntimeMethod.SaveNewObjectInRegion.generateCall(mv)
 
-      case StructOrModuleInstantiation(tid, args) =>
+      case StructOrModuleInstantiation(regionOpt, tid, args) =>
         val constructorSig = ctx.resolveType(tid).get.asInstanceOf[StructOrModuleSignature].constructorSig
         val constructorDescr = descriptorForFunc(constructorSig)
         mv.visitTypeInsn(Opcodes.NEW, tid.stringId)
         mv.visitInsn(Opcodes.DUP)
+        regionOpt.foreach { region =>
+          mv.visitInsn(Opcodes.DUP)
+          generateCode(region, ctx)(using mv)
+          RuntimeMethod.SaveNewObjectInRegion.generateCall(mv)
+        }
         for (arg <- args) {
           generateCode(arg, ctx)
         }
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, tid.stringId, ConstructorFunId.stringId, constructorDescr, false)
 
       case RegionCreation() =>
-        mv.visitMethodInsn(Opcodes.INVOKESTATIC, NamesForGeneratedClasses.runtimeClassName, "newRegion", "()I", false)
+        RuntimeMethod.NewRegion.generateCall(mv)
 
       case UnaryOp(operator, operand) =>
         generateCode(operand, ctx)

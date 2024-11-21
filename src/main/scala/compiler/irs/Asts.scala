@@ -254,6 +254,8 @@ object Asts {
   
   final case class RegionCreation() extends Expr {
     override def children: List[Ast] = Nil
+
+    override def getTypeOpt: Option[Type] = Some(PrimitiveType.RegionType)
   }
 
   /**
@@ -300,22 +302,19 @@ object Asts {
   /**
    * Initialization of an (empty) array
    */
-  final case class ArrayInit(elemType: Type, size: Expr) extends Expr {
-    override def children: List[Ast] = List(size)
+  final case class ArrayInit(region: Expr, elemType: Type, size: Expr) extends Expr {
+    override def children: List[Ast] = List(region, size)
   }
 
   /**
    * Initialization of an array that contains all the elements in `arrayElems` (in order)
    */
-  final case class FilledArrayInit(arrayElems: List[Expr], modifiable: Boolean) extends Expr {
-    override def children: List[Ast] = arrayElems
+  final case class FilledArrayInit(regionOpt: Option[Expr], arrayElems: List[Expr]) extends Expr {
+    override def children: List[Ast] = regionOpt.toList ++ arrayElems
   }
-
-  /**
-   * Initialization of a struct, e.g. `new Foo { 0, 1 }`
-   */
-  final case class StructOrModuleInstantiation(typeId: TypeIdentifier, args: List[Expr]) extends Expr {
-    override def children: List[Ast] = args
+  
+  final case class StructOrModuleInstantiation(regionOpt: Option[Expr], typeId: TypeIdentifier, args: List[Expr]) extends Expr {
+    override def children: List[Ast] = regionOpt.toList ++ args
   }
 
   /**

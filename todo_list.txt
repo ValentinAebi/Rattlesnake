@@ -1,6 +1,6 @@
 
-TODO request region when instantiating mutable struct or array
-TODO add capture set to array type (to capture the region)
+TODO dynamically check that references to packages and devices are allowed by the current frame, if any
+TODO what to do when a module is captured? Currently only regions and devices can be dynamically checked, is that OK?
 TODO investigate problem of type-checking capture set in struct definitions (probably also records)
     - A field can capture a previous field (as me.fld)
     - A field can capture a global (package or device)

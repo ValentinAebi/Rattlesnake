@@ -193,7 +193,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
         checkSubtypingConstraint(IntType, argType, indexing.getPosition, "array index", ctx)
         exprMustBeArray(indexed.getType, ctx, indexed.getPosition, mustUpdate = false)
 
-      case arrayInit@ArrayInit(elemType, size) =>
+      case arrayInit@ArrayInit(region, elemType, size) =>
+        checkAndRequireRegion(region, ctx)
         if (elemType == VoidType || elemType == NothingType) {
           reportError(s"array cannot have element type $elemType", arrayInit.getPosition)
         }
@@ -207,19 +208,22 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val checkedType = typeMustBeKnown(elemType, ctx, arrayInit.getPosition)
         ArrayType(elemType, modifiable = true)
 
-      case filledArrayInit@FilledArrayInit(Nil, _) =>
+      case filledArrayInit@FilledArrayInit(regionOpt, Nil) =>
+        regionOpt.foreach(checkAndRequireRegion(_, ctx))
         reportError("cannot infer type of empty array, use 'arr <type>[0]' instead", filledArrayInit.getPosition)
 
-      case filledArrayInit@FilledArrayInit(arrayElems, modifiable) =>
+      case filledArrayInit@FilledArrayInit(regionOpt, arrayElems) =>
+        regionOpt.foreach(checkAndRequireRegion(_, ctx))
         val types = arrayElems.map(check(_, ctx))
         computeJoinOf(types.toSet, ctx) match {
           case Some(elemsJoin) =>
-            ArrayType(elemsJoin, modifiable)
+            ArrayType(elemsJoin, modifiable = regionOpt.isDefined)
           case None =>
             reportError("cannot infer array type", filledArrayInit.getPosition)
         }
 
-      case instantiation@StructOrModuleInstantiation(tid, args) =>
+      case instantiation@StructOrModuleInstantiation(regionOpt, tid, args) =>
+        regionOpt.foreach(checkAndRequireRegion(_, ctx))
         ctx.resolveType(tid) match {
           case Some(structSig: StructSignature) if structSig.isInterface =>
             reportError(
@@ -227,6 +231,12 @@ final class TypeChecker(errorReporter: ErrorReporter)
               instantiation.getPosition
             )
           case Some(structSig: StructSignature) =>
+            if (structSig.isShallowMutable && regionOpt.isEmpty){
+              reportError(
+                s"cannot instantiate '$tid' without providing a region, since at least one of its fields is reassignable",
+                instantiation.getPosition
+              )
+            }
             checkCallArgs(structSig.fields.values.map(_.tpe).toList, args, ctx, instantiation.getPosition)
             NamedType(tid)
           case Some(moduleSig: ModuleSignature) =>
@@ -420,6 +430,12 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case _ => ()
     }
     tpe
+  }
+
+  private def checkAndRequireRegion(region: Expr, ctx: TypeCheckingContext)
+                                   (using Map[TypeIdentifier, StructSignature]): Unit = {
+    val regType = check(region, ctx)
+    checkSubtypingConstraint(PrimitiveType.RegionType, regType, region.getPosition, "region", ctx)
   }
 
   private def typesMustBeKnownInParams(params: List[Param], ctx: TypeCheckingContext): Unit = {
