@@ -1,12 +1,13 @@
 package compiler.parser
 
-import compiler.CompilationStep.Parsing
-import compiler.Errors.{Err, ErrorReporter, Fatal}
+import compiler.pipeline.CompilationStep.Parsing
+import compiler.reporting.Errors.{Err, ErrorReporter, Fatal}
 import compiler.irs.Asts.*
 import compiler.irs.Tokens.*
 import compiler.parser.ParseTree.^:
 import compiler.parser.TreeParsers.*
-import compiler.{CompilerStep, Errors, Position}
+import compiler.pipeline.CompilerStep
+import compiler.reporting.{Errors, Position}
 import identifiers.*
 import lang.Captures.*
 import lang.Keyword.*

@@ -1,6 +1,6 @@
 package compiler.io
 
-import compiler.{FileExtensions, SourceCodeProvider}
+import compiler.gennames.FileExtensions
 
 import scala.util.{Try, Using}
 

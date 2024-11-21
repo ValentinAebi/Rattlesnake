@@ -2,8 +2,8 @@ package lang
 
 import identifiers.TypeIdentifier
 import lang.Operator.*
-import lang.SubcaptureRelation.SubcapturingContext
-import lang.SubtypeRelation.subtypeOf
+import compiler.typechecker.SubcaptureRelation.SubcapturingContext
+import compiler.typechecker.SubtypeRelation.subtypeOf
 import lang.Types.PrimitiveType.*
 import lang.Types.Type
 

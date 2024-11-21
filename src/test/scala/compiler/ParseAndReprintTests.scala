@@ -1,6 +1,6 @@
 package compiler
 
-import compiler.Errors.{ErrorReporter, ExitCode}
+import compiler.reporting.Errors.{ErrorReporter, ExitCode}
 import compiler.io.SourceFile
 import compiler.lexer.Lexer
 import compiler.parser.Parser

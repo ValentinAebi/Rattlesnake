@@ -1,10 +1,11 @@
 package compiler.lexer
 
-import compiler.Errors.{CompilationError, Err, ErrorReporter, Fatal}
-import compiler.StringFormatting.stringLengthLimited
+import compiler.io.SourceCodeProvider
+import compiler.reporting.Errors.{CompilationError, Err, ErrorReporter, Fatal}
 import compiler.irs.Tokens.*
 import compiler.lexer.Matchers.*
-import compiler.{CompilationStep, CompilerStep, Position, SourceCodeProvider}
+import compiler.pipeline.{CompilationStep, CompilerStep}
+import compiler.reporting.Position
 import lang.Types.PrimitiveType
 import lang.{Keyword, Operator}
 
@@ -118,6 +119,14 @@ final class Lexer(errorReporter: ErrorReporter) extends CompilerStep[SourceCodeP
     }
 
     tokenizeRemaining(line, Nil, 0)
+  }
+
+  /**
+   * @return `str`, unless it is too long in which case it is truncated and postfixed with "..."
+   */
+  private def stringLengthLimited(maxLen: Int, str: String): String = {
+    if str.length > maxLen then s"$str..."
+    else str
   }
 
   override def apply(sourceCodeProvider: SourceCodeProvider): (List[PositionedToken], String) = {

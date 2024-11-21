@@ -1,11 +1,13 @@
 package compiler
 
-import compiler.CompilationStep.ContextCreation
-import compiler.Errors.*
-import compiler.TasksPipelines.frontend
-import compiler.ctxcreator.ContextCreator
+import compiler.pipeline.CompilationStep.ContextCreation
+import compiler.reporting.Errors.*
+import compiler.pipeline.TasksPipelines.frontend
+import compiler.analysisctx.ContextCreator
+import compiler.gennames.FileExtensions
 import compiler.io.SourceFile
 import compiler.lowerer.Lowerer
+import compiler.pipeline.{CompilationStep, MultiStep, TasksPipelines}
 import compiler.typechecker.TypeChecker
 import org.junit.Assert.fail
 import org.junit.Test

@@ -1,9 +1,9 @@
-package compiler
+package compiler.pipeline
 
-import compiler.Errors.{ErrorReporter, ExitCode}
+import compiler.reporting.Errors.{ErrorReporter, ExitCode}
+import compiler.analysisctx.ContextCreator
 import compiler.backend.Backend
-import compiler.ctxcreator.ContextCreator
-import compiler.io.StringWriter
+import compiler.io.{SourceCodeProvider, StringWriter}
 import compiler.irs.Asts
 import compiler.lexer.Lexer
 import compiler.lowerer.Lowerer

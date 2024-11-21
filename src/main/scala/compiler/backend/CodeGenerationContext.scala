@@ -1,6 +1,6 @@
 package compiler.backend
 
-import compiler.AnalysisContext
+import compiler.analysisctx.AnalysisContext
 import compiler.backend.CodeGenerationContext.from
 import compiler.backend.TypesConverter.numSlotsFor
 import identifiers.{FunOrVarId, TypeIdentifier}

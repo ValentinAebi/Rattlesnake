@@ -1,13 +1,14 @@
 package compiler.typechecker
 
-import compiler.CompilationStep.TypeChecking
-import compiler.Errors.{ErrorReporter, Warning}
+import compiler.pipeline.CompilationStep.TypeChecking
+import compiler.reporting.Errors.{ErrorReporter, Warning}
 import compiler.irs.Asts.{Expr, Indexing, Select, VariableRef}
 import compiler.typechecker.TypeCheckingContext.{LocalInfo, LocalUsesCollector}
-import compiler.{AnalysisContext, Errors, Position}
 import identifiers.{FunOrVarId, TypeIdentifier}
 import lang.Captures.*
-import lang.SubcaptureRelation.SubcapturingContext
+import SubcaptureRelation.SubcapturingContext
+import compiler.analysisctx.AnalysisContext
+import compiler.reporting.{Errors, Position}
 import lang.Types.PrimitiveType.{NothingType, VoidType}
 import lang.Types.{NamedType, Type}
 import lang.{Captures, FunctionSignature, Keyword}

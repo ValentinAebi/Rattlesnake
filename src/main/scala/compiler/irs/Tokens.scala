@@ -1,6 +1,6 @@
 package compiler.irs
 
-import compiler.Position
+import compiler.reporting.Position
 import lang.Types.PrimitiveType
 import lang.{Keyword, Operator}
 

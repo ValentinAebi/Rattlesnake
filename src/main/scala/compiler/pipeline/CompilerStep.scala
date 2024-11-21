@@ -1,4 +1,5 @@
-package compiler
+package compiler.pipeline
+
 
 trait CompilerStep[In, Out] {
   thisStep =>

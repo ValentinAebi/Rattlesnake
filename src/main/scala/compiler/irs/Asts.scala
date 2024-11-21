@@ -1,6 +1,6 @@
 package compiler.irs
 
-import compiler.Position
+import compiler.reporting.Position
 import identifiers.*
 import lang.Types.*
 import lang.Types.PrimitiveType.*

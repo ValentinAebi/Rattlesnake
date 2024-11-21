@@ -1,8 +1,9 @@
 package compiler.lexer
 
-import compiler.Errors.{CompilationError, ErrorReporter, ExitCode}
+import compiler.io.SourceCodeProvider
+import compiler.reporting.Errors.{CompilationError, ErrorReporter, ExitCode}
 import compiler.irs.Tokens.*
-import compiler.{Position, SourceCodeProvider}
+import compiler.reporting.Position
 import lang.Keyword.*
 import lang.Operator.*
 import org.junit.Assert.{assertArrayEquals, assertEquals, assertTrue, fail}

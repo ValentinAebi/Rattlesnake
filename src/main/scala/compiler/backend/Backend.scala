@@ -1,17 +1,19 @@
 package compiler.backend
 
-import compiler.CompilationStep.CodeGeneration
-import compiler.Errors.*
-import compiler.NamesForGeneratedClasses.packageInstanceName
+import compiler.pipeline.CompilationStep.CodeGeneration
+import compiler.reporting.Errors.*
+import compiler.gennames.NamesForGeneratedClasses.packageInstanceName
+import compiler.analysisctx.AnalysisContext
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
 import compiler.backend.TypesConverter.{convertToAsmTypeCode, internalNameOf, numSlotsFor, opcodeFor}
 import compiler.irs.Asts.*
-import compiler.{AnalysisContext, CompilerStep, FileExtensions, NamesForGeneratedClasses}
+import compiler.pipeline.CompilerStep
+import compiler.gennames.{FileExtensions, NamesForGeneratedClasses}
 import identifiers.{BackendGeneratedVarId, ConstructorFunId, FunOrVarId, MeVarId, NormalFunOrVarId, TypeIdentifier}
 import lang.*
 import lang.Captures.CaptureSet
 import lang.Operator.*
-import lang.SubtypeRelation.subtypeOf
+import compiler.typechecker.SubtypeRelation.subtypeOf
 import lang.Types.PrimitiveType.*
 import lang.Types.{ArrayType, NamedType, PrimitiveType, UnionType}
 import org.objectweb.asm

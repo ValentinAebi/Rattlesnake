@@ -1,7 +1,8 @@
 package compiler.lowerer
 
 import compiler.irs.Asts.*
-import compiler.{AnalysisContext, CompilerStep}
+import compiler.analysisctx.AnalysisContext
+import compiler.pipeline.CompilerStep
 import identifiers.IntrinsicsPackageId
 import lang.Captures.CaptureSet
 import lang.Intrinsics

@@ -1,9 +1,9 @@
-package lang
+package compiler.typechecker
 
-import Captures.*
-import Types.*
-import compiler.typechecker.TypeCheckingContext
 import identifiers.{FunOrVarId, TypeIdentifier}
+import lang.Captures.*
+import lang.StructSignature
+import lang.Types.*
 
 object SubcaptureRelation {
 
@@ -47,7 +47,7 @@ object SubcaptureRelation {
       // FIXME other cases, don't limit subcapturing to structs
     }
   }
-  
+
   private def captureDescrOf(tpe: Type): Option[CaptureDescriptor] = tpe match {
     case NamedType(typeName, captureDescr) => Some(captureDescr)
     case _ => None

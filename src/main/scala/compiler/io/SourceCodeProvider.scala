@@ -1,4 +1,4 @@
-package compiler
+package compiler.io
 
 import scala.util.Try
 

@@ -1,7 +1,7 @@
 package compiler.prettyprinter
 
-import compiler.CompilerStep
 import compiler.irs.Asts.*
+import compiler.pipeline.CompilerStep
 import lang.Keyword.*
 import lang.{Keyword, Operator}
 

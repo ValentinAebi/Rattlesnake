@@ -1,13 +1,14 @@
-package compiler
+package compiler.analysisctx
 
-import compiler.AnalysisContext.{FunctionFound, FunctionNotFound, MethodResolutionResult, ModuleNotFound}
-import compiler.CompilationStep.ContextCreation
-import compiler.Errors.{Err, ErrorReporter, errorsExitCode}
+import AnalysisContext.{FunctionFound, FunctionNotFound, MethodResolutionResult, ModuleNotFound}
+import compiler.pipeline.CompilationStep.ContextCreation
+import compiler.reporting.Errors.{Err, ErrorReporter, errorsExitCode}
 import compiler.irs.Asts.*
+import compiler.reporting.Position
+import compiler.typechecker.SubcaptureRelation.SubcapturingContext
+import compiler.typechecker.SubtypeRelation.subtypeOf
 import identifiers.{FunOrVarId, IntrinsicsPackageId, TypeIdentifier}
 import lang.*
-import lang.SubcaptureRelation.SubcapturingContext
-import lang.SubtypeRelation.subtypeOf
 import lang.Types.PrimitiveType.{NothingType, VoidType}
 import lang.Types.{NamedType, Type}
 

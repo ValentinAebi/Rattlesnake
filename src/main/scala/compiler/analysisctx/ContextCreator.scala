@@ -1,8 +1,8 @@
-package compiler.ctxcreator
+package compiler.analysisctx
 
-import compiler.Errors.ErrorReporter
+import compiler.reporting.Errors.ErrorReporter
 import compiler.irs.Asts.*
-import compiler.{AnalysisContext, CompilerStep}
+import compiler.pipeline.CompilerStep
 
 /**
  * Compiler pass to generate an [[AnalysisContext]]

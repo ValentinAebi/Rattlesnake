@@ -1,8 +1,8 @@
-package lang
+package compiler.typechecker
 
 import compiler.typechecker.TypeCheckingContext
 import identifiers.TypeIdentifier
-import lang.SubcaptureRelation.{SubcapturingContext, subcaptureOf}
+import SubcaptureRelation.{SubcapturingContext, subcaptureOf}
 import lang.Types.*
 import lang.Types.PrimitiveType.*
 

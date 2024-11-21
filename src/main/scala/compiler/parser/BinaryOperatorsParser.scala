@@ -1,6 +1,6 @@
 package compiler.parser
 
-import compiler.Errors.ErrorReporter
+import compiler.reporting.Errors.ErrorReporter
 import compiler.irs.Asts.{BinaryOp, Expr}
 import compiler.irs.Tokens.OperatorToken
 import compiler.parser.ParseTree.^:

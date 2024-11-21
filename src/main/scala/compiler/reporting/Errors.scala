@@ -1,4 +1,6 @@
-package compiler
+package compiler.reporting
+
+import compiler.pipeline.CompilationStep
 
 import java.io.PrintStream
 import scala.runtime.Nothing$

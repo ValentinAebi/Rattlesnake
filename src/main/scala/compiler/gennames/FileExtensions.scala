@@ -1,4 +1,4 @@
-package compiler
+package compiler.gennames
 
 object FileExtensions {
   val rattlesnake: String = "rsn"

@@ -1,4 +1,6 @@
-package compiler
+package compiler.reporting
+
+import compiler.io.SourceCodeProvider
 
 /**
  * Position in a source (typically a source file)

@@ -1,6 +1,6 @@
 package compiler.backend
 
-import compiler.AnalysisContext
+import compiler.analysisctx.AnalysisContext
 import identifiers.{IntrinsicsPackageId, NormalTypeId, TypeIdentifier}
 import lang.Types.{PrimitiveType, Type}
 import lang.*

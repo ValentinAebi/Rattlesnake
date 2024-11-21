@@ -1,6 +1,6 @@
 package compiler.backend
 
-import compiler.AnalysisContext
+import compiler.analysisctx.AnalysisContext
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
 import compiler.irs.Asts.Expr
 import identifiers.{FunOrVarId, TypeIdentifier}

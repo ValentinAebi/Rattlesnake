@@ -1,6 +1,6 @@
 package compiler.backend
 
-import compiler.AnalysisContext
+import compiler.analysisctx.AnalysisContext
 import compiler.backend.DescriptorsCreator.descriptorForType
 import identifiers.TypeIdentifier
 import lang.Types.*

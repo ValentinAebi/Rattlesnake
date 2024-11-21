@@ -1,18 +1,20 @@
 package compiler.typechecker
 
-import compiler.AnalysisContext.{FunctionFound, FunctionNotFound, ModuleNotFound}
-import compiler.CompilationStep.TypeChecking
-import compiler.Errors.{Err, ErrorReporter, Warning}
+import compiler.analysisctx.AnalysisContext.{FunctionFound, FunctionNotFound, ModuleNotFound}
+import compiler.pipeline.CompilationStep.TypeChecking
+import compiler.reporting.Errors.{Err, ErrorReporter, Warning}
 import compiler.irs.Asts.*
 import compiler.typechecker.TypeCheckingContext.LocalInfo
-import compiler.{AnalysisContext, CompilerStep, Position}
 import identifiers.{FunOrVarId, IntrinsicsPackageId}
 import lang.*
 import lang.Captures.*
 import lang.Operator.{Equality, Inequality, Sharp}
 import lang.StructSignature.FieldInfo
-import lang.SubcaptureRelation.*
-import lang.SubtypeRelation.subtypeOf
+import SubcaptureRelation.*
+import SubtypeRelation.subtypeOf
+import compiler.analysisctx.AnalysisContext
+import compiler.pipeline.CompilerStep
+import compiler.reporting.Position
 import lang.Types.*
 import lang.Types.PrimitiveType.*
 
