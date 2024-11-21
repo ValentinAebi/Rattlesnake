@@ -2,8 +2,6 @@ package lang
 
 import identifiers.TypeIdentifier
 import lang.Operator.*
-import compiler.typechecker.SubcaptureRelation.SubcapturingContext
-import compiler.typechecker.SubtypeRelation.subtypeOf
 import lang.Types.PrimitiveType.*
 import lang.Types.Type
 
@@ -30,13 +28,6 @@ object Operators {
     UnaryOpSignature(Minus, DoubleType, DoubleType),
     UnaryOpSignature(ExclamationMark, BoolType, BoolType)
   )
-  
-  def unaryOperatorSignatureFor(operator: Operator, operand: Type)(using ctx: SubcapturingContext): Option[UnaryOpSignature] = {
-    unaryOperators.find {
-      case UnaryOpSignature(op, operandType, _) =>
-        operator == op && operand.subtypeOf(operandType)
-    }
-  }
 
   //  ==  and  !=  are treated separately
   val binaryOperators: List[BinaryOpSignature] = List(
@@ -65,13 +56,6 @@ object Operators {
 
     StringType $ Plus $ StringType is StringType
   )
-
-  def binaryOperatorSigFor(left: Type, operator: Operator, right: Type)(using ctx: SubcapturingContext): Option[BinaryOpSignature] = {
-    binaryOperators.find {
-      case BinaryOpSignature(leftOperandType, op, rightOperandType, _) =>
-        left.subtypeOf(leftOperandType) && op == operator && right.subtypeOf(rightOperandType)
-    }
-  }
   
   val assigOperators: Map[Operator, Operator] = Map(
     PlusEq -> Plus,

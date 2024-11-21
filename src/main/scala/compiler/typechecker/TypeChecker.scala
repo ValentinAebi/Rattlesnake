@@ -1,20 +1,21 @@
 package compiler.typechecker
 
+import compiler.analysisctx.AnalysisContext
 import compiler.analysisctx.AnalysisContext.{FunctionFound, FunctionNotFound, ModuleNotFound}
-import compiler.pipeline.CompilationStep.TypeChecking
-import compiler.reporting.Errors.{Err, ErrorReporter, Warning}
 import compiler.irs.Asts.*
+import compiler.pipeline.CompilationStep.TypeChecking
+import compiler.pipeline.CompilerStep
+import compiler.reporting.Errors.{Err, ErrorReporter, Warning}
+import compiler.reporting.Position
+import compiler.typechecker.SubcaptureRelation.*
+import compiler.typechecker.SubtypeRelation.subtypeOf
 import compiler.typechecker.TypeCheckingContext.LocalInfo
 import identifiers.{FunOrVarId, IntrinsicsPackageId}
 import lang.*
 import lang.Captures.*
 import lang.Operator.{Equality, Inequality, Sharp}
+import lang.Operators.{BinaryOpSignature, UnaryOpSignature, binaryOperators, unaryOperators}
 import lang.StructSignature.FieldInfo
-import SubcaptureRelation.*
-import SubtypeRelation.subtypeOf
-import compiler.analysisctx.AnalysisContext
-import compiler.pipeline.CompilerStep
-import compiler.reporting.Position
 import lang.Types.*
 import lang.Types.PrimitiveType.*
 
@@ -245,7 +246,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
             reportError(s"operator # can only be applied to arrays and strings, found '$operandType'", unaryOp.getPosition)
           }
         } else {
-          Operators.unaryOperatorSignatureFor(operator, operandType)(using ctx.toSubcapturingCtx) match {
+          unaryOperatorSignatureFor(operator, operandType)(using ctx.toSubcapturingCtx) match {
             case Some(sig) => sig.retType
             case None =>
               reportError(s"no definition of operator '$operator' found for operand '$operandType'", unaryOp.getPosition)
@@ -429,6 +430,20 @@ final class TypeChecker(errorReporter: ErrorReporter)
       typeMustBeKnown(tpe, ctx, param.getPosition)
     }
   }
+  
+  private def unaryOperatorSignatureFor(operator: Operator, operand: Type)(using ctx: SubcapturingContext): Option[UnaryOpSignature] = {
+    unaryOperators.find {
+      case UnaryOpSignature(op, operandType, _) =>
+        operator == op && operand.subtypeOf(operandType)
+    }
+  }
+  
+  private def binaryOperatorSigFor(left: Type, operator: Operator, right: Type)(using ctx: SubcapturingContext): Option[BinaryOpSignature] = {
+    binaryOperators.find {
+      case BinaryOpSignature(leftOperandType, op, rightOperandType, _) =>
+        left.subtypeOf(leftOperandType) && op == operator && right.subtypeOf(rightOperandType)
+    }
+  }
 
   /**
    * @return (meType, callType)
@@ -604,7 +619,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def mustExistOperator(lhsType: Type, operator: Operator, rhsType: Type, position: Option[Position])(using ctx: SubcapturingContext): Type = {
-    Operators.binaryOperatorSigFor(lhsType, operator, rhsType) match {
+    binaryOperatorSigFor(lhsType, operator, rhsType) match {
       case Some(sig) => sig.retType
       case None =>
         reportError(s"no definition of operator '$operator' found for operands '$lhsType' and '$rhsType'", position)
