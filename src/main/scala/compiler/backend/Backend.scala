@@ -584,6 +584,7 @@ final class Backend[V <: ClassVisitor](
           // x[y] = ...
           case Indexing(indexed, arg) =>
             generateCode(indexed, ctx)
+            genCheckCanModifyStackTop(mv)
             generateCode(arg, ctx)
             generateCode(rhs, ctx)
             val elemType = indexed.getType.asInstanceOf[ArrayType].elemType
@@ -592,6 +593,7 @@ final class Backend[V <: ClassVisitor](
           // x.y = ...
           case Select(ownerStruct, fieldName) =>
             generateCode(ownerStruct, ctx)
+            genCheckCanModifyStackTop(mv)
             generateCode(rhs, ctx)
             val ownerTypeName = ownerStruct.getType.asInstanceOf[NamedType].typeName
             val structSig = ctx.structs.apply(ownerTypeName)
@@ -674,6 +676,11 @@ final class Backend[V <: ClassVisitor](
 
       case other => throw new AssertionError(s"unexpected in backend: ${other.getClass}")
     }
+  }
+
+  private def genCheckCanModifyStackTop(mv: MethodVisitor)(using AnalysisContext): Unit = {
+    mv.visitInsn(Opcodes.DUP)
+    RuntimeMethod.AssertCanModifyRegionOf.generateCall(mv)
   }
 
   private def generateSequence(ctx: CodeGenerationContext, stats: List[Statement], optFinalExpr: Option[Expr])

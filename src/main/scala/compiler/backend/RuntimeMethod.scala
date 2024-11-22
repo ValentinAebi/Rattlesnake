@@ -10,7 +10,9 @@ enum RuntimeMethod(name: String, mthDescr: String) {
   case AddAllowedResource extends RuntimeMethod("addAllowedResource", "(I)V")
   case PushFrame extends RuntimeMethod("pushFrame", "()V")
   case PopFrame extends RuntimeMethod("popFrame", "()V")
-  case AssertAllowed extends RuntimeMethod("assertAllowed", "(I)V")
+  case AssertResourceAllowed extends RuntimeMethod("assertResourceAllowed", "(I)V")
+  case AssertCanModifyRegionOf extends RuntimeMethod("assertCanModifyRegionOf", "(Ljava/lang/Object;)V")
+  case AssertFilesystemAllowed extends RuntimeMethod("assertFilesystemAllowed", "()V")
   
   def generateCall(mv: MethodVisitor)(using AnalysisContext): Unit = {
     mv.visitMethodInsn(Opcodes.INVOKESTATIC, runtimeClassName, name, mthDescr, false)

@@ -6,9 +6,7 @@ final class Rattlesnake$runtime {
     // NOTE: This implementation assumes single-threaded execution.
     // A thread-safe runtime should include per-thread capability stacks.
 
-    // TODO what to do when too many regions are created? Can we reuse region ids that are not used anymore?
-
-    public static final int FILE_SYSTEM_ID = Integer.MIN_VALUE;
+    private static final int FILE_SYSTEM_ID = Integer.MIN_VALUE;
 
 
     //////////////// Region allocation ////////////////
@@ -17,6 +15,10 @@ final class Rattlesnake$runtime {
     private static int nextRegionId = -700_000;
 
     public static int newRegion(){
+        if (nextRegionId == Integer.MAX_VALUE){
+            // TODO what to do when too many regions are created? Can we reuse region ids that are not used anymore?
+            throw new RuntimeException("too many regions created");
+        }
         return nextRegionId++;
     }
 
@@ -32,28 +34,36 @@ final class Rattlesnake$runtime {
 
     ////////// Dynamic authority enforcement //////////
 
-    private static final Deque<Set<Integer>> allowedCapabilities = new LinkedList<>();
+    private static final Deque<Set<Integer>> allowedCapabilitiesStack = new LinkedList<>();
     private static Set<Integer> nextFrame = new HashSet<Integer>();
 
     public static void addAllowedResource(int resource){
-        assertAllowed(resource);
+        assertResourceAllowed(resource);
         nextFrame.add(resource);
     }
 
     public static void pushFrame(){
-        allowedCapabilities.addLast(nextFrame);
+        allowedCapabilitiesStack.addLast(nextFrame);
         nextFrame = new HashSet<>();
     }
 
     public static void popFrame(){
-        allowedCapabilities.remove();
+        allowedCapabilitiesStack.remove();
     }
 
-    public static void assertAllowed(int resource){
+    public static void assertResourceAllowed(int resource){
         // TODO possibly optimize by caching the information of whether the stack is empty or not
-        if (!allowedCapabilities.isEmpty() && !allowedCapabilities.getLast().contains(resource)){
+        if (!allowedCapabilitiesStack.isEmpty() && !allowedCapabilitiesStack.getLast().contains(resource)){
             throw new RuntimeException("dynamic resource access policy violated");
         }
+    }
+
+    public static void assertCanModifyRegionOf(Object o){
+        assertResourceAllowed(regionOf.get(o));
+    }
+
+    public static void assertFilesystemAllowed(){
+        assertResourceAllowed(FILE_SYSTEM_ID);
     }
 
 }
