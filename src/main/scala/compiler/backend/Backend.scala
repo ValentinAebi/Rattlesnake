@@ -9,6 +9,7 @@ import compiler.irs.Asts.*
 import compiler.pipeline.CompilationStep.CodeGeneration
 import compiler.pipeline.CompilerStep
 import compiler.reporting.Errors.*
+import compiler.reporting.Position
 import identifiers.*
 import lang.*
 import lang.Operator.*
@@ -40,6 +41,8 @@ final class Backend[V <: ClassVisitor](
                                       ) extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
 
   private val runtimeClass = s"${NamesForGeneratedClasses.runtimeClassName}.class"
+
+  private var lastWrittenLine = -1
 
   import Backend.*
 
@@ -119,6 +122,7 @@ final class Backend[V <: ClassVisitor](
   private def generateConstantsFile(consts: List[ConstDef], constantsFilePath: Path)
                                    (using AnalysisContext): Unit = {
     val ccv: V = mode.createVisitor(constantsFilePath)
+    addSourceName(ccv, "<auto-gen-constants-file>")
     ccv.visit(javaVersionCode, ACC_PUBLIC, NamesForGeneratedClasses.constantsClassName, null, objectTypeStr, null)
     for const <- consts do {
       ccv.visitField(
@@ -136,6 +140,7 @@ final class Backend[V <: ClassVisitor](
   private def generateModuleOrPackageFile(modOrPkg: ModuleOrPackageDefTree, path: Path)(using ctx: AnalysisContext): Unit = {
     val modOrPkgSig = ctx.resolveType(modOrPkg.name).get
     val cv: V = mode.createVisitor(path)
+    addSourceNameIfKnown(cv, modOrPkg.getPosition)
     cv.visit(javaVersionCode, ACC_PUBLIC | ACC_FINAL, modOrPkg.name.stringId, null, objectTypeStr, null)
     val constructorVisibility = if modOrPkg.isPackage then ACC_PRIVATE else ACC_PUBLIC
     addConstructor(cv, constructorVisibility, modOrPkgSig)
@@ -193,6 +198,7 @@ final class Backend[V <: ClassVisitor](
           ctx.addLocal(paramName, param.tpe)
       }
     }
+    lastWrittenLine = -1
     mv.visitCode()
     generateCode(funDef.body, ctx)(using mv)
     if (ctx.resolveFunc(owner, funDef.funName).getOrThrow().retType == VoidType) {
@@ -226,6 +232,7 @@ final class Backend[V <: ClassVisitor](
     val structSig = ctx.structs.apply(structName)
     val isInterface = structSig.isInterface
     val cv = mode.createVisitor(structFilePath)
+    addSourceNameIfKnown(cv, structDef.getPosition)
     var classMods = ACC_PUBLIC
     if (isInterface) {
       classMods |= ACC_INTERFACE
@@ -348,6 +355,15 @@ final class Backend[V <: ClassVisitor](
     val analysisContext = ctx.analysisContext
 
     given AnalysisContext = analysisContext
+
+    ast.getPosition.map(_.line).foreach { currentLine =>
+      if (currentLine != lastWrittenLine) {
+        val label = new Label()
+        mv.visitLabel(label)
+        mv.visitLineNumber(currentLine, label)
+        lastWrittenLine = currentLine
+      }
+    }
 
     ast match {
 
@@ -675,7 +691,7 @@ final class Backend[V <: ClassVisitor](
         mv.visitInsn(Opcodes.ATHROW)
 
       case EnclosedStat(capabilities, body) =>
-        for (capability <- capabilities){
+        for (capability <- capabilities) {
           generateCode(capability, ctx)
           RuntimeMethod.AddAllowedResource.generateCall(mv)
         }
@@ -751,6 +767,16 @@ final class Backend[V <: ClassVisitor](
       importedModules.toList.map((id, tpe) => (id.stringId, tpe))
     case _: PackageSignature => List.empty
     case _ => shouldNotHappen()
+  }
+
+  private def addSourceNameIfKnown(cv: ClassVisitor, posOpt: Option[Position]): Unit = {
+    posOpt.foreach { pos =>
+      addSourceName(cv, pos.srcCodeProviderName)
+    }
+  }
+
+  private def addSourceName(cv: ClassVisitor, srcName: String): Unit = {
+    cv.visitSource(srcName, null)
   }
 
   private def shouldNotHappen(): Nothing = assert(false)

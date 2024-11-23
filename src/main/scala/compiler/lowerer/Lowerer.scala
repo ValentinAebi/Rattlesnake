@@ -3,6 +3,7 @@ package compiler.lowerer
 import compiler.irs.Asts.*
 import compiler.analysisctx.AnalysisContext
 import compiler.pipeline.CompilerStep
+import compiler.reporting.Position
 import identifiers.IntrinsicsPackageId
 import lang.Intrinsics
 import lang.Operator.*
@@ -40,15 +41,19 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
     (loweredSources, ctx)
   }
 
-  private def lower(src: Source): Source = Source(src.defs.map(lower)).setName(src.getName)
+  private def lower(src: Source): Source = propagatePosition(src.getPosition) {
+    Source(src.defs.map(lower)).setName(src.getName)
+  }
 
-  private def lower(block: Block): Block = Block(block.stats.map(lower))
+  private def lower(block: Block): Block = propagatePosition(block.getPosition) {
+    Block(block.stats.map(lower))
+  }
 
-  private def lower(funDef: FunDef): FunDef = {
+  private def lower(funDef: FunDef): FunDef = propagatePosition(funDef.getPosition) {
     FunDef(funDef.funName, funDef.params.map(lower), funDef.optRetType, lower(funDef.body))
   }
 
-  private def lower(structDef: StructDef): StructDef = {
+  private def lower(structDef: StructDef): StructDef = propagatePosition(structDef.getPosition) {
     StructDef(
       structDef.structName,
       structDef.fields.map(lower),
@@ -57,16 +62,20 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
     )
   }
   
-  private def lower(moduleDef: ModuleDef): ModuleDef = ModuleDef(
-    moduleDef.moduleName,
-    moduleDef.imports.map(lower),
-    moduleDef.functions.map(lower)
-  )
+  private def lower(moduleDef: ModuleDef): ModuleDef = propagatePosition(moduleDef.getPosition) {
+    ModuleDef(
+      moduleDef.moduleName,
+      moduleDef.imports.map(lower),
+      moduleDef.functions.map(lower)
+    )
+  }
   
-  private def lower(packageDef: PackageDef): PackageDef = PackageDef(
-    packageDef.packageName,
-    packageDef.functions.map(lower)
-  )
+  private def lower(packageDef: PackageDef): PackageDef = propagatePosition(packageDef.getPosition) {
+    PackageDef(
+      packageDef.packageName,
+      packageDef.functions.map(lower)
+    )
+  }
 
   private def lower(constDef: ConstDef): ConstDef = constDef
 
@@ -74,29 +83,32 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
 
   private def lower(imp: Import): Import = imp
 
-  private def lower(localDef: LocalDef): LocalDef =
+  private def lower(localDef: LocalDef): LocalDef = propagatePosition(localDef.getPosition) {
     LocalDef(localDef.localName, localDef.optType, lower(localDef.rhs), localDef.isReassignable)
+  }
 
-  private def lower(varAssig: VarAssig): VarAssig = VarAssig(lower(varAssig.lhs), lower(varAssig.rhs))
+  private def lower(varAssig: VarAssig): VarAssig = propagatePosition(varAssig.getPosition) {
+    VarAssig(lower(varAssig.lhs), lower(varAssig.rhs))
+  }
 
-  private def lower(varModif: VarModif): VarAssig = {
+  private def lower(varModif: VarModif): VarAssig = propagatePosition(varModif.getPosition) {
     val VarModif(lhs, rhs, op) = varModif
     val loweredLhs = lower(lhs)
     val loweredRhs = lower(rhs)
     VarAssig(loweredLhs, BinaryOp(loweredLhs, op, loweredRhs).setType(lhs.getType))
   }
 
-  private def lower(ifThenElse: IfThenElse): IfThenElse = {
+  private def lower(ifThenElse: IfThenElse): IfThenElse = propagatePosition(ifThenElse.getPosition) {
     val lowered = IfThenElse(lower(ifThenElse.cond), lower(ifThenElse.thenBr), ifThenElse.elseBrOpt.map(lower))
     lowered.setSmartCasts(ifThenElse.getSmartCasts)
     lowered
   }
 
-  private def lower(whileLoop: WhileLoop): WhileLoop = {
+  private def lower(whileLoop: WhileLoop): WhileLoop = propagatePosition(whileLoop.getPosition) {
     WhileLoop(lower(whileLoop.cond), lower(whileLoop.body))
   }
 
-  private def lower(forLoop: ForLoop): Block = {
+  private def lower(forLoop: ForLoop): Block = propagatePosition(forLoop.getPosition) {
     val body = Block(
       forLoop.body.stats ++ forLoop.stepStats
     )
@@ -104,11 +116,15 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
     lower(Block(stats))
   }
 
-  private def lower(returnStat: ReturnStat): ReturnStat = ReturnStat(returnStat.optVal.map(lower))
+  private def lower(returnStat: ReturnStat): ReturnStat = propagatePosition(returnStat.getPosition) {
+    ReturnStat(returnStat.optVal.map(lower))
+  }
 
-  private def lower(panicStat: PanicStat): PanicStat = PanicStat(lower(panicStat.msg))
+  private def lower(panicStat: PanicStat): PanicStat = propagatePosition(panicStat.getPosition) {
+    PanicStat(lower(panicStat.msg))
+  }
 
-  private def lower(expr: Expr): Expr = {
+  private def lower(expr: Expr): Expr = propagatePosition(expr.getPosition) {
     val lowered = expr match {
       case literal: Literal => literal
       case varRef: VariableRef => varRef
@@ -211,7 +227,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
     lowered.setTypeOpt(expr.getTypeOpt)
   }
 
-  private def lower(statement: Statement): Statement = {
+  private def lower(statement: Statement): Statement = propagatePosition(statement.getPosition) {
     // call appropriate method for each type of statement
     statement match
       case expr: Expr => lower(expr)
@@ -227,7 +243,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
       case enclosedStat: EnclosedStat => lower(enclosedStat)
   }
 
-  private def lower(topLevelDef: TopLevelDef): TopLevelDef = {
+  private def lower(topLevelDef: TopLevelDef): TopLevelDef = propagatePosition(topLevelDef.getPosition) {
     topLevelDef match
       case moduleDef: ModuleDef => lower(moduleDef)
       case packageDef: PackageDef => lower(packageDef)
@@ -235,8 +251,18 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
       case constDef: ConstDef => lower(constDef)
   }
   
-  private def lower(enclosedStat: EnclosedStat): EnclosedStat = {
+  private def lower(enclosedStat: EnclosedStat): EnclosedStat = propagatePosition(enclosedStat.getPosition) {
     EnclosedStat(enclosedStat.capabilities.map(lower), lower(enclosedStat.body))
+  }
+  
+  private def propagatePosition[A <: Ast](pos: Option[Position], maxDepth: Int = 2)(ast: A): A = {
+    if (maxDepth > 0 && ast.getPosition.isEmpty){
+      ast.setPosition(pos)
+      for (child <- ast.children){
+        propagatePosition(pos, maxDepth - 1)(child)
+      }
+    }
+    ast
   }
 
 }
