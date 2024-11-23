@@ -382,6 +382,13 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           .addSpace()
         addAst(msg)
 
+      case EnclosedStat(capabilities, body) =>
+        pps
+          .add(Enclosed.str)
+          .addSpace()
+        addParenthList(capabilities)
+        addAst(body)
+
     }
   }
 

@@ -1,0 +1,33 @@
+
+package Test {
+
+    fn main(arr String){
+        val x = newregion;
+        val xs = arr@x Int[20];
+        val y = newregion;
+        val ys = arr@y Int[10];
+        enclosed(x){
+            fillArray(xs);
+            fillArray(ys);
+        };
+        printArray(xs);
+        printArray(ys);
+    }
+
+    fn fillArray(xs: mut arr Int){
+        for var i = 0; i < #xs; i += 1 {
+            xs[i] = i + 1;
+        }
+    }
+
+    fn printArray(xs: arr Int){
+        for var i = 0; i < #xs; i += 1 {
+            print(intToString(xs[i]));
+            if i < #xs-1 {
+                print(" ");
+            }
+        };
+        print("\n");
+    }
+
+}

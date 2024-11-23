@@ -224,6 +224,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
       case forLoop: ForLoop => lower(forLoop)
       case returnStat: ReturnStat => lower(returnStat)
       case panicStat: PanicStat => lower(panicStat)
+      case enclosedStat: EnclosedStat => lower(enclosedStat)
   }
 
   private def lower(topLevelDef: TopLevelDef): TopLevelDef = {
@@ -232,6 +233,10 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
       case packageDef: PackageDef => lower(packageDef)
       case structDef: StructDef => lower(structDef)
       case constDef: ConstDef => lower(constDef)
+  }
+  
+  private def lower(enclosedStat: EnclosedStat): EnclosedStat = {
+    EnclosedStat(enclosedStat.capabilities.map(lower), lower(enclosedStat.body))
   }
 
 }

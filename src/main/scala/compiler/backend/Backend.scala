@@ -674,6 +674,15 @@ final class Backend[V <: ClassVisitor](
           ConstructorFunId.stringId, s"(L$stringTypeStr;)V", false)
         mv.visitInsn(Opcodes.ATHROW)
 
+      case EnclosedStat(capabilities, body) =>
+        for (capability <- capabilities){
+          generateCode(capability, ctx)
+          RuntimeMethod.AddAllowedResource.generateCall(mv)
+        }
+        RuntimeMethod.PushFrame.generateCall(mv)
+        generateCode(body, ctx)
+        RuntimeMethod.PopFrame.generateCall(mv)
+
       case other => throw new AssertionError(s"unexpected in backend: ${other.getClass}")
     }
   }

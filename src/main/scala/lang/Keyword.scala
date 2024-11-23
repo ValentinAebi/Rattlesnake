@@ -6,6 +6,7 @@ enum Keyword(val str: String) {
   case Const extends Keyword("const")
   case Device extends Keyword("device")
   case Else extends Keyword("else")
+  case Enclosed extends Keyword("enclosed")
   case Fn extends Keyword("fn")
   case For extends Keyword("for")
   case Fs extends Keyword("fs")

@@ -9,7 +9,7 @@ import compiler.parser.TreeParsers.*
 import compiler.pipeline.CompilerStep
 import compiler.reporting.{Errors, Position}
 import identifiers.*
-import lang.Keyword.*
+import lang.Keyword.{Enclosed, *}
 import lang.Operator.*
 import lang.Types.PrimitiveType.RegionType
 import lang.Types.{ArrayType, NamedType, Type}
@@ -313,7 +313,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val regionCreation = kw(NewRegion) map (_ => RegionCreation()) setName "regionCreation"
 
   private lazy val stat: P[Statement] = {
-    exprOrAssig OR valDef OR varDef OR whileLoop OR forLoop OR ifThenElse OR returnStat OR panicStat
+    exprOrAssig OR valDef OR varDef OR whileLoop OR forLoop OR ifThenElse OR returnStat OR panicStat OR enclosedStat
   } setName "stat"
 
   private lazy val valDef = {
@@ -360,6 +360,12 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val panicStat = {
     kw(Panic).ignored ::: expr map PanicStat.apply
   } setName "panicStat"
+  
+  private lazy val enclosedStat = {
+    kw(Enclosed).ignored ::: callArgs ::: block map {
+      case args ^: body => EnclosedStat(args, body)
+    }
+  } setName "enclosedStat"
 
 
   override def apply(input: (List[PositionedToken], String)): Source = {

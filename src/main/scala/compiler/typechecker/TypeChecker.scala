@@ -412,6 +412,15 @@ final class TypeChecker(errorReporter: ErrorReporter)
         checkSubtypingConstraint(StringType, msgType, panicStat.getPosition, "panic", ctx)
         NothingType
 
+      case EnclosedStat(capabilities, body) =>
+        for (capability <- capabilities) {
+          val capabilityType = check(capability, ctx)
+          // TODO support devices, and maybe structs and arrays
+          checkSubtypingConstraint(RegionType, capabilityType, capability.getPosition, "enclosure permission", ctx)
+        }
+        check(body, ctx)
+        VoidType
+
       case modImp@ParamImport(paramName, paramType) =>
         typeMustBeKnown(paramType, ctx, modImp.getPosition)
         VoidType
@@ -599,6 +608,9 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case _: PanicStat =>
         EndStatus(Set(NothingType), true)
+
+      case EnclosedStat(_, body) =>
+        checkReturns(body)
 
       case _: (FunDef | StructDef | Param) =>
         assert(false)
