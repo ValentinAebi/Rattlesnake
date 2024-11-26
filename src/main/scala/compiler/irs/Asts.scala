@@ -281,13 +281,13 @@ object Asts {
    * Function call: `callee(args)`
    */
   final case class Call(receiverOpt: Option[Expr], function: FunOrVarId, args: List[Expr]) extends Expr {
-    private var _implicitMeTypeOpt: Option[Type] = None
+    private var _sig: Option[(NamedType, FunctionSignature)] = None
     
-    def setImplicitMeType(meType: Type): Unit = {
-      _implicitMeTypeOpt = Some(meType)
+    def resolve(receiverType: NamedType, sig: FunctionSignature): Unit = {
+      _sig = Some((receiverType, sig))
     }
     
-    def implicitMeTypeOpt: Option[Type] = _implicitMeTypeOpt
+    def getSignature: Option[(NamedType, FunctionSignature)] = _sig
     
     override def children: List[Ast] = receiverOpt.toList ++ args
   }

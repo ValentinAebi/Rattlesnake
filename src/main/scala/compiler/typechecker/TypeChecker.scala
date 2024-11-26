@@ -174,15 +174,12 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case call@Call(None, funName, args) =>
         val fallback = Some(ctx.currentEnvironment.get.currentModuleType)
-        val (meType, callType) = checkFunCall(NamedType(IntrinsicsPackageId), fallback,
-          funName, args, call.getPosition, ctx)
-        call.setImplicitMeType(meType)
-        callType
+        checkFunCall(call, NamedType(IntrinsicsPackageId), fallback, ctx)
 
       case call@Call(Some(lhs), funName, args) =>
         check(lhs, ctx) match {
           case namedType: NamedType =>
-            checkFunCall(namedType, None, funName, args, call.getPosition, ctx)._2
+            checkFunCall(call, namedType, None, ctx)
           case lhsType =>
             reportError(s"expected a module or package type, found $lhsType", lhs.getPosition)
         }
@@ -471,27 +468,28 @@ final class TypeChecker(errorReporter: ErrorReporter)
    * @return (meType, callType)
    */
   private def checkFunCall(
+                            call: Call,
                             owner: NamedType,
                             fallbackOwnerOpt: Option[NamedType],
-                            funName: FunOrVarId,
-                            args: List[Expr],
-                            pos: Option[Position],
                             ctx: TypeCheckingContext
-                          )(using Map[TypeIdentifier, StructSignature]): (Type, Type) = {
+                          )(using Map[TypeIdentifier, StructSignature]): Type = {
+    val funName = call.function
+    val args = call.args
+    val pos = call.getPosition
     ctx.resolveFunc(owner.typeName, funName) match {
       case FunctionFound(funSig) =>
         checkCallArgs(funSig.argTypes, args, ctx, pos)
-        (owner, funSig.retType)
+        call.resolve(owner, funSig)
+        funSig.retType
       case ModuleNotFound =>
         args.foreach(check(_, ctx))
         reportError(s"not found: package or module $owner", pos)
-        (UndefinedType, UndefinedType)
       case FunctionNotFound =>
         fallbackOwnerOpt.map { fallbackOwner =>
-          checkFunCall(fallbackOwner, None, funName, args, pos, ctx)
+          checkFunCall(call, fallbackOwner, None, ctx)
         }.getOrElse {
           args.foreach(check(_, ctx))
-          (owner, reportError(s"function not found: '$funName'", pos))
+          reportError(s"function not found: '$funName'", pos)
         }
     }
   }

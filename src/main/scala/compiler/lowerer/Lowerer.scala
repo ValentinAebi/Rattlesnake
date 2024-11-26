@@ -132,7 +132,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
       case packageRef: PackageRef => packageRef
       case deviceRef: DeviceRef => deviceRef
       case call: Call if call.receiverOpt.isEmpty && !Intrinsics.intrinsics.contains(call.function) =>
-        val receiver = MeRef().setTypeOpt(call.implicitMeTypeOpt)
+        val receiver = MeRef().setType(call.getSignature.get._1)
         lower(call.copy(receiverOpt = Some(receiver)))
       case call: Call => Call(call.receiverOpt.map(lower), call.function, call.args.map(lower))
       case indexing: Indexing => Indexing(lower(indexing.indexed), lower(indexing.arg))
@@ -146,7 +146,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
         /* Argument for soundness of creating a region here:
          * This creation happens only when the region is not specified in the original AST, i.e. when the array is 
          * meant to be immutable. The type of the expression is therefore an immutable array type that captures no 
-         * region, hence the region is known only by the non-terminal statements of the Sequence. */
+         * region, hence the region does not exit the code in the Sequence. */
         val region = regionOpt.getOrElse(RegionCreation())
         val arrayType = filledArrayInit.getType.asInstanceOf[ArrayType]
         val elemType = arrayType.elemType
