@@ -181,7 +181,26 @@ object Asts {
   /**
    * Parameter of a function or field of a struct
    */
-  final case class Param(paramNameOpt: Option[FunOrVarId], tpe: Type, isReassignable: Boolean) extends Ast {
+  final case class Param(
+                          paramNameOpt: Option[FunOrVarId],
+                          tpe: Type,
+                          captureDescrOpt: Option[CaptureDescr],
+                          isReassignable: Boolean
+                        ) extends Ast {
+    override def children: List[Ast] = Nil
+  }
+
+  sealed abstract class CaptureDescr extends Ast
+
+  final case class ExplicitCaptureSet(captures: List[Expr]) extends CaptureDescr {
+    override def children: List[Ast] = captures
+  }
+
+  final case class ImplicitRootCaptureSet() extends CaptureDescr {
+    override def children: List[Ast] = Nil
+  }
+
+  final case class BrandDescr() extends CaptureDescr {
     override def children: List[Ast] = Nil
   }
 
@@ -282,11 +301,11 @@ object Asts {
    */
   final case class Call(receiverOpt: Option[Expr], function: FunOrVarId, args: List[Expr]) extends Expr {
     private var _sig: Option[(NamedType, FunctionSignature)] = None
-    
+
     def resolve(receiverType: NamedType, sig: FunctionSignature): Unit = {
       _sig = Some((receiverType, sig))
     }
-    
+
     def getSignature: Option[(NamedType, FunctionSignature)] = _sig
     
     override def children: List[Ast] = receiverOpt.toList ++ args
