@@ -209,9 +209,8 @@ object AnalysisContext {
           case Some(paramName) =>
             val tpe = computeType(param.tpe)
             if (checkIsNotVoidOrNothing(tpe, param.getPosition)) {
-              if (fieldsMap.contains(paramName)) {
-                reportError(s"duplicate field: '$paramName'", param.getPosition)
-              } else {
+              if (!fieldsMap.contains(paramName)) {
+                // the absence of duplicate fields will be reported by the type-checker
                 fieldsMap.put(paramName, StructSignature.FieldInfo(tpe, param.isReassignable))
               }
             }
