@@ -4,8 +4,8 @@ import compiler.analysisctx.AnalysisContext
 import compiler.backend.CodeGenerationContext.from
 import compiler.backend.TypesConverter.numSlotsFor
 import identifiers.{FunOrVarId, TypeIdentifier}
-import lang.Types.PrimitiveType.*
-import lang.Types.{PrimitiveType, Type}
+import lang.Types.PrimitiveTypeShape.*
+import lang.Types.{PrimitiveTypeShape, TypeShape}
 import org.objectweb.asm.Label
 
 import scala.annotation.tailrec
@@ -13,7 +13,7 @@ import scala.collection.mutable
 
 final class CodeGenerationContext(
                                    val analysisContext: AnalysisContext,
-                                   locals: List[mutable.Map[FunOrVarId, (Type, Int)]],
+                                   locals: List[mutable.Map[FunOrVarId, (TypeShape, Int)]],
                                    var currLocalIdx: Int,
                                    val currentModule: TypeIdentifier
                                  ) {
@@ -24,7 +24,7 @@ final class CodeGenerationContext(
   def withNewLocalsFrame: CodeGenerationContext = {
     new CodeGenerationContext(
       analysisContext,
-      mutable.Map.empty[FunOrVarId, (Type, Int)] :: locals,
+      mutable.Map.empty[FunOrVarId, (TypeShape, Int)] :: locals,
       currLocalIdx,
       currentModule
     )
@@ -33,14 +33,14 @@ final class CodeGenerationContext(
   /**
    * Register a new local
    */
-  def addLocal(name: FunOrVarId, tpe: Type): Unit = {
+  def addLocal(name: FunOrVarId, tpe: TypeShape): Unit = {
     locals.head.put(name, (tpe, currLocalIdx))
     currLocalIdx += numSlotsFor(tpe)
   }
 
-  def getLocal(name: FunOrVarId): Option[(Type, Int)] = {
+  def getLocal(name: FunOrVarId): Option[(TypeShape, Int)] = {
 
-    @tailrec def searchLocal(remFrames: List[mutable.Map[FunOrVarId, (Type, Int)]]): Option[(Type, Int)] = {
+    @tailrec def searchLocal(remFrames: List[mutable.Map[FunOrVarId, (TypeShape, Int)]]): Option[(TypeShape, Int)] = {
       remFrames match {
         case Nil => None
         case head :: tail =>
@@ -61,7 +61,7 @@ final class CodeGenerationContext(
 object CodeGenerationContext {
 
   def from(analysisContext: AnalysisContext, currentModule: TypeIdentifier): CodeGenerationContext = {
-    new CodeGenerationContext(analysisContext, List(mutable.Map.empty[FunOrVarId, (Type, Int)]), 0, currentModule)
+    new CodeGenerationContext(analysisContext, List(mutable.Map.empty[FunOrVarId, (TypeShape, Int)]), 0, currentModule)
   }
 
 }

@@ -1,7 +1,7 @@
 package compiler.irs
 
 import compiler.reporting.Position
-import lang.Types.PrimitiveType
+import lang.Types.PrimitiveTypeShape
 import lang.{Keyword, Operator}
 
 object Tokens {

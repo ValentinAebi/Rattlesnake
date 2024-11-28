@@ -1,8 +1,8 @@
 package lang
 
 import identifiers.*
-import lang.Types.ArrayType
-import lang.Types.PrimitiveType.*
+import lang.Types.ArrayTypeShape
+import lang.Types.PrimitiveTypeShape.*
 
 object Intrinsics {
   
@@ -19,7 +19,7 @@ object Intrinsics {
     FunctionSignature(doubleToString, List(DoubleType), StringType).keyed,
     FunctionSignature(charToString, List(CharType), StringType).keyed,
     FunctionSignature(boolToString, List(BoolType), StringType).keyed,
-    FunctionSignature(toCharArray, List(StringType), ArrayType(CharType, modifiable = true)).keyed
+    FunctionSignature(toCharArray, List(StringType), ArrayTypeShape(CharType, modifiable = true)).keyed
   )
 
   extension(sig: FunctionSignature) private def keyed: (FunOrVarId, FunctionSignature) = {

@@ -2,8 +2,8 @@ package lang
 
 import identifiers.TypeIdentifier
 import lang.Operator.*
-import lang.Types.PrimitiveType.*
-import lang.Types.Type
+import lang.Types.PrimitiveTypeShape.*
+import lang.Types.TypeShape
 
 import scala.annotation.targetName
 
@@ -15,12 +15,12 @@ object Operators {
   /**
    * Signature of an unary operator
    */
-  final case class UnaryOpSignature(op: Operator, operandType: Type, retType: Type)
+  final case class UnaryOpSignature(op: Operator, operandType: TypeShape, retType: TypeShape)
 
   /**
    * Signature of a binary operator
    */
-  final case class BinaryOpSignature(leftOperandType: Type, op: Operator, rightOperandType: Type, retType: Type)
+  final case class BinaryOpSignature(leftOperandType: TypeShape, op: Operator, rightOperandType: TypeShape, retType: TypeShape)
 
   // # is treated separately
   val unaryOperators: List[UnaryOpSignature] = List(
@@ -68,19 +68,19 @@ object Operators {
   
   // Binop signature DSL implementation --------------------------------------------
 
-  private case class PartialBinop1(leftOperandType: Type, op: Operator) {
-    @targetName("andThen") infix def $(rightOperandType: Type): PartialBinop2 = {
+  private case class PartialBinop1(leftOperandType: TypeShape, op: Operator) {
+    @targetName("andThen") infix def $(rightOperandType: TypeShape): PartialBinop2 = {
       PartialBinop2(leftOperandType, op, rightOperandType)
     }
   }
 
-  private case class PartialBinop2(leftOperandType: Type, op: Operator, rightOperandType: Type) {
-    infix def is(retType: Type): BinaryOpSignature = {
+  private case class PartialBinop2(leftOperandType: TypeShape, op: Operator, rightOperandType: TypeShape) {
+    infix def is(retType: TypeShape): BinaryOpSignature = {
       BinaryOpSignature(leftOperandType, op, rightOperandType, retType)
     }
   }
 
-  extension (leftOperandType: Type) {
+  extension (leftOperandType: TypeShape) {
     @targetName("andThen") private infix def $(op: Operator): PartialBinop1 = {
       PartialBinop1(leftOperandType, op)
     }

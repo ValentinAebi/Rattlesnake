@@ -2,33 +2,32 @@ package lang
 
 import identifiers.*
 import lang.StructSignature.FieldInfo
-import lang.Types.PrimitiveType.VoidType
-import lang.Types.{NamedType, Type}
+import lang.Types.PrimitiveTypeShape.VoidType
+import lang.Types.{NamedTypeShape, Type}
 
 import java.util
 import scala.collection.mutable
 
-final case class FunctionSignature(
-                                    name: FunOrVarId,
-                                    argTypes: List[Type],
-                                    retType: Type
-                                  )
+final case class FunctionSignature(name: FunOrVarId, argTypes: List[Type], retType: Type)
 
 sealed trait TypeSignature {
   def id: TypeIdentifier
   def isInterface: Boolean
   def isModuleOrPackage: Boolean
   def functions: Map[FunOrVarId, FunctionSignature]
+  def typeOfSelectIfCapturable(sel: FunOrVarId): Option[Type]
 }
 
 sealed trait ModuleOrPackageSignature extends TypeSignature {
-  
+
   def paramImports: mutable.LinkedHashMap[FunOrVarId, Type]
   def importedPackages: mutable.LinkedHashSet[TypeIdentifier]
   def importedDevices: mutable.LinkedHashSet[Device]
-  
+
   override def isInterface: Boolean = false
   override def isModuleOrPackage: Boolean = true
+
+  override def typeOfSelectIfCapturable(sel: FunOrVarId): Option[Type] = paramImports.get(sel)
 }
 
 sealed trait StructOrModuleSignature extends TypeSignature {
@@ -56,6 +55,10 @@ final case class PackageSignature(
                                    functions: Map[FunOrVarId, FunctionSignature]
                                  ) extends ModuleOrPackageSignature {
   override def paramImports: mutable.LinkedHashMap[FunOrVarId, Type] = mutable.LinkedHashMap.empty
+  def asType: Type = NamedTypeShape(id) ^ CaptureSet((
+    importedPackages.map(PackageValue(_)) ++
+      importedDevices.map(DeviceValue(_))
+    ).toSet)
 }
 
 final case class StructSignature(
@@ -72,6 +75,9 @@ final case class StructSignature(
     FunctionSignature(ConstructorFunId, fields.map(_._2.tpe).toList, VoidType)
 
   override def isShallowMutable: Boolean = fields.exists(_._2.isReassignable)
+
+  override def typeOfSelectIfCapturable(sel: FunOrVarId): Option[Type] =
+    fields.get(sel).filter(!_.isReassignable).map(_.tpe)
 }
 
 final case class DeviceSignature(
@@ -80,8 +86,9 @@ final case class DeviceSignature(
                                 ) extends TypeSignature {
 
   override def isInterface: Boolean = false
-
   override def isModuleOrPackage: Boolean = false
+  
+  def asType: Type = NamedTypeShape(id) ^ CaptureSet.singletonOfRoot
 }
 
 object StructSignature {

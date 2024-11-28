@@ -4,7 +4,7 @@ import compiler.analysisctx.AnalysisContext
 import compiler.backend.DescriptorsCreator.descriptorForType
 import identifiers.TypeIdentifier
 import lang.Types.*
-import lang.Types.PrimitiveType.DoubleType
+import lang.Types.PrimitiveTypeShape.DoubleType
 import lang.{StructSignature, TypeSignature, Types}
 import org.objectweb.asm
 import org.objectweb.asm.Opcodes.*
@@ -19,50 +19,50 @@ object TypesConverter {
     tpe.getOpcode(intOpcode)
   }
 
-  def opcodeFor(tpe: Types.Type, intOpcode: Int, refOpcode: => Int): Int = {
+  def opcodeFor(tpe: Types.TypeShape, intOpcode: Int, refOpcode: => Int): Int = {
     convertToAsmType(tpe).map(safeGetOpcode(_, intOpcode)).getOrElse(refOpcode)
   }
 
-  def convertToAsmType(tpe: Types.Type): Option[asm.Type] = {
+  def convertToAsmType(tpe: Types.TypeShape): Option[asm.Type] = {
     tpe match
-      case PrimitiveType.IntType => INT_TYPE.toSome
-      case PrimitiveType.DoubleType => DOUBLE_TYPE.toSome
-      case PrimitiveType.CharType => CHAR_TYPE.toSome
-      case PrimitiveType.BoolType => BOOLEAN_TYPE.toSome
-      case PrimitiveType.RegionType => INT_TYPE.toSome
-      case PrimitiveType.VoidType => VOID_TYPE.toSome
-      case PrimitiveType.NothingType => VOID_TYPE.toSome
-      case _: (PrimitiveType.StringType.type | NamedType | ArrayType | UnionType) => None
-      case Types.UndefinedType => assert(false)
+      case PrimitiveTypeShape.IntType => INT_TYPE.toSome
+      case PrimitiveTypeShape.DoubleType => DOUBLE_TYPE.toSome
+      case PrimitiveTypeShape.CharType => CHAR_TYPE.toSome
+      case PrimitiveTypeShape.BoolType => BOOLEAN_TYPE.toSome
+      case PrimitiveTypeShape.RegionType => INT_TYPE.toSome
+      case PrimitiveTypeShape.VoidType => VOID_TYPE.toSome
+      case PrimitiveTypeShape.NothingType => VOID_TYPE.toSome
+      case _: (PrimitiveTypeShape.StringType.type | NamedTypeShape | ArrayTypeShape | UnionTypeShape) => None
+      case Types.UndefinedTypeShape => assert(false)
   }
 
-  def convertToAsmTypeCode(tpe: Types.Type): Option[Int] = {
+  def convertToAsmTypeCode(tpe: Types.TypeShape): Option[Int] = {
     tpe match
-      case PrimitiveType.IntType => Opcodes.T_INT.toSome
-      case PrimitiveType.DoubleType => Opcodes.T_DOUBLE.toSome
-      case PrimitiveType.CharType => Opcodes.T_CHAR.toSome
-      case PrimitiveType.BoolType => Opcodes.T_BOOLEAN.toSome
-      case PrimitiveType.RegionType => Opcodes.T_INT.toSome
+      case PrimitiveTypeShape.IntType => Opcodes.T_INT.toSome
+      case PrimitiveTypeShape.DoubleType => Opcodes.T_DOUBLE.toSome
+      case PrimitiveTypeShape.CharType => Opcodes.T_CHAR.toSome
+      case PrimitiveTypeShape.BoolType => Opcodes.T_BOOLEAN.toSome
+      case PrimitiveTypeShape.RegionType => Opcodes.T_INT.toSome
       case _ => None
   }
   
-  def internalNameOf(tpe: Types.Type)(using ctx: AnalysisContext): String = {
+  def internalNameOf(tpe: Types.TypeShape)(using ctx: AnalysisContext): String = {
     tpe match
-      case PrimitiveType.IntType => "I"
-      case PrimitiveType.DoubleType => "D"
-      case PrimitiveType.CharType => "C"
-      case PrimitiveType.BoolType => "Z"
-      case PrimitiveType.RegionType => "I"
-      case PrimitiveType.StringType => "java/lang/String"
-      case PrimitiveType.VoidType => "V"
-      case PrimitiveType.NothingType => "V"
-      case NamedType(typeName) if !ctx.resolveType(typeName).get.isInterface => s"$typeName"
-      case ArrayType(elemType, _) => s"[${descriptorForType(elemType)}"
-      case NamedType(_) | UnionType(_) => "java/lang/Object"
-      case UndefinedType => assert(false)
+      case PrimitiveTypeShape.IntType => "I"
+      case PrimitiveTypeShape.DoubleType => "D"
+      case PrimitiveTypeShape.CharType => "C"
+      case PrimitiveTypeShape.BoolType => "Z"
+      case PrimitiveTypeShape.RegionType => "I"
+      case PrimitiveTypeShape.StringType => "java/lang/String"
+      case PrimitiveTypeShape.VoidType => "V"
+      case PrimitiveTypeShape.NothingType => "V"
+      case NamedTypeShape(typeName) if !ctx.resolveType(typeName).get.isInterface => s"$typeName"
+      case ArrayTypeShape(elemType, _) => s"[${descriptorForType(elemType)}"
+      case NamedTypeShape(_) | UnionTypeShape(_) => "java/lang/Object"
+      case UndefinedTypeShape => assert(false)
   }
 
-  def numSlotsFor(tpe: Types.Type): Int = {
+  def numSlotsFor(tpe: Types.TypeShape): Int = {
     tpe match
       case DoubleType => 2
       case _ => 1

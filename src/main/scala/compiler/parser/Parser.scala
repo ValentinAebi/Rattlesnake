@@ -1,19 +1,18 @@
 package compiler.parser
 
-import compiler.pipeline.CompilationStep.Parsing
-import compiler.reporting.Errors.{Err, ErrorReporter, Fatal}
 import compiler.irs.Asts.*
 import compiler.irs.Tokens.*
 import compiler.parser.ParseTree.^:
 import compiler.parser.TreeParsers.*
+import compiler.pipeline.CompilationStep.Parsing
 import compiler.pipeline.CompilerStep
+import compiler.reporting.Errors.{ErrorReporter, Fatal}
 import compiler.reporting.{Errors, Position}
 import identifiers.*
 import lang.Keyword.{Enclosed, *}
 import lang.Operator.*
-import lang.Types.PrimitiveType.RegionType
-import lang.Types.{ArrayType, NamedType, Type}
-import lang.{Keyword, Operator, Operators, Types}
+import lang.Types.{ArrayTypeShape, NamedTypeShape, TypeShape}
+import lang.*
 
 import scala.compiletime.uninitialized
 
@@ -115,13 +114,13 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "moduleDef"
 
   private lazy val funDef = {
-    kw(Fn).ignored ::: lowName ::: openParenth ::: repeatWithSep(param, comma) ::: closeParenth ::: opt(-> ::: tpe) ::: block map {
+    kw(Fn).ignored ::: lowName ::: openParenth ::: repeatWithSep(param, comma) ::: closeParenth ::: opt(-> ::: typeTree) ::: block map {
       case funName ^: params ^: optRetType ^: body =>
         FunDef(funName, params, optRetType, body)
     }
   } setName "funDef"
 
-  private lazy val moduleImport = lowName ::: colon ::: tpe map {
+  private lazy val moduleImport = lowName ::: colon ::: typeTree map {
     case paramId ^: paramType => ParamImport(paramId, paramType)
   } setName "moduleImport"
 
@@ -129,14 +128,14 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     kw(Package).ignored ::: highName map (PackageImport(_))
   } setName "packageImport"
 
-  private lazy val deviceImport = kw(Device).ignored ::: device map {
+  private lazy val deviceImport = kw(Keyword.Device).ignored ::: device map {
     device => DeviceImport(device)
   } setName "deviceImport"
 
   private lazy val importTree = moduleImport OR packageImport OR deviceImport
 
   private lazy val param = {
-    opt(kw(Var)) ::: opt(lowName ::: colon) ::: tpe map {
+    opt(kw(Var)) ::: opt(lowName ::: colon) ::: typeTree map {
       case optVar ^: name ^: tpe =>
         Param(name, tpe, optVar.isDefined)
     }
@@ -163,29 +162,63 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "constExprLiteralValue"
 
   private lazy val constDef = {
-    kw(Const).ignored ::: lowName ::: opt(colon ::: tpe) ::: assig ::: constExprLiteralValue map {
+    kw(Const).ignored ::: lowName ::: opt(colon ::: typeTree) ::: assig ::: constExprLiteralValue map {
       case name ^: tpeOpt ^: value => ConstDef(name, tpeOpt, value)
     }
   } setName "constDef"
 
   private lazy val noParenthType = recursive {
-    atomicType OR arrayType
+    primOrNamedType OR arrayType
   } setName "noParenthType"
 
-  private lazy val tpe: P[Type] = recursive {
-    noParenthType OR (openParenth ::: tpe ::: closeParenth)
-  } setName "tpe"
-
-  private lazy val atomicType = highName map {
-    typeName => {
-      val primTypeOpt = Types.primTypeFor(typeName)
-      primTypeOpt.getOrElse(NamedType(typeName))
+  private lazy val typeTree: P[TypeTree] = recursive {
+    noParenthType OR (openParenth ::: typeTree ::: closeParenth)
+  } setName "typeTree"
+  
+  private lazy val varRef = lowName map (VariableRef(_))
+  
+  private lazy val paths = recursive {
+    (me OR varRef) ::: repeat(dot ::: lowName) map {
+      case root ^: selects => selects.foldLeft[Expr](root)(Select(_, _))
     }
-  } setName "atomicType"
+  } setName "paths"
+
+  private lazy val capturableExpr = recursive {
+    pkgRef OR deviceRef OR paths
+  } setName "capturableExpr"
+
+  private lazy val captureSet = recursive {
+    openBrace ::: repeatWithSep(capturableExpr, comma) ::: closeBrace map {
+      case captured => ExplicitCaptureSetTree(captured)
+    }
+  } setName "captureSet"
+
+  private lazy val brand = {
+    op(QuestionMark) map (_ => BrandTree())
+  } setName "brand"
+
+  private lazy val captureDescr: P[CaptureDescrTree] = recursive {
+    captureSet OR brand
+  } setName "captureDescr"
+  
+  private lazy val maybeCaptureDescr: P[Option[CaptureDescrTree]] = recursive {
+    opt(op(Hat) ::: opt(captureDescr)) map { maybeHatAndDescr =>
+      maybeHatAndDescr.map {
+        case _ ^: descrOpt => descrOpt.getOrElse(ImplicitRootCaptureSetTree())
+      }
+    }
+  } setName "maybeCaptureDescr"
+
+  private lazy val primOrNamedType = highName ::: maybeCaptureDescr map {
+    case typeName ^: cdOpt => {
+      val primTypeOpt = Types.primTypeFor(typeName).map(PrimitiveTypeTree(_, cdOpt))
+      primTypeOpt.getOrElse(NamedTypeTree(typeName, cdOpt))
+    }
+  } setName "primOrNamedType"
 
   private lazy val arrayType = recursive {
-    opt(kw(Mut)) ::: kw(Arr).ignored ::: tpe map {
-      case mutOpt ^: tp => ArrayType(tp, mutOpt.isDefined)
+    opt(kw(Mut)) ::: kw(Arr).ignored ::: maybeCaptureDescr ::: typeTree map {
+      case mutOpt ^: cdOpt ^: tp => ArrayTypeTree(tp, cdOpt, mutOpt.isDefined)
     }
   } setName "arrayType"
 
@@ -233,7 +266,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   private lazy val binopArg = recursive {
     (noBinopExpr OR mutPossiblyFilledArrayInit OR arrayInit OR structOrModuleInstantiation OR regionCreation)
-      ::: opt((kw(As) OR kw(Is)) ::: tpe
+      ::: opt((kw(As) OR kw(Is)) ::: typeTree
     ) map {
       case expression ^: None => expression
       case expression ^: Some(As ^: tp) => Cast(expression, tp)
@@ -262,7 +295,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "varRefOrIntrinsicCall"
 
   private lazy val atomicExpr = recursive {
-    varRefOrIntrinsicCall OR me OR pkgRef OR literalValue OR filledArrayInit OR parenthesizedExpr
+    varRefOrIntrinsicCall OR me OR pkgRef OR deviceRef OR literalValue OR filledArrayInit OR parenthesizedExpr
   } setName "atomicExpr"
 
   private lazy val selectOrIndexingChain = recursive {
@@ -279,7 +312,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val parenthesizedExpr = recursive {
     openParenth ::: expr ::: closeParenth
   } setName "parenthesizedExpr"
-  
+
   private lazy val mutPossiblyFilledArrayInit = recursive {
     kw(Mut).ignored ::: (arrayInit OR (at ::: expr ::: filledArrayInit)) map {
       case arrayInit: ArrayInit =>
@@ -292,7 +325,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "mutPossiblyFilledArrayInit"
 
   private lazy val arrayInit = recursive {
-    kw(Arr).ignored ::: at ::: expr ::: tpe ::: openingBracket ::: expr ::: closingBracket map {
+    kw(Arr).ignored ::: at ::: expr ::: typeTree ::: openingBracket ::: expr ::: closingBracket map {
       case region ^: elemType ^: size =>
         ArrayInit(region, elemType, size)
     }
@@ -317,13 +350,13 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "stat"
 
   private lazy val valDef = {
-    kw(Val).ignored ::: lowName ::: opt(colon ::: tpe) ::: assig ::: expr map {
+    kw(Val).ignored ::: lowName ::: opt(colon ::: typeTree) ::: assig ::: expr map {
       case valName ^: optType ^: rhs => LocalDef(valName, optType, rhs, isReassignable = false)
     }
   } setName "valDef"
 
   private lazy val varDef = {
-    kw(Var).ignored ::: lowName ::: opt(colon ::: tpe) ::: assig ::: expr map {
+    kw(Var).ignored ::: lowName ::: opt(colon ::: typeTree) ::: assig ::: expr map {
       case varName ^: optType ^: rhs => LocalDef(varName, optType, rhs, isReassignable = true)
     }
   } setName "varDef"
@@ -360,7 +393,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val panicStat = {
     kw(Panic).ignored ::: expr map PanicStat.apply
   } setName "panicStat"
-  
+
   private lazy val enclosedStat = {
     kw(Enclosed).ignored ::: callArgs ::: block map {
       case args ^: body => EnclosedStat(args, body)

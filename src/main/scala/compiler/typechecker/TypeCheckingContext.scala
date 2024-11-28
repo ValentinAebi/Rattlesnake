@@ -1,15 +1,15 @@
 package compiler.typechecker
 
+import compiler.analysisctx.AnalysisContext
+import compiler.irs.Asts.{Expr, Indexing, Select, VariableRef}
 import compiler.pipeline.CompilationStep.TypeChecking
 import compiler.reporting.Errors.{ErrorReporter, Warning}
-import compiler.irs.Asts.{Expr, Indexing, Select, VariableRef}
+import compiler.reporting.{Errors, Position}
 import compiler.typechecker.TypeCheckingContext.{LocalInfo, LocalUsesCollector}
 import identifiers.{FunOrVarId, TypeIdentifier}
-import compiler.analysisctx.AnalysisContext
-import compiler.reporting.{Errors, Position}
-import lang.Types.PrimitiveType.{NothingType, VoidType}
-import lang.Types.{NamedType, Type}
-import lang.{FunctionSignature, Keyword}
+import lang.Types.PrimitiveTypeShape.{NothingType, VoidType}
+import lang.Types.{NamedTypeShape, Type, TypeShape, UndefinedTypeShape}
+import lang.*
 
 import scala.collection.mutable
 
@@ -27,7 +27,7 @@ final case class TypeCheckingContext(
   /**
    * @return a copy of this with empty locals map
    */
-  def copyForNewFunction(expectedRetType: Type): TypeCheckingContext =
+  def copyForNewFunction: TypeCheckingContext =
     copy(locals = mutable.Map.empty)
 
   /**
@@ -37,7 +37,7 @@ final case class TypeCheckingContext(
     copy(locals = mutable.Map.from(locals))
 
   // TODO keep smartcasts on vars, until reassignment, and re-enable them on loops
-  def copyWithSmartCasts(smartCasts: Map[FunOrVarId, Type]): TypeCheckingContext = {
+  def copyWithSmartCasts(smartCasts: Map[FunOrVarId, TypeShape]): TypeCheckingContext = {
     copy(locals = locals.map {
       case (id, info) => id -> info.copy(tpe = smartCasts.getOrElse(id, info.tpe))
     })
@@ -83,6 +83,35 @@ final case class TypeCheckingContext(
         // defPos and declHasTypeAnnot are never used for constants, as long as constants can only be of primitive types
         .map(tpe => LocalInfo(name, tpe, isReassignable = false, defPos = None, declHasTypeAnnot = false))
     )
+  }
+  
+  def lookup(value: CapturableValue): Type = value match {
+    case PackageValue(typeIdentifier) =>
+      packages.get(typeIdentifier)
+        .map(_.asType)
+        .getOrElse(UndefinedTypeShape)
+    case DeviceValue(device) =>
+      device.sig.asType
+    case FunctionParamValue(paramId) =>
+      getLocalOnly(paramId).map(_.tpe).getOrElse(UndefinedTypeShape)
+    case LocalVarValue(varId) =>
+      getLocalOnly(varId).map(_.tpe).getOrElse(UndefinedTypeShape)
+    case MeValue() =>
+      currentEnvironment.map(_.currentModuleType).getOrElse(UndefinedTypeShape)
+    case SelectValue(root, field) =>
+      lookup(root) match {
+        case NamedTypeShape(typeName) =>
+          resolveType(typeName)
+            .flatMap(_.typeOfSelectIfCapturable(field))
+            .getOrElse(UndefinedTypeShape)
+        case _ => UndefinedTypeShape
+      }
+    case value: AnonymousValue =>
+      UndefinedTypeShape
+    case RootCapValue =>
+      UndefinedTypeShape
+    case value: UndefinedValue =>
+      UndefinedTypeShape
   }
 
   def localIsQueried(localId: FunOrVarId): Unit = {

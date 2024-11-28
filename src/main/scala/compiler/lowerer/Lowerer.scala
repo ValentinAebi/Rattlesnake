@@ -7,8 +7,8 @@ import compiler.reporting.Position
 import identifiers.IntrinsicsPackageId
 import lang.Intrinsics
 import lang.Operator.*
-import lang.Types.PrimitiveType.*
-import lang.Types.{ArrayType, NamedType, PrimitiveType, UndefinedType}
+import lang.Types.PrimitiveTypeShape.*
+import lang.Types.{ArrayTypeShape, NamedTypeShape, PrimitiveTypeShape, UndefinedTypeShape}
 
 /**
  * Lowering replaces (this list may not be complete):
@@ -148,7 +148,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
          * meant to be immutable. The type of the expression is therefore an immutable array type that captures no 
          * region, hence the region does not exit the code in the Sequence. */
         val region = regionOpt.getOrElse(RegionCreation())
-        val arrayType = filledArrayInit.getType.asInstanceOf[ArrayType]
+        val arrayType = filledArrayInit.getType.asInstanceOf[ArrayTypeShape]
         val elemType = arrayType.elemType
         val arrValId = uniqueIdGenerator.next()
         val arrValRef = VariableRef(arrValId).setType(arrayType)
@@ -156,7 +156,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
         // TODO the type of the temporary variable should capture the region (for consistency)
         val arrayValDefinition = LocalDef(arrValId, Some(arrayType), arrInit, isReassignable = false)
         val arrElemAssigStats = arrayElems.map(lower).zipWithIndex.map {
-          (elem, idx) => VarAssig(Indexing(arrValRef, IntLit(idx)).setType(UndefinedType), elem)
+          (elem, idx) => VarAssig(Indexing(arrValRef, IntLit(idx)).setType(UndefinedTypeShape), elem)
         }
         Sequence(arrayValDefinition :: arrElemAssigStats, arrValRef)
         

@@ -6,7 +6,7 @@ import compiler.irs.Tokens.*
 import compiler.lexer.Matchers.*
 import compiler.pipeline.{CompilationStep, CompilerStep}
 import compiler.reporting.Position
-import lang.Types.PrimitiveType
+import lang.Types.PrimitiveTypeShape
 import lang.{Keyword, Operator}
 
 import scala.annotation.tailrec

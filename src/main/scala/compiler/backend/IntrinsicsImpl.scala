@@ -4,7 +4,7 @@ import compiler.analysisctx.AnalysisContext
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
 import compiler.irs.Asts.Expr
 import identifiers.{FunOrVarId, TypeIdentifier}
-import lang.Types.PrimitiveType.*
+import lang.Types.PrimitiveTypeShape.*
 import lang.{Intrinsics, StructSignature}
 import org.objectweb.asm.{MethodVisitor, Opcodes}
 

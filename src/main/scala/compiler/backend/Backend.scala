@@ -13,8 +13,8 @@ import compiler.reporting.Position
 import identifiers.*
 import lang.*
 import lang.Operator.*
-import lang.Types.PrimitiveType.*
-import lang.Types.{ArrayType, NamedType, PrimitiveType, UnionType}
+import lang.Types.PrimitiveTypeShape.*
+import lang.Types.{ArrayTypeShape, NamedTypeShape, PrimitiveTypeShape, UnionTypeShape}
 import org.objectweb.asm
 import org.objectweb.asm.*
 import org.objectweb.asm.Opcodes.*
@@ -144,7 +144,7 @@ final class Backend[V <: ClassVisitor](
     cv.visit(javaVersionCode, ACC_PUBLIC | ACC_FINAL, modOrPkg.name.stringId, null, objectTypeStr, null)
     val constructorVisibility = if modOrPkg.isPackage then ACC_PRIVATE else ACC_PUBLIC
     addConstructor(cv, constructorVisibility, modOrPkgSig)
-    val pkgTypeDescr = descriptorForType(NamedType(modOrPkg.name))
+    val pkgTypeDescr = descriptorForType(NamedTypeShape(modOrPkg.name))
     if (modOrPkg.isInstanceOf[PackageDef]) {
       addInstanceFieldAndInitializer(modOrPkg, cv, pkgTypeDescr)
     }
@@ -152,7 +152,7 @@ final class Backend[V <: ClassVisitor](
       cv.visitField(ACC_PRIVATE, varId.stringId, descriptorForType(moduleType), null, null)
     }
     for func <- modOrPkg.functions do {
-      val desc = descriptorForFunc(func.signature)
+      val desc = descriptorForFunc(func.computeSignatureUnsafe)
       val mv = cv.visitMethod(ACC_PUBLIC, func.funName.stringId, desc, null, null)
       addFunction(modOrPkg.name, func, mv, ctx)
     }
@@ -188,7 +188,7 @@ final class Backend[V <: ClassVisitor](
 
   private def addFunction(owner: TypeIdentifier, funDef: FunDef, mv: MethodVisitor, analysisContext: AnalysisContext): Unit = {
     val ctx = CodeGenerationContext.from(analysisContext, owner)
-    ctx.addLocal(MeVarId, NamedType(owner))
+    ctx.addLocal(MeVarId, NamedTypeShape(owner))
     val unnamedParamIdx = new AtomicInteger(0)
     for param <- funDef.params do {
       param.paramNameOpt match {
@@ -258,7 +258,7 @@ final class Backend[V <: ClassVisitor](
     mode.terminate(cv, structFilePath, errorReporter)
   }
 
-  private def generateGetter(structName: TypeIdentifier, fld: FunOrVarId, fldType: Types.Type,
+  private def generateGetter(structName: TypeIdentifier, fld: FunOrVarId, fldType: Types.TypeShape,
                              fieldDescr: String, cv: ClassVisitor, genImplementation: Boolean)
                             (using AnalysisContext): Unit = {
     val getterDescriptor = descriptorForFunc(FunctionSignature(fld, List.empty, fldType))
@@ -278,10 +278,10 @@ final class Backend[V <: ClassVisitor](
     getterVisitor.visitEnd()
   }
 
-  private def generateSetter(structName: TypeIdentifier, fld: FunOrVarId, fldType: Types.Type,
+  private def generateSetter(structName: TypeIdentifier, fld: FunOrVarId, fldType: Types.TypeShape,
                              fieldDescr: String, cv: ClassVisitor, genImplementation: Boolean)
                             (using AnalysisContext): Unit = {
-    val setterDescriptor = descriptorForFunc(FunctionSignature(fld, List(fldType), PrimitiveType.VoidType))
+    val setterDescriptor = descriptorForFunc(FunctionSignature(fld, List(fldType), PrimitiveTypeShape.VoidType))
     var modifiers = ACC_PUBLIC
     if (!genImplementation) {
       modifiers |= ACC_ABSTRACT
@@ -397,10 +397,10 @@ final class Backend[V <: ClassVisitor](
       }
 
       case MeRef() =>
-        mv.visitIntInsn(opcodeFor(NamedType(ctx.currentModule), Opcodes.ILOAD, Opcodes.ALOAD), 0)
+        mv.visitIntInsn(opcodeFor(NamedTypeShape(ctx.currentModule), Opcodes.ILOAD, Opcodes.ALOAD), 0)
 
       case PackageRef(name) =>
-        val packageShapeType = NamedType(name)
+        val packageShapeType = NamedTypeShape(name)
         val internalName = internalNameOf(packageShapeType)
         val descr = descriptorForType(packageShapeType)
         mv.visitFieldInsn(Opcodes.GETSTATIC, internalName, packageInstanceName, descr)
@@ -420,7 +420,7 @@ final class Backend[V <: ClassVisitor](
           generateCode(arg, ctx)
         }
         val recvInternalName = internalNameOf(receiver.getType)
-        val receiverTypeName = receiver.getType.asInstanceOf[NamedType].typeName
+        val receiverTypeName = receiver.getType.asInstanceOf[NamedTypeShape].typeName
         val funDescr = descriptorForFunc(ctx.resolveFunc(receiverTypeName, funName).getOrThrow())
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, recvInternalName, funName.stringId, funDescr, false)
       }
@@ -428,7 +428,7 @@ final class Backend[V <: ClassVisitor](
       case Indexing(indexed, arg) =>
         generateCode(indexed, ctx)
         generateCode(arg, ctx)
-        val elemType = indexed.getType.asInstanceOf[ArrayType].elemType
+        val elemType = indexed.getType.asInstanceOf[ArrayTypeShape].elemType
         val opcode = opcodeFor(elemType, Opcodes.IALOAD, Opcodes.AALOAD)
         mv.visitInsn(opcode)
 
@@ -436,12 +436,12 @@ final class Backend[V <: ClassVisitor](
         generateCode(region, ctx)
         generateCode(size, ctx)
         elemType match {
-          case _: (PrimitiveType.StringType.type | NamedType | ArrayType | UnionType) =>
+          case _: (PrimitiveTypeShape.StringType.type | NamedTypeShape | ArrayTypeShape | UnionTypeShape) =>
             mv.visitTypeInsn(Opcodes.ANEWARRAY, internalNameOf(elemType))
-          case _: Types.PrimitiveType =>
+          case _: Types.PrimitiveTypeShape =>
             val elemTypeCode = convertToAsmTypeCode(elemType).get
             mv.visitIntInsn(Opcodes.NEWARRAY, elemTypeCode)
-          case Types.UndefinedType => shouldNotHappen()
+          case Types.UndefinedTypeShape => shouldNotHappen()
         }
         mv.visitInsn(Opcodes.DUP_X1)
         mv.visitInsn(Opcodes.SWAP)
@@ -472,7 +472,7 @@ final class Backend[V <: ClassVisitor](
             mv.visitInsn(Opcodes.INEG)
           case Minus if operand.getType == DoubleType =>
             mv.visitInsn(Opcodes.DNEG)
-          case Sharp if operand.getType.isInstanceOf[ArrayType] =>
+          case Sharp if operand.getType.isInstanceOf[ArrayTypeShape] =>
             mv.visitInsn(Opcodes.ARRAYLENGTH)
           case Sharp if operand.getType == StringType =>
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, stringTypeStr, "length", "()I", false)
@@ -514,7 +514,7 @@ final class Backend[V <: ClassVisitor](
            */
           val trueLabel = new Label()
           val endLabel = new Label()
-          val opcode = if tpe.isInstanceOf[NamedType] then Opcodes.IF_ACMPEQ else Opcodes.IF_ICMPEQ
+          val opcode = if tpe.isInstanceOf[NamedTypeShape] then Opcodes.IF_ACMPEQ else Opcodes.IF_ICMPEQ
           mv.visitJumpInsn(opcode, trueLabel)
           mv.visitInsn(Opcodes.ICONST_0)
           mv.visitJumpInsn(Opcodes.GOTO, endLabel)
@@ -576,7 +576,7 @@ final class Backend[V <: ClassVisitor](
 
       case Select(lhs, selected) =>
         generateCode(lhs, ctx)
-        val typeName = lhs.getType.asInstanceOf[NamedType].typeName
+        val typeName = lhs.getType.asInstanceOf[NamedTypeShape].typeName
         val fieldType =
           analysisContext.structs.get(typeName).map(_.fields.apply(selected).tpe)
             .getOrElse(analysisContext.modules.apply(typeName).paramImports.apply(selected))
@@ -603,7 +603,7 @@ final class Backend[V <: ClassVisitor](
             genCheckCanModifyStackTop(mv)
             generateCode(arg, ctx)
             generateCode(rhs, ctx)
-            val elemType = indexed.getType.asInstanceOf[ArrayType].elemType
+            val elemType = indexed.getType.asInstanceOf[ArrayTypeShape].elemType
             mv.visitInsn(opcodeFor(elemType, Opcodes.IASTORE, Opcodes.AASTORE))
 
           // x.y = ...
@@ -611,11 +611,11 @@ final class Backend[V <: ClassVisitor](
             generateCode(ownerStruct, ctx)
             genCheckCanModifyStackTop(mv)
             generateCode(rhs, ctx)
-            val ownerTypeName = ownerStruct.getType.asInstanceOf[NamedType].typeName
+            val ownerTypeName = ownerStruct.getType.asInstanceOf[NamedTypeShape].typeName
             val structSig = ctx.structs.apply(ownerTypeName)
             val fieldType = structSig.fields.apply(fieldName).tpe
             if (structSig.isInterface) {
-              val setterSig = FunctionSignature(fieldName, List(fieldType), PrimitiveType.VoidType)
+              val setterSig = FunctionSignature(fieldName, List(fieldType), PrimitiveTypeShape.VoidType)
               val setterDescriptor = descriptorForFunc(setterSig)
               mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, ownerTypeName.stringId, fieldName.stringId, setterDescriptor, true)
             } else {
@@ -749,7 +749,7 @@ final class Backend[V <: ClassVisitor](
     mv.visitLabel(endLabel)
   }
 
-  private def generateSmartCasts(smartCasts: Map[FunOrVarId, Types.Type], ctx: CodeGenerationContext)
+  private def generateSmartCasts(smartCasts: Map[FunOrVarId, Types.TypeShape], ctx: CodeGenerationContext)
                                 (using mv: MethodVisitor): Unit = {
     for (varId, destType) <- smartCasts do {
       // typechecker has already checked that varId is not a constant
@@ -760,7 +760,7 @@ final class Backend[V <: ClassVisitor](
     }
   }
 
-  private def constructorParameters(typeSig: TypeSignature): List[(String, Types.Type)] = typeSig match {
+  private def constructorParameters(typeSig: TypeSignature): List[(String, Types.TypeShape)] = typeSig match {
     case StructSignature(name, fields, directSupertypes, isInterface) =>
       fields.toList.map((id, infos) => (id.stringId, infos.tpe))
     case ModuleSignature(name, importedModules, importedPackages, importedDevices, functions) =>

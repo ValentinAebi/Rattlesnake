@@ -3,8 +3,8 @@ package compiler.irs
 import compiler.reporting.Position
 import identifiers.*
 import lang.Types.*
-import lang.Types.PrimitiveType.*
-import lang.{Device, FunctionSignature, Keyword, Operator, TypeConversion}
+import lang.Types.PrimitiveTypeShape.*
+import lang.*
 
 object Asts {
 
@@ -72,7 +72,7 @@ object Asts {
     /**
      * See [[getTypeOpt]]
      */
-    final def getType: Type = {
+    def getType: Type = {
       getTypeOpt match
         case Some(tpe) => tpe
         case None => throw new NoSuchElementException(s"type missing in $this")
@@ -109,23 +109,30 @@ object Asts {
   }
 
   sealed abstract class TopLevelDef extends Ast
-  
+
   sealed trait TypeDefTree extends TopLevelDef {
     def name: TypeIdentifier
+
     def directSupertypes: Seq[TypeIdentifier]
+
     def isInterface: Boolean
   }
-  
+
   sealed trait ModuleOrPackageDefTree extends TypeDefTree {
     def functions: List[FunDef]
+
     def isPackage: Boolean
   }
-  
+
   final case class PackageDef(packageName: TypeIdentifier, functions: List[FunDef]) extends ModuleOrPackageDefTree {
     override def name: TypeIdentifier = packageName
+
     override def directSupertypes: Seq[TypeIdentifier] = Nil
+
     override def isInterface: Boolean = false
+
     override def children: List[Ast] = functions
+
     override def isPackage: Boolean = true
   }
 
@@ -135,16 +142,20 @@ object Asts {
                               functions: List[FunDef]
                             ) extends ModuleOrPackageDefTree {
     override def name: TypeIdentifier = moduleName
+
     override def directSupertypes: Seq[TypeIdentifier] = Nil
+
     override def isInterface: Boolean = false
+
     override def children: List[Ast] = imports ++ functions
+
     override def isPackage: Boolean = false
   }
 
   sealed trait Import extends Ast
 
-  final case class ParamImport(paramId: FunOrVarId, paramType: Type) extends Import {
-    override def children: List[Ast] = Nil
+  final case class ParamImport(paramId: FunOrVarId, paramType: TypeTree) extends Import {
+    override def children: List[Ast] = List(paramType)
   }
 
   final case class PackageImport(packageId: TypeIdentifier) extends Import {
@@ -166,16 +177,23 @@ object Asts {
                               isInterface: Boolean
                             ) extends TypeDefTree {
     override def name: TypeIdentifier = structName
+
     override def children: List[Ast] = fields
   }
 
   /**
    * Function definition
    */
-  final case class FunDef(funName: FunOrVarId, params: List[Param], optRetType: Option[Type], body: Block) extends Ast {
-    val signature: FunctionSignature = FunctionSignature(funName, params.map(_.tpe), optRetType.getOrElse(VoidType))
-
-    override def children: List[Ast] = params :+ body
+  final case class FunDef(funName: FunOrVarId, params: List[Param], optRetType: Option[TypeTree], body: Block) extends Ast {
+    private var _signature: Option[FunctionSignature] = None
+    
+    def setSignature(sig: FunctionSignature): Unit = {
+      _signature = Some(sig)
+    }
+    
+    def getSignature: Option[FunctionSignature] = _signature
+    
+    override def children: List[Ast] = params ++ optRetType.toList :+ body
   }
 
   /**
@@ -183,32 +201,17 @@ object Asts {
    */
   final case class Param(
                           paramNameOpt: Option[FunOrVarId],
-                          tpe: Type,
-                          captureDescrOpt: Option[CaptureDescr],
+                          tpe: TypeTree,
                           isReassignable: Boolean
                         ) extends Ast {
-    override def children: List[Ast] = Nil
-  }
-
-  sealed abstract class CaptureDescr extends Ast
-
-  final case class ExplicitCaptureSet(captures: List[Expr]) extends CaptureDescr {
-    override def children: List[Ast] = captures
-  }
-
-  final case class ImplicitRootCaptureSet() extends CaptureDescr {
-    override def children: List[Ast] = Nil
-  }
-
-  final case class BrandDescr() extends CaptureDescr {
-    override def children: List[Ast] = Nil
+    override def children: List[Ast] = List(tpe)
   }
 
   /**
    * Constant definition
    */
-  final case class ConstDef(constName: FunOrVarId, tpeOpt: Option[Type], value: Literal) extends TopLevelDef {
-    override def children: List[Ast] = List(value)
+  final case class ConstDef(constName: FunOrVarId, tpeOpt: Option[TypeTree], value: Literal) extends TopLevelDef {
+    override def children: List[Ast] = tpeOpt.toList :+ value
   }
 
   /**
@@ -218,10 +221,15 @@ object Asts {
    * @param rhs            expression producing the value that will be assigned to the local
    * @param isReassignable `true` if `var`, `false` if `val`
    */
-  final case class LocalDef(localName: FunOrVarId, var optType: Option[Type], rhs: Expr, isReassignable: Boolean) extends Statement {
+  final case class LocalDef(
+                             localName: FunOrVarId,
+                             var optType: Option[TypeTree],
+                             rhs: Expr,
+                             isReassignable: Boolean
+                           ) extends Statement {
     val keyword: Keyword = if isReassignable then Keyword.Var else Keyword.Val
 
-    override def children: List[Ast] = List(rhs)
+    override def children: List[Ast] = optType.toList :+ rhs
   }
 
   sealed abstract class Literal extends Expr {
@@ -229,7 +237,13 @@ object Asts {
 
     final override def children: List[Ast] = Nil
 
-    override def getTypeOpt: Option[Type]
+    override def getTypeOpt: Option[TypeShape]
+
+    final def getType: TypeShape = {
+      getTypeOpt match
+        case Some(tpe) => tpe
+        case None => throw new NoSuchElementException(s"type missing in $this")
+    }
   }
 
   sealed trait NumericLiteral extends Literal
@@ -240,41 +254,41 @@ object Asts {
    * Integer literal
    */
   final case class IntLit(value: Int) extends NumericLiteral {
-    override def getTypeOpt: Option[Type] = Some(IntType)
+    override def getTypeOpt: Option[TypeShape] = Some(IntType)
   }
 
   /**
    * Double literal
    */
   final case class DoubleLit(value: Double) extends NumericLiteral {
-    override def getTypeOpt: Option[Type] = Some(DoubleType)
+    override def getTypeOpt: Option[TypeShape] = Some(DoubleType)
   }
 
   /**
    * Char literal
    */
   final case class CharLit(value: Char) extends NonNumericLiteral {
-    override def getTypeOpt: Option[Type] = Some(CharType)
+    override def getTypeOpt: Option[TypeShape] = Some(CharType)
   }
 
   /**
    * Bool (boolean) literal
    */
   final case class BoolLit(value: Boolean) extends NonNumericLiteral {
-    override def getTypeOpt: Option[Type] = Some(BoolType)
+    override def getTypeOpt: Option[TypeShape] = Some(BoolType)
   }
 
   /**
    * String literal
    */
   final case class StringLit(value: String) extends NonNumericLiteral {
-    override def getTypeOpt: Option[Type] = Some(StringType)
+    override def getTypeOpt: Option[TypeShape] = Some(StringType)
   }
-  
+
   final case class RegionCreation() extends Expr {
     override def children: List[Ast] = Nil
 
-    override def getTypeOpt: Option[Type] = Some(PrimitiveType.RegionType)
+    override def getTypeOpt: Option[Type] = Some(RegionType ^ CaptureSet.singletonOfRoot)
   }
 
   /**
@@ -283,11 +297,11 @@ object Asts {
   final case class VariableRef(name: FunOrVarId) extends Expr {
     override def children: List[Ast] = Nil
   }
-  
+
   final case class MeRef() extends Expr {
     override def children: List[Ast] = Nil
   }
-  
+
   final case class PackageRef(pkgName: TypeIdentifier) extends Expr {
     override def children: List[Ast] = Nil
   }
@@ -295,19 +309,19 @@ object Asts {
   final case class DeviceRef(device: Device) extends Expr {
     override def children: List[Ast] = Nil
   }
-  
+
   /**
    * Function call: `callee(args)`
    */
   final case class Call(receiverOpt: Option[Expr], function: FunOrVarId, args: List[Expr]) extends Expr {
-    private var _sig: Option[(NamedType, FunctionSignature)] = None
+    private var _sig: Option[(NamedTypeShape, FunctionSignature)] = None
 
-    def resolve(receiverType: NamedType, sig: FunctionSignature): Unit = {
+    def resolve(receiverType: NamedTypeShape, sig: FunctionSignature): Unit = {
       _sig = Some((receiverType, sig))
     }
 
-    def getSignature: Option[(NamedType, FunctionSignature)] = _sig
-    
+    def getSignature: Option[(NamedTypeShape, FunctionSignature)] = _sig
+
     override def children: List[Ast] = receiverOpt.toList ++ args
   }
 
@@ -321,8 +335,8 @@ object Asts {
   /**
    * Initialization of an (empty) array
    */
-  final case class ArrayInit(region: Expr, elemType: Type, size: Expr) extends Expr {
-    override def children: List[Ast] = List(region, size)
+  final case class ArrayInit(region: Expr, elemType: TypeTree, size: Expr) extends Expr {
+    override def children: List[Ast] = List(region, elemType, size)
   }
 
   /**
@@ -331,7 +345,7 @@ object Asts {
   final case class FilledArrayInit(regionOpt: Option[Expr], arrayElems: List[Expr]) extends Expr {
     override def children: List[Ast] = regionOpt.toList ++ arrayElems
   }
-  
+
   final case class StructOrModuleInstantiation(regionOpt: Option[Expr], typeId: TypeIdentifier, args: List[Expr]) extends Expr {
     override def children: List[Ast] = regionOpt.toList ++ args
   }
@@ -351,10 +365,10 @@ object Asts {
     override def cond: Expr = lhs
 
     override def thenBr: Statement = rhs
-    
+
     override def children: List[Ast] = List(lhs, rhs)
   }
-  
+
   /**
    * Access to a struct field: `lhs.select`
    */
@@ -402,6 +416,7 @@ object Asts {
    */
   final case class Ternary(cond: Expr, thenBr: Expr, elseBr: Expr) extends Expr with Conditional {
     override def children: List[Ast] = List(cond, thenBr, elseBr)
+
     override def elseBrOpt: Option[Statement] = Some(elseBr)
   }
 
@@ -446,23 +461,23 @@ object Asts {
   /**
    * Cast, e.g. `x as Int`
    */
-  final case class Cast(expr: Expr, tpe: Type) extends Expr {
+  final case class Cast(expr: Expr, tpe: TypeTree) extends Expr {
     private var _isTransparentCast: Boolean = false
-    
+
     def isTransparentCast: Boolean = _isTransparentCast
 
     def markTransparent(): Unit = {
       _isTransparentCast = true
     }
-    
-    override def children: List[Ast] = List(expr)
+
+    override def children: List[Ast] = List(expr, tpe)
   }
 
   /**
    * Type test, e.g. `x is Foo`
    */
-  final case class TypeTest(expr: Expr, tpe: Type) extends Expr {
-    override def children: List[Ast] = List(expr)
+  final case class TypeTest(expr: Expr, tpe: TypeTree) extends Expr {
+    override def children: List[Ast] = List(expr, tpe)
   }
 
   /**
@@ -488,22 +503,61 @@ object Asts {
     override def getTypeOpt: Option[Type] = expr.getTypeOpt
   }
   
+  sealed abstract class TypeTree extends Ast {
+    private var _resolvedType: Option[Type] = None
+    
+    def setResolvedType(tpe: Type): Unit = {
+      _resolvedType = Some(tpe)
+    }
+    
+    def getResolvedType: Option[Type] = _resolvedType
+    
+    def captureDescr: Option[CaptureDescrTree]
+  }
+  
+  final case class PrimitiveTypeTree(primitiveType: PrimitiveTypeShape, captureDescr: Option[CaptureDescrTree]) extends TypeTree
+  
+  final case class NamedTypeTree(name: TypeIdentifier, captureDescr: Option[CaptureDescrTree]) extends TypeTree
+  
+  final case class ArrayTypeTree(
+                                  elemType: TypeTree,
+                                  captureDescr: Option[CaptureDescrTree],
+                                  isModifiable: Boolean
+                                ) extends TypeTree
+  
+  sealed trait CaptureDescrTree extends Ast
+  
+  final case class ExplicitCaptureSetTree(capturedExpressions: List[Expr]) extends CaptureDescrTree {
+    override def children: List[Ast] = capturedExpressions
+  }
+  
+  final case class ImplicitRootCaptureSetTree() extends CaptureDescrTree {
+    override def children: List[Ast] = Nil
+  }
+  
+  final case class BrandTree() extends CaptureDescrTree {
+    override def children: List[Ast] = Nil
+  }
+
   trait SmartCastsAware extends Ast {
-    private var smartCasts: Map[FunOrVarId, Type] = Map.empty
+    private var smartCasts: Map[FunOrVarId, TypeShape] = Map.empty
 
     def cond: Expr
+
     def thenBr: Statement
-    
-    def setSmartCasts(smartcasts: Map[FunOrVarId, Type]): Unit = {
+
+    def setSmartCasts(smartcasts: Map[FunOrVarId, TypeShape]): Unit = {
       this.smartCasts = smartcasts
     }
 
-    def getSmartCasts: Map[FunOrVarId, Type] = smartCasts
+    def getSmartCasts: Map[FunOrVarId, TypeShape] = smartCasts
   }
-  
+
   trait Conditional extends SmartCastsAware {
     def cond: Expr
+
     def thenBr: Statement
+
     def elseBrOpt: Option[Statement]
   }
 

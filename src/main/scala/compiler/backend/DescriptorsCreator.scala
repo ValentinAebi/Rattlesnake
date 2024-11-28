@@ -2,7 +2,7 @@ package compiler.backend
 
 import compiler.analysisctx.AnalysisContext
 import identifiers.{IntrinsicsPackageId, NormalTypeId, TypeIdentifier}
-import lang.Types.{PrimitiveType, Type}
+import lang.Types.{PrimitiveTypeShape, TypeShape}
 import lang.*
 
 object DescriptorsCreator {
@@ -10,20 +10,20 @@ object DescriptorsCreator {
   /**
    * @return JVM descriptor for [[tpe]]
    */
-  def descriptorForType(tpe: Type)(using ctx: AnalysisContext): String = {
+  def descriptorForType(tpe: TypeShape)(using ctx: AnalysisContext): String = {
     tpe match
-      case PrimitiveType.IntType => "I"
-      case PrimitiveType.DoubleType => "D"
-      case PrimitiveType.CharType => "C"
-      case PrimitiveType.BoolType => "Z"
-      case PrimitiveType.RegionType => "I"
-      case PrimitiveType.StringType => "Ljava/lang/String;"
-      case PrimitiveType.VoidType => "V"
-      case PrimitiveType.NothingType => "V"
-      case Types.NamedType(typeName) if !ctx.resolveType(typeName).get.isInterface => s"L$typeName;"
-      case Types.NamedType(_) | Types.UnionType(_) => "Ljava/lang/Object;"
-      case Types.ArrayType(elemType, _) => s"[${descriptorForType(elemType)}"
-      case Types.UndefinedType => assert(false)
+      case PrimitiveTypeShape.IntType => "I"
+      case PrimitiveTypeShape.DoubleType => "D"
+      case PrimitiveTypeShape.CharType => "C"
+      case PrimitiveTypeShape.BoolType => "Z"
+      case PrimitiveTypeShape.RegionType => "I"
+      case PrimitiveTypeShape.StringType => "Ljava/lang/String;"
+      case PrimitiveTypeShape.VoidType => "V"
+      case PrimitiveTypeShape.NothingType => "V"
+      case Types.NamedTypeShape(typeName) if !ctx.resolveType(typeName).get.isInterface => s"L$typeName;"
+      case Types.NamedTypeShape(_) | Types.UnionTypeShape(_) => "Ljava/lang/Object;"
+      case Types.ArrayTypeShape(elemType, _) => s"[${descriptorForType(elemType)}"
+      case Types.UndefinedTypeShape => assert(false)
   }
 
   /**

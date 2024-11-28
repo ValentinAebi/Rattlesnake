@@ -1,15 +1,16 @@
 package compiler.analysisctx
 
-import AnalysisContext.{FunctionFound, FunctionNotFound, MethodResolutionResult, ModuleNotFound}
+import compiler.analysisctx.AnalysisContext.{FunctionFound, FunctionNotFound, MethodResolutionResult, ModuleNotFound}
+import compiler.irs.Asts.*
 import compiler.pipeline.CompilationStep.ContextCreation
 import compiler.reporting.Errors.{Err, ErrorReporter, errorsExitCode}
-import compiler.irs.Asts.*
 import compiler.reporting.Position
 import compiler.typechecker.SubtypeRelation.subtypeOf
+import compiler.typechecker.{Environment, TypeCheckingContext}
 import identifiers.{FunOrVarId, IntrinsicsPackageId, TypeIdentifier}
 import lang.*
-import lang.Types.PrimitiveType.{NothingType, VoidType}
-import lang.Types.{NamedType, Type}
+import lang.Types.PrimitiveTypeShape.{NothingType, VoidType}
+import lang.Types.*
 
 import scala.collection.mutable
 
@@ -17,22 +18,8 @@ final case class AnalysisContext(
                                   modules: Map[TypeIdentifier, ModuleSignature],
                                   packages: Map[TypeIdentifier, PackageSignature],
                                   structs: Map[TypeIdentifier, StructSignature],
-                                  constants: Map[FunOrVarId, Type]
+                                  constants: Map[FunOrVarId, TypeShape]
                                 ) {
-
-  /**
-   * Returns `true` iff `tpe` is known (primitive type, known struct or array of a known type)
-   */
-  // do not use @tailrec, even though Intellij suggests it: fails the CI
-  def knowsType(tpe: Type): Boolean = {
-    tpe match {
-      case _: Types.PrimitiveType => true
-      case Types.NamedType(typeName) => knowsUserDefType(typeName)
-      case Types.ArrayType(elemType, _) => knowsType(elemType)
-      case Types.UnionType(unitedTypes) => unitedTypes.forall(knowsType)
-      case Types.UndefinedType => true
-    }
-  }
 
   def knowsUserDefType(tid: TypeIdentifier): Boolean =
     knowsPackageOrModule(tid) || knowsStruct(tid)
@@ -90,7 +77,7 @@ object AnalysisContext {
       )
     )
     private val structs: mutable.Map[TypeIdentifier, (StructSignature, Option[Position])] = mutable.Map.empty
-    private val constants: mutable.Map[FunOrVarId, Type] = mutable.Map.empty
+    private val constants: mutable.Map[FunOrVarId, TypeShape] = mutable.Map.empty
 
     def addModule(moduleDef: ModuleDef): Unit = {
       val moduleName = moduleDef.moduleName
@@ -132,15 +119,15 @@ object AnalysisContext {
     }
 
     def build(): AnalysisContext = {
-      val builtStructsMap = structs.map((tid, sigAndPos) => (tid, sigAndPos._1)).toMap
-      checkSubtyping(builtStructsMap)
-      checkSubtypingCycles(builtStructsMap)
-      new AnalysisContext(
+      val builtCtx = new AnalysisContext(
         modules.toMap,
         packages.toMap,
-        builtStructsMap,
+        structs.map((tid, sigAndPos) => (tid, sigAndPos._1)).toMap,
         constants.toMap
       )
+      checkFieldsTypeConformance(builtCtx)
+      checkSubtypingCycles(builtCtx.structs)
+      builtCtx
     }
 
     private def extractFunctions(repo: ModuleOrPackageDefTree): Map[FunOrVarId, FunctionSignature] = {
@@ -150,19 +137,55 @@ object AnalysisContext {
         if (functions.contains(name)) {
           reportError(s"redefinition of function '$name'", funDef.getPosition)
         } else {
-          functions.put(name, funDef.signature)
+          val funSig = computeFunctionSig(funDef)
+          functions.put(name, funSig)
         }
       }
       functions.toMap
     }
 
+    private def computeFunctionSig(funDef: FunDef): FunctionSignature = {
+      val capResCtx = CapturesResolutionContext()
+      val argsTypes = {
+        for (Param(paramNameOpt, typeTree, isReassignable) <- funDef.params) yield {
+          val tpe = computeType(typeTree, capResCtx)
+          paramNameOpt.foreach { paramName =>
+            capResCtx.addLocal(paramName, FunctionParamValue(paramName))
+          }
+          tpe
+        }
+      }
+      val retType = funDef.optRetType.map(computeType(_, capResCtx)).getOrElse(VoidType)
+      FunctionSignature(funDef.funName, argsTypes, retType)
+    }
+
+    private def computeType(typeTree: TypeTree, capResCtx: CapturesResolutionContext): Type = typeTree match {
+      case PrimitiveTypeTree(primitiveType, captureDescr) =>
+        primitiveType ^ captureDescr.map(computeCaptureDescr(_, capResCtx))
+      case NamedTypeTree(name, captureDescr) =>
+        NamedTypeShape(name) ^ captureDescr.map(computeCaptureDescr(_, capResCtx))
+      case ArrayTypeTree(elemType, captureDescr, isModifiable) =>
+        ArrayTypeShape(computeType(elemType, capResCtx), isModifiable) ^ captureDescr.map(computeCaptureDescr(_, capResCtx))
+    }
+
+    private def computeCaptureDescr(cdTree: CaptureDescrTree, capResCtx: CapturesResolutionContext): CaptureDescriptor = cdTree match {
+      case ExplicitCaptureSetTree(capturedExpressions) =>
+        CaptureSet(capturedExpressions.map(capResCtx.resolveCapturedExpr).toSet)
+      case ImplicitRootCaptureSetTree() =>
+        CaptureSet.singletonOfRoot
+      case BrandTree() =>
+        Brand
+    }
+
     private def analyzeImports(moduleDef: ModuleDef) = {
+      val capResCtx = CapturesResolutionContext()
       val importsMap = new mutable.LinkedHashMap[FunOrVarId, Type]()
       val packagesSet = new mutable.LinkedHashSet[TypeIdentifier]()
       val devicesSet = new mutable.LinkedHashSet[Device]()
       moduleDef.imports.foreach {
         case ParamImport(instanceId, moduleType) =>
-          importsMap.put(instanceId, moduleType)
+          importsMap.put(instanceId, computeType(moduleType, capResCtx))
+          capResCtx.addLocal(instanceId, MeValue().dot(instanceId))
         case PackageImport(packageId) =>
           packagesSet.add(packageId)
         case DeviceImport(device) =>
@@ -186,16 +209,19 @@ object AnalysisContext {
 
     private def buildFieldsMap(structDef: StructDef) = {
       val fieldsMap = new mutable.LinkedHashMap[FunOrVarId, StructSignature.FieldInfo]()
+      val capResCtx = CapturesResolutionContext()
       for param <- structDef.fields do {
         param.paramNameOpt match {
           case None =>
             reportError("struct fields must be named", param.getPosition)
           case Some(paramName) =>
-            if (checkIsNotVoidOrNothing(param.tpe, param.getPosition)) {
+            val tpe = computeType(param.tpe, capResCtx)
+            if (checkIsNotVoidOrNothing(tpe, param.getPosition)) {
               if (fieldsMap.contains(paramName)) {
                 reportError(s"duplicate field: '$paramName'", param.getPosition)
               } else {
-                fieldsMap.put(paramName, StructSignature.FieldInfo(param.tpe, param.isReassignable))
+                fieldsMap.put(paramName, StructSignature.FieldInfo(tpe, param.isReassignable))
+                capResCtx.addLocal(paramName, MeValue().dot(paramName))
               }
             }
         }
@@ -223,7 +249,7 @@ object AnalysisContext {
       !isVoidOrNothing
     }
 
-    private def checkSubtyping(builtStructMap: Map[TypeIdentifier, StructSignature]): Unit = {
+    private def checkFieldsTypeConformance(builtCtx: AnalysisContext): Unit = {
       for {
         (structId, (structSig, posOpt)) <- structs
         directSupertypeId <- structSig.directSupertypes
@@ -231,22 +257,27 @@ object AnalysisContext {
         structs.get(directSupertypeId) match {
           case Some((directSupertypeSig, _)) => {
             if (directSupertypeSig.isInterface) {
-              val previousFields = mutable.Map.empty[FunOrVarId, Type]
+              val tcCtx = TypeCheckingContext(
+                analysisContext = builtCtx,
+                currentEnvironment = Some(Environment(NamedTypeShape(directSupertypeId), Set.empty, Set.empty))
+              )
               for ((fldName, superFldInfo) <- directSupertypeSig.fields) {
                 structSig.fields.get(fldName) match {
                   case Some(subFieldInfo) =>
-                    if (logicalImplies(superFldInfo.isReassignable, subFieldInfo.isReassignable)) {
-                      checkFieldVariance(structId, directSupertypeId, fldName, previousFields.toMap,
-                        subFieldInfo, superFldInfo, builtStructMap, posOpt)
-                    } else {
-                      errorReporter.push(Err(ContextCreation,
-                        s"subtyping error: $fldName needs to be reassignable in subtypes of $directSupertypeId", posOpt))
+                    if (subFieldInfo.isReassignable != superFldInfo.isReassignable) {
+                      reportError(s"$fldName should be reassignable in $structId if and only if it is " +
+                        s"reassignable in its supertype $directSupertypeId", posOpt)
+                    } else if (subFieldInfo.isReassignable && subFieldInfo.tpe != superFldInfo.tpe) {
+                      reportError(s"reassignable field $fldName should have the same type in $structId as in its " +
+                        s"supertype $directSupertypeId", posOpt)
+                    } else if (!subFieldInfo.isReassignable && !subFieldInfo.tpe.subtypeOf(superFldInfo.tpe)(using tcCtx)) {
+                      reportError(s"type ${subFieldInfo.tpe} of field $fldName does not conform to its type " +
+                        s"${superFldInfo.tpe} in the interface $directSupertypeId", posOpt)
                     }
                   case None =>
-                    errorReporter.push(Err(ContextCreation,
-                      s"$structId cannot subtype $directSupertypeId: missing field $fldName", posOpt))
+                    reportError(s"$structId cannot subtype $directSupertypeId: missing field $fldName", posOpt)
                 }
-                previousFields.addOne(fldName -> superFldInfo.tpe)
+                tcCtx.addLocal(fldName, superFldInfo.tpe, None, superFldInfo.isReassignable, true, () => (), () => ())
               }
             } else {
               reportError(s"struct $directSupertypeId is not an interface", posOpt)
@@ -255,26 +286,6 @@ object AnalysisContext {
           case None =>
             reportError(s"interface $directSupertypeId is unknown", posOpt)
         }
-      }
-    }
-
-    private def checkFieldVariance(
-                                    structId: TypeIdentifier,
-                                    directSupertypeId: TypeIdentifier,
-                                    fldName: FunOrVarId,
-                                    previousFields: Map[FunOrVarId, Type],
-                                    subFieldInfo: StructSignature.FieldInfo, superFldInfo: StructSignature.FieldInfo,
-                                    structs: Map[TypeIdentifier, StructSignature],
-                                    posOpt: Option[Position]
-                                  ): Unit = {
-      if (superFldInfo.isReassignable && subFieldInfo.tpe != superFldInfo.tpe) {
-        errorReporter.push(Err(ContextCreation,
-          s"subtyping error: type of $fldName is not the same in $structId and $directSupertypeId", posOpt))
-      } else if (
-        !superFldInfo.isReassignable
-          && !subFieldInfo.tpe.subtypeOf(superFldInfo.tpe)(using structs)) {
-        errorReporter.push(Err(ContextCreation,
-          s"subtyping error: type of $fldName in $structId should be a subtype of its type in $directSupertypeId", posOpt))
       }
     }
 
@@ -303,8 +314,6 @@ object AnalysisContext {
         findCycleFrom(currId, currId, depth = 0)
       }
     }
-
-    private def logicalImplies(p: Boolean, q: Boolean): Boolean = !p || q
 
   }
 
