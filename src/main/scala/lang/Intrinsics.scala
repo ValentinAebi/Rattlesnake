@@ -14,12 +14,12 @@ object Intrinsics {
   val toCharArray: NormalFunOrVarId = NormalFunOrVarId("toCharArray")
 
   val intrinsics: Map[FunOrVarId, FunctionSignature] = Map(
-    FunctionSignature(print, List(StringType), VoidType).keyed,
-    FunctionSignature(intToString, List(IntType), StringType).keyed,
-    FunctionSignature(doubleToString, List(DoubleType), StringType).keyed,
-    FunctionSignature(charToString, List(CharType), StringType).keyed,
-    FunctionSignature(boolToString, List(BoolType), StringType).keyed,
-    FunctionSignature(toCharArray, List(StringType), ArrayTypeShape(CharType, modifiable = true)).keyed
+    FunctionSignature(print, List(None -> StringType), VoidType).keyed,
+    FunctionSignature(intToString, List(None -> IntType), StringType).keyed,
+    FunctionSignature(doubleToString, List(None -> DoubleType), StringType).keyed,
+    FunctionSignature(charToString, List(None -> CharType), StringType).keyed,
+    FunctionSignature(boolToString, List(None -> BoolType), StringType).keyed,
+    FunctionSignature(toCharArray, List(None -> StringType), ArrayTypeShape(CharType, modifiable = true)).keyed
   )
 
   extension(sig: FunctionSignature) private def keyed: (FunOrVarId, FunctionSignature) = {

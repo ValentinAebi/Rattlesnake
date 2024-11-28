@@ -8,7 +8,7 @@ import lang.Types.{NamedTypeShape, Type}
 import java.util
 import scala.collection.mutable
 
-final case class FunctionSignature(name: FunOrVarId, argTypes: List[Type], retType: Type)
+final case class FunctionSignature(name: FunOrVarId, args: List[(Option[FunOrVarId], Type)], retType: Type)
 
 sealed trait TypeSignature {
   def id: TypeIdentifier
@@ -16,6 +16,7 @@ sealed trait TypeSignature {
   def isModuleOrPackage: Boolean
   def functions: Map[FunOrVarId, FunctionSignature]
   def typeOfSelectIfCapturable(sel: FunOrVarId): Option[Type]
+  def params: mutable.LinkedHashMap[FunOrVarId, FieldInfo]
 }
 
 sealed trait ModuleOrPackageSignature extends TypeSignature {
@@ -24,6 +25,9 @@ sealed trait ModuleOrPackageSignature extends TypeSignature {
   def importedPackages: mutable.LinkedHashSet[TypeIdentifier]
   def importedDevices: mutable.LinkedHashSet[Device]
 
+  override def params: mutable.LinkedHashMap[FunOrVarId, FieldInfo] =
+    paramImports.map((id, tpe) => id -> FieldInfo(tpe, isReassignable = false))
+
   override def isInterface: Boolean = false
   override def isModuleOrPackage: Boolean = true
 
@@ -31,7 +35,8 @@ sealed trait ModuleOrPackageSignature extends TypeSignature {
 }
 
 sealed trait StructOrModuleSignature extends TypeSignature {
-  def constructorSig: FunctionSignature
+  def constructorSig: FunctionSignature =
+    FunctionSignature(ConstructorFunId, params.toList.map((id, info) => (Some(id), info.tpe)), VoidType)
   def isShallowMutable: Boolean
 }
 
@@ -42,9 +47,6 @@ final case class ModuleSignature(
                                   importedDevices: mutable.LinkedHashSet[Device],
                                   functions: Map[FunOrVarId, FunctionSignature]
                                 ) extends ModuleOrPackageSignature, StructOrModuleSignature {
-  override def constructorSig: FunctionSignature =
-    FunctionSignature(ConstructorFunId, paramImports.values.toList, VoidType)
-
   override def isShallowMutable: Boolean = false
 }
 
@@ -56,8 +58,8 @@ final case class PackageSignature(
                                  ) extends ModuleOrPackageSignature {
   override def paramImports: mutable.LinkedHashMap[FunOrVarId, Type] = mutable.LinkedHashMap.empty
   def asType: Type = NamedTypeShape(id) ^ CaptureSet((
-    importedPackages.map(PackageValue(_)) ++
-      importedDevices.map(DeviceValue(_))
+    importedPackages.map(CapPackage(_)) ++
+      importedDevices.map(CapDevice(_))
     ).toSet)
 }
 
@@ -71,8 +73,7 @@ final case class StructSignature(
 
   override def functions: Map[FunOrVarId, FunctionSignature] = Map.empty
 
-  override def constructorSig: FunctionSignature =
-    FunctionSignature(ConstructorFunId, fields.map(_._2.tpe).toList, VoidType)
+  override def params: mutable.LinkedHashMap[FunOrVarId, FieldInfo] = fields
 
   override def isShallowMutable: Boolean = fields.exists(_._2.isReassignable)
 

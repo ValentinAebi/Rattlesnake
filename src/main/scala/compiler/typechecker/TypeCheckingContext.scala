@@ -7,20 +7,20 @@ import compiler.reporting.Errors.{ErrorReporter, Warning}
 import compiler.reporting.{Errors, Position}
 import compiler.typechecker.TypeCheckingContext.{LocalInfo, LocalUsesCollector}
 import identifiers.{FunOrVarId, TypeIdentifier}
+import lang.*
 import lang.Types.PrimitiveTypeShape.{NothingType, VoidType}
 import lang.Types.{NamedTypeShape, Type, TypeShape, UndefinedTypeShape}
-import lang.*
 
 import scala.collection.mutable
 
 /**
  * Mutable context for type checking
  */
-final case class TypeCheckingContext(
-                                      private val analysisContext: AnalysisContext,
-                                      private val locals: mutable.Map[FunOrVarId, LocalInfo] = mutable.Map.empty,
-                                      currentEnvironment: Option[Environment]
-                                    ) {
+final case class TypeCheckingContext private(
+                                              private val analysisContext: AnalysisContext,
+                                              private val locals: mutable.Map[FunOrVarId, LocalInfo] = mutable.Map.empty,
+                                              meType: Type
+                                            ) {
   // Locals that have been created by this context (i.e. not obtained via copied)
   private val ownedLocals: mutable.Set[FunOrVarId] = mutable.Set.empty
 
@@ -42,9 +42,6 @@ final case class TypeCheckingContext(
       case (id, info) => id -> info.copy(tpe = smartCasts.getOrElse(id, info.tpe))
     })
   }
-
-  def copyForModuleOrPackage(moduleInfos: Environment): TypeCheckingContext =
-    copy(currentEnvironment = Some(moduleInfos))
 
   /**
    * Register a new local
@@ -84,35 +81,6 @@ final case class TypeCheckingContext(
         .map(tpe => LocalInfo(name, tpe, isReassignable = false, defPos = None, declHasTypeAnnot = false))
     )
   }
-  
-  def lookup(value: CapturableValue): Type = value match {
-    case PackageValue(typeIdentifier) =>
-      packages.get(typeIdentifier)
-        .map(_.asType)
-        .getOrElse(UndefinedTypeShape)
-    case DeviceValue(device) =>
-      device.sig.asType
-    case FunctionParamValue(paramId) =>
-      getLocalOnly(paramId).map(_.tpe).getOrElse(UndefinedTypeShape)
-    case LocalVarValue(varId) =>
-      getLocalOnly(varId).map(_.tpe).getOrElse(UndefinedTypeShape)
-    case MeValue() =>
-      currentEnvironment.map(_.currentModuleType).getOrElse(UndefinedTypeShape)
-    case SelectValue(root, field) =>
-      lookup(root) match {
-        case NamedTypeShape(typeName) =>
-          resolveType(typeName)
-            .flatMap(_.typeOfSelectIfCapturable(field))
-            .getOrElse(UndefinedTypeShape)
-        case _ => UndefinedTypeShape
-      }
-    case value: AnonymousValue =>
-      UndefinedTypeShape
-    case RootCapValue =>
-      UndefinedTypeShape
-    case value: UndefinedValue =>
-      UndefinedTypeShape
-  }
 
   def localIsQueried(localId: FunOrVarId): Unit = {
     locals.get(localId).foreach { l =>
@@ -141,6 +109,12 @@ final case class TypeCheckingContext(
 }
 
 object TypeCheckingContext {
+
+  def apply(analysisContext: AnalysisContext, meType: Type): TypeCheckingContext = TypeCheckingContext(
+    analysisContext,
+    mutable.Map.empty,
+    meType
+  )
 
   final case class LocalInfo private(
                                       name: FunOrVarId,

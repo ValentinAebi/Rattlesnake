@@ -6,7 +6,7 @@ import compiler.pipeline.CompilationStep.ContextCreation
 import compiler.reporting.Errors.{Err, ErrorReporter, errorsExitCode}
 import compiler.reporting.Position
 import compiler.typechecker.SubtypeRelation.subtypeOf
-import compiler.typechecker.{Environment, TypeCheckingContext}
+import compiler.typechecker.{Environment, PathsConverter, TypeCheckingContext}
 import identifiers.{FunOrVarId, IntrinsicsPackageId, TypeIdentifier}
 import lang.*
 import lang.Types.PrimitiveTypeShape.{NothingType, VoidType}
@@ -145,32 +145,27 @@ object AnalysisContext {
     }
 
     private def computeFunctionSig(funDef: FunDef): FunctionSignature = {
-      val capResCtx = CapturesResolutionContext()
-      val argsTypes = {
-        for (Param(paramNameOpt, typeTree, isReassignable) <- funDef.params) yield {
-          val tpe = computeType(typeTree, capResCtx)
-          paramNameOpt.foreach { paramName =>
-            capResCtx.addLocal(paramName, FunctionParamValue(paramName))
-          }
-          tpe
-        }
+      val argsTypesB = List.newBuilder[(Option[FunOrVarId], Type)]
+      for (Param(paramNameOpt, tpe, isReassignable) <- funDef.params){
+        argsTypesB.addOne(paramNameOpt, computeType(tpe))
       }
-      val retType = funDef.optRetType.map(computeType(_, capResCtx)).getOrElse(VoidType)
-      FunctionSignature(funDef.funName, argsTypes, retType)
+      val retType = funDef.optRetType.map(computeType).getOrElse(VoidType)
+      FunctionSignature(funDef.funName, argsTypesB.result(), retType)
     }
 
-    private def computeType(typeTree: TypeTree, capResCtx: CapturesResolutionContext): Type = typeTree match {
+    private def computeType(typeTree: TypeTree): Type = typeTree match {
       case PrimitiveTypeTree(primitiveType, captureDescr) =>
-        primitiveType ^ captureDescr.map(computeCaptureDescr(_, capResCtx))
+        primitiveType ^ captureDescr.map(computeCaptureDescr)
       case NamedTypeTree(name, captureDescr) =>
-        NamedTypeShape(name) ^ captureDescr.map(computeCaptureDescr(_, capResCtx))
+        NamedTypeShape(name) ^ captureDescr.map(computeCaptureDescr)
       case ArrayTypeTree(elemType, captureDescr, isModifiable) =>
-        ArrayTypeShape(computeType(elemType, capResCtx), isModifiable) ^ captureDescr.map(computeCaptureDescr(_, capResCtx))
+        ArrayTypeShape(computeType(elemType), isModifiable) ^ captureDescr.map(computeCaptureDescr)
     }
 
-    private def computeCaptureDescr(cdTree: CaptureDescrTree, capResCtx: CapturesResolutionContext): CaptureDescriptor = cdTree match {
+    private def computeCaptureDescr(cdTree: CaptureDescrTree): CaptureDescriptor = cdTree match {
       case ExplicitCaptureSetTree(capturedExpressions) =>
-        CaptureSet(capturedExpressions.map(capResCtx.resolveCapturedExpr).toSet)
+        // checks that the expression is indeed capturable are delayed to the type-checker
+        CaptureSet(capturedExpressions.flatMap(PathsConverter.convertOrFailSilently).toSet)
       case ImplicitRootCaptureSetTree() =>
         CaptureSet.singletonOfRoot
       case BrandTree() =>
@@ -178,14 +173,12 @@ object AnalysisContext {
     }
 
     private def analyzeImports(moduleDef: ModuleDef) = {
-      val capResCtx = CapturesResolutionContext()
       val importsMap = new mutable.LinkedHashMap[FunOrVarId, Type]()
       val packagesSet = new mutable.LinkedHashSet[TypeIdentifier]()
       val devicesSet = new mutable.LinkedHashSet[Device]()
       moduleDef.imports.foreach {
         case ParamImport(instanceId, moduleType) =>
-          importsMap.put(instanceId, computeType(moduleType, capResCtx))
-          capResCtx.addLocal(instanceId, MeValue().dot(instanceId))
+          importsMap.put(instanceId, computeType(moduleType))
         case PackageImport(packageId) =>
           packagesSet.add(packageId)
         case DeviceImport(device) =>
@@ -209,19 +202,17 @@ object AnalysisContext {
 
     private def buildFieldsMap(structDef: StructDef) = {
       val fieldsMap = new mutable.LinkedHashMap[FunOrVarId, StructSignature.FieldInfo]()
-      val capResCtx = CapturesResolutionContext()
       for param <- structDef.fields do {
         param.paramNameOpt match {
           case None =>
             reportError("struct fields must be named", param.getPosition)
           case Some(paramName) =>
-            val tpe = computeType(param.tpe, capResCtx)
+            val tpe = computeType(param.tpe)
             if (checkIsNotVoidOrNothing(tpe, param.getPosition)) {
               if (fieldsMap.contains(paramName)) {
                 reportError(s"duplicate field: '$paramName'", param.getPosition)
               } else {
                 fieldsMap.put(paramName, StructSignature.FieldInfo(tpe, param.isReassignable))
-                capResCtx.addLocal(paramName, MeValue().dot(paramName))
               }
             }
         }
@@ -259,7 +250,7 @@ object AnalysisContext {
             if (directSupertypeSig.isInterface) {
               val tcCtx = TypeCheckingContext(
                 analysisContext = builtCtx,
-                currentEnvironment = Some(Environment(NamedTypeShape(directSupertypeId), Set.empty, Set.empty))
+                meType = NamedTypeShape(directSupertypeId)
               )
               for ((fldName, superFldInfo) <- directSupertypeSig.fields) {
                 structSig.fields.get(fldName) match {

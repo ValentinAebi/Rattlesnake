@@ -1,7 +1,5 @@
 package lang
 
-import lang.{CapturableValue, RootCapValue}
-
 sealed trait CaptureDescriptor {
   
   def isRoot: Boolean
@@ -14,8 +12,8 @@ sealed trait CaptureDescriptor {
   
 }
 
-final case class CaptureSet(set: Set[CapturableValue]) extends CaptureDescriptor {
-  override def isRoot: Boolean = set.contains(RootCapValue)
+final case class CaptureSet(set: Set[Capturable]) extends CaptureDescriptor {
+  override def isRoot: Boolean = set.contains(RootCapability)
   override def isEmpty: Boolean = set.isEmpty
 
   override def toString: String = set.mkString("{", ",", "}")
@@ -30,9 +28,9 @@ case object Brand extends CaptureDescriptor {
 
 object CaptureSet {
 
-  def apply(values: CapturableValue*): CaptureSet = CaptureSet(Set(values *))
+  def apply(values: Capturable*): CaptureSet = CaptureSet(Set(values *))
 
   val empty: CaptureSet = CaptureSet(Set.empty)
-  val singletonOfRoot: CaptureSet = CaptureSet(RootCapValue)
+  val singletonOfRoot: CaptureSet = CaptureSet(RootCapability)
 
 }

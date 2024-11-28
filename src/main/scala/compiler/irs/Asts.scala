@@ -512,16 +512,16 @@ object Asts {
     
     def getResolvedType: Option[Type] = _resolvedType
     
-    def captureDescr: Option[CaptureDescrTree]
+    def captureDescrOpt: Option[CaptureDescrTree]
   }
   
-  final case class PrimitiveTypeTree(primitiveType: PrimitiveTypeShape, captureDescr: Option[CaptureDescrTree]) extends TypeTree
+  final case class PrimitiveTypeTree(primitiveType: PrimitiveTypeShape, captureDescrOpt: Option[CaptureDescrTree]) extends TypeTree
   
-  final case class NamedTypeTree(name: TypeIdentifier, captureDescr: Option[CaptureDescrTree]) extends TypeTree
+  final case class NamedTypeTree(name: TypeIdentifier, captureDescrOpt: Option[CaptureDescrTree]) extends TypeTree
   
   final case class ArrayTypeTree(
                                   elemType: TypeTree,
-                                  captureDescr: Option[CaptureDescrTree],
+                                  captureDescrOpt: Option[CaptureDescrTree],
                                   isModifiable: Boolean
                                 ) extends TypeTree
   

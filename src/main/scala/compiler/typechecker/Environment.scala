@@ -17,3 +17,13 @@ final case class Environment(
     allowedDevices.contains(device)
 
 }
+
+object Environment {
+  
+  def emptyFrom(currentModuleType: NamedTypeShape): Environment = Environment(
+    currentModuleType,
+    Set.empty,
+    Set.empty
+  )
+  
+}

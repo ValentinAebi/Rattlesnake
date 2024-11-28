@@ -2,7 +2,7 @@ package compiler.backend
 
 import compiler.analysisctx.AnalysisContext
 import identifiers.{IntrinsicsPackageId, NormalTypeId, TypeIdentifier}
-import lang.Types.{PrimitiveTypeShape, TypeShape}
+import lang.Types.{PrimitiveTypeShape, TypeShape, Type}
 import lang.*
 
 object DescriptorsCreator {
@@ -10,8 +10,8 @@ object DescriptorsCreator {
   /**
    * @return JVM descriptor for [[tpe]]
    */
-  def descriptorForType(tpe: TypeShape)(using ctx: AnalysisContext): String = {
-    tpe match
+  def descriptorForType(tpe: Type)(using ctx: AnalysisContext): String = {
+    tpe.shape match
       case PrimitiveTypeShape.IntType => "I"
       case PrimitiveTypeShape.DoubleType => "D"
       case PrimitiveTypeShape.CharType => "C"
@@ -31,7 +31,7 @@ object DescriptorsCreator {
    */
   def descriptorForFunc(funSig: FunctionSignature)(using AnalysisContext): String = {
     val FunctionSignature(_, argTypes, retType) = funSig
-    argTypes.map(descriptorForType).mkString("(", "", ")") ++ descriptorForType(retType)
+    argTypes.map((_, tpe) => descriptorForType(tpe)).mkString("(", "", ")") ++ descriptorForType(retType)
   }
 
 }
