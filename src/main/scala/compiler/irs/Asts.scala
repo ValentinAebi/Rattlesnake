@@ -2,9 +2,12 @@ package compiler.irs
 
 import compiler.reporting.Position
 import identifiers.*
+import lang.*
+import lang.CaptureDescriptors.CaptureSet
 import lang.Types.*
 import lang.Types.PrimitiveTypeShape.*
-import lang.*
+
+import scala.annotation.targetName
 
 object Asts {
 
@@ -186,13 +189,13 @@ object Asts {
    */
   final case class FunDef(funName: FunOrVarId, params: List[Param], optRetType: Option[TypeTree], body: Block) extends Ast {
     private var _signature: Option[FunctionSignature] = None
-    
+
     def setSignature(sig: FunctionSignature): Unit = {
       _signature = Some(sig)
     }
-    
+
     def getSignature: Option[FunctionSignature] = _signature
-    
+
     override def children: List[Ast] = params ++ optRetType.toList :+ body
   }
 
@@ -223,13 +226,22 @@ object Asts {
    */
   final case class LocalDef(
                              localName: FunOrVarId,
-                             var optType: Option[TypeTree],
+                             optTypeAnnot: Option[TypeTree],
                              rhs: Expr,
                              isReassignable: Boolean
                            ) extends Statement {
+
+    private var _varTypeOpt: Option[Type] = None
+
+    def setVarType(varType: Type): Unit = {
+      _varTypeOpt = Some(varType)
+    }
+
+    def getVarTypeOpt: Option[Type] = _varTypeOpt
+
     val keyword: Keyword = if isReassignable then Keyword.Var else Keyword.Val
 
-    override def children: List[Ast] = optType.toList :+ rhs
+    override def children: List[Ast] = optTypeAnnot.toList :+ rhs
   }
 
   sealed abstract class Literal extends Expr {
@@ -314,13 +326,13 @@ object Asts {
    * Function call: `callee(args)`
    */
   final case class Call(receiverOpt: Option[Expr], function: FunOrVarId, args: List[Expr]) extends Expr {
-    private var _sig: Option[(NamedTypeShape, FunctionSignature)] = None
+    private var _sig: Option[FunctionSignature] = None
 
-    def resolve(receiverType: NamedTypeShape, sig: FunctionSignature): Unit = {
-      _sig = Some((receiverType, sig))
+    def resolve(funSig: FunctionSignature): Unit = {
+      _sig = Some(funSig)
     }
 
-    def getSignature: Option[(NamedTypeShape, FunctionSignature)] = _sig
+    def getSignature: Option[FunctionSignature] = _sig
 
     override def children: List[Ast] = receiverOpt.toList ++ args
   }
@@ -461,7 +473,7 @@ object Asts {
   /**
    * Cast, e.g. `x as Int`
    */
-  final case class Cast(expr: Expr, tpe: TypeTree) extends Expr {
+  final case class Cast(expr: Expr, tpe: TypeShapeTree) extends Expr {
     private var _isTransparentCast: Boolean = false
 
     def isTransparentCast: Boolean = _isTransparentCast
@@ -476,7 +488,7 @@ object Asts {
   /**
    * Type test, e.g. `x is Foo`
    */
-  final case class TypeTest(expr: Expr, tpe: TypeTree) extends Expr {
+  final case class TypeTest(expr: Expr, tpe: TypeShapeTree) extends Expr {
     override def children: List[Ast] = List(expr, tpe)
   }
 
@@ -502,39 +514,44 @@ object Asts {
 
     override def getTypeOpt: Option[Type] = expr.getTypeOpt
   }
+
+  sealed trait TypeTree extends Ast
   
-  sealed abstract class TypeTree extends Ast {
-    private var _resolvedType: Option[Type] = None
-    
-    def setResolvedType(tpe: Type): Unit = {
-      _resolvedType = Some(tpe)
-    }
-    
-    def getResolvedType: Option[Type] = _resolvedType
-    
-    def captureDescrOpt: Option[CaptureDescrTree]
+  final case class CapturingTypeTree(
+                                      typeShapeTree: TypeShapeTree,
+                                      captureDescr: CaptureDescrTree
+                                    ) extends TypeTree {
+    // TODO store type shape and capture descriptor
   }
   
-  final case class PrimitiveTypeTree(primitiveType: PrimitiveTypeShape, captureDescrOpt: Option[CaptureDescrTree]) extends TypeTree
-  
-  final case class NamedTypeTree(name: TypeIdentifier, captureDescrOpt: Option[CaptureDescrTree]) extends TypeTree
-  
-  final case class ArrayTypeTree(
-                                  elemType: TypeTree,
-                                  captureDescrOpt: Option[CaptureDescrTree],
-                                  isModifiable: Boolean
-                                ) extends TypeTree
-  
+  sealed trait TypeShapeTree extends TypeTree {
+    
+    @targetName("capturing") infix def ^(capDescr: CaptureDescrTree): CapturingTypeTree =
+      CapturingTypeTree(this, capDescr)
+      
+    @targetName("maybeCapturing") infix def ^(capDescrOpt: Option[CaptureDescrTree]): TypeTree =
+      capDescrOpt.map { capDescr =>
+        this ^ capDescr
+      }.getOrElse(this)
+    
+  }
+
+  final case class PrimitiveTypeShapeTree(primitiveType: PrimitiveTypeShape) extends TypeShapeTree
+
+  final case class NamedTypeShapeTree(name: TypeIdentifier) extends TypeShapeTree
+
+  final case class ArrayTypeShapeTree(elemType: TypeTree, isModifiable: Boolean) extends TypeShapeTree
+
   sealed trait CaptureDescrTree extends Ast
-  
+
   final case class ExplicitCaptureSetTree(capturedExpressions: List[Expr]) extends CaptureDescrTree {
     override def children: List[Ast] = capturedExpressions
   }
-  
+
   final case class ImplicitRootCaptureSetTree() extends CaptureDescrTree {
     override def children: List[Ast] = Nil
   }
-  
+
   final case class BrandTree() extends CaptureDescrTree {
     override def children: List[Ast] = Nil
   }

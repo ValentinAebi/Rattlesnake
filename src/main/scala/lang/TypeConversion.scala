@@ -1,9 +1,9 @@
 package lang
 
 import lang.Types.PrimitiveTypeShape.*
-import lang.Types.TypeShape
+import lang.Types.{Type, TypeShape}
 
-enum TypeConversion(val from: TypeShape, val to: TypeShape) {
+enum TypeConversion(val from: Type, val to: Type) {
   case Int2Double extends TypeConversion(IntType, DoubleType)
   case Double2Int extends TypeConversion(DoubleType, IntType)
   case IntToChar extends TypeConversion(IntType, CharType)
@@ -12,7 +12,7 @@ enum TypeConversion(val from: TypeShape, val to: TypeShape) {
 
 object TypeConversion {
   
-  def conversionFor(from: TypeShape, to: TypeShape): Option[TypeConversion] = {
+  def conversionFor(from: Type, to: Type): Option[TypeConversion] = {
     TypeConversion.values.find(conv => conv.from == from && conv.to == to)
   }
   

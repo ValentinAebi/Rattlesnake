@@ -8,8 +8,9 @@ import compiler.reporting.{Errors, Position}
 import compiler.typechecker.TypeCheckingContext.{LocalInfo, LocalUsesCollector}
 import identifiers.{FunOrVarId, TypeIdentifier}
 import lang.*
+import lang.CaptureDescriptors.*
 import lang.Types.PrimitiveTypeShape.{NothingType, VoidType}
-import lang.Types.{NamedTypeShape, Type, TypeShape, UndefinedTypeShape}
+import lang.Types.*
 
 import scala.collection.mutable
 
@@ -19,8 +20,12 @@ import scala.collection.mutable
 final case class TypeCheckingContext private(
                                               private val analysisContext: AnalysisContext,
                                               private val locals: mutable.Map[FunOrVarId, LocalInfo] = mutable.Map.empty,
-                                              meType: Type
+                                              meId: TypeIdentifier,
+                                              meCaptureDescr: CaptureDescriptor
                                             ) {
+
+  def meType: Type = NamedTypeShape(meId) ^ meCaptureDescr
+
   // Locals that have been created by this context (i.e. not obtained via copied)
   private val ownedLocals: mutable.Set[FunOrVarId] = mutable.Set.empty
 
@@ -110,11 +115,8 @@ final case class TypeCheckingContext private(
 
 object TypeCheckingContext {
 
-  def apply(analysisContext: AnalysisContext, meType: Type): TypeCheckingContext = TypeCheckingContext(
-    analysisContext,
-    mutable.Map.empty,
-    meType
-  )
+  def apply(analysisContext: AnalysisContext, meId: TypeIdentifier, meCaptureDescr: CaptureDescriptor): TypeCheckingContext =
+    TypeCheckingContext(analysisContext, mutable.Map.empty, meId, meCaptureDescr)
 
   final case class LocalInfo private(
                                       name: FunOrVarId,

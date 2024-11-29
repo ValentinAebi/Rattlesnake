@@ -1,6 +1,7 @@
 package lang
 
 import identifiers.TypeIdentifier
+import lang.CaptureDescriptors.*
 
 import scala.annotation.targetName
 

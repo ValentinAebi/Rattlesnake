@@ -4,11 +4,7 @@ import identifiers.TypeIdentifier
 import lang.Device
 import lang.Types.NamedTypeShape
 
-final case class Environment(
-                              currentModuleType: NamedTypeShape,
-                              allowedPackages: Set[TypeIdentifier],
-                              allowedDevices: Set[Device]
-                            ) {
+final case class Environment(allowedPackages: Set[TypeIdentifier], allowedDevices: Set[Device]) {
 
   def allowsPackage(pkg: TypeIdentifier): Boolean =
     allowedPackages.contains(pkg)
@@ -19,11 +15,10 @@ final case class Environment(
 }
 
 object Environment {
-  
-  def emptyFrom(currentModuleType: NamedTypeShape): Environment = Environment(
-    currentModuleType,
+
+  val empty: Environment = Environment(
     Set.empty,
     Set.empty
   )
-  
+
 }

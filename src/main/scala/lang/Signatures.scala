@@ -1,6 +1,7 @@
 package lang
 
 import identifiers.*
+import lang.CaptureDescriptors.{CaptureDescriptor, CaptureSet}
 import lang.StructSignature.FieldInfo
 import lang.Types.PrimitiveTypeShape.VoidType
 import lang.Types.{NamedTypeShape, Type}
@@ -12,23 +13,33 @@ final case class FunctionSignature(name: FunOrVarId, args: List[(Option[FunOrVar
 
 sealed trait TypeSignature {
   def id: TypeIdentifier
+
   def isInterface: Boolean
+
   def isModuleOrPackage: Boolean
+
   def functions: Map[FunOrVarId, FunctionSignature]
+
   def typeOfSelectIfCapturable(sel: FunOrVarId): Option[Type]
+
   def params: mutable.LinkedHashMap[FunOrVarId, FieldInfo]
+  
+  def getCaptureDescr: CaptureDescriptor
 }
 
 sealed trait ModuleOrPackageSignature extends TypeSignature {
 
   def paramImports: mutable.LinkedHashMap[FunOrVarId, Type]
+
   def importedPackages: mutable.LinkedHashSet[TypeIdentifier]
+
   def importedDevices: mutable.LinkedHashSet[Device]
 
   override def params: mutable.LinkedHashMap[FunOrVarId, FieldInfo] =
     paramImports.map((id, tpe) => id -> FieldInfo(tpe, isReassignable = false))
 
   override def isInterface: Boolean = false
+
   override def isModuleOrPackage: Boolean = true
 
   override def typeOfSelectIfCapturable(sel: FunOrVarId): Option[Type] = paramImports.get(sel)
@@ -37,6 +48,7 @@ sealed trait ModuleOrPackageSignature extends TypeSignature {
 sealed trait StructOrModuleSignature extends TypeSignature {
   def constructorSig: FunctionSignature =
     FunctionSignature(ConstructorFunId, params.toList.map((id, info) => (Some(id), info.tpe)), VoidType)
+
   def isShallowMutable: Boolean
 }
 
@@ -47,6 +59,13 @@ final case class ModuleSignature(
                                   importedDevices: mutable.LinkedHashSet[Device],
                                   functions: Map[FunOrVarId, FunctionSignature]
                                 ) extends ModuleOrPackageSignature, StructOrModuleSignature {
+
+  override def getCaptureDescr: CaptureDescriptor = CaptureSet((
+    paramImports.map((paramId, _) => MePath.dot(paramId)) ++
+      importedPackages.map(CapPackage(_)) ++
+      importedDevices.map(CapDevice(_))
+    ).toSet)
+
   override def isShallowMutable: Boolean = false
 }
 
@@ -56,8 +75,10 @@ final case class PackageSignature(
                                    importedDevices: mutable.LinkedHashSet[Device],
                                    functions: Map[FunOrVarId, FunctionSignature]
                                  ) extends ModuleOrPackageSignature {
+
   override def paramImports: mutable.LinkedHashMap[FunOrVarId, Type] = mutable.LinkedHashMap.empty
-  def asType: Type = NamedTypeShape(id) ^ CaptureSet((
+
+  override def getCaptureDescr: CaptureDescriptor = CaptureSet((
     importedPackages.map(CapPackage(_)) ++
       importedDevices.map(CapDevice(_))
     ).toSet)
@@ -79,6 +100,10 @@ final case class StructSignature(
 
   override def typeOfSelectIfCapturable(sel: FunOrVarId): Option[Type] =
     fields.get(sel).filter(!_.isReassignable).map(_.tpe)
+
+  override def getCaptureDescr: CaptureDescriptor = CaptureSet(
+    fields.filter((_, info) => !info.tpe.captureDescriptor.isEmpty).map((id, _) => MePath.dot(id)).toSet
+  )
 }
 
 final case class DeviceSignature(
@@ -87,9 +112,10 @@ final case class DeviceSignature(
                                 ) extends TypeSignature {
 
   override def isInterface: Boolean = false
+
   override def isModuleOrPackage: Boolean = false
-  
-  def asType: Type = NamedTypeShape(id) ^ CaptureSet.singletonOfRoot
+
+  override def getCaptureDescr: CaptureDescriptor = CaptureSet.singletonOfRoot
 }
 
 object StructSignature {

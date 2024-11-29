@@ -9,8 +9,9 @@ import compiler.typechecker.SubtypeRelation.subtypeOf
 import compiler.typechecker.{Environment, PathsConverter, TypeCheckingContext}
 import identifiers.{FunOrVarId, IntrinsicsPackageId, TypeIdentifier}
 import lang.*
-import lang.Types.PrimitiveTypeShape.{NothingType, VoidType}
+import lang.CaptureDescriptors.*
 import lang.Types.*
+import lang.Types.PrimitiveTypeShape.{NothingType, VoidType}
 
 import scala.collection.mutable
 
@@ -45,6 +46,11 @@ final case class AnalysisContext(
         } getOrElse FunctionNotFound
       } getOrElse ModuleNotFound
   }
+
+  def unrestrictedEnvironment: Environment = Environment(
+    packages.keySet,
+    Device.values.toSet
+  )
 
 }
 
@@ -146,7 +152,7 @@ object AnalysisContext {
 
     private def computeFunctionSig(funDef: FunDef): FunctionSignature = {
       val argsTypesB = List.newBuilder[(Option[FunOrVarId], Type)]
-      for (Param(paramNameOpt, tpe, isReassignable) <- funDef.params){
+      for (Param(paramNameOpt, tpe, isReassignable) <- funDef.params) {
         argsTypesB.addOne(paramNameOpt, computeType(tpe))
       }
       val retType = funDef.optRetType.map(computeType).getOrElse(VoidType)
@@ -154,11 +160,11 @@ object AnalysisContext {
     }
 
     private def computeType(typeTree: TypeTree): Type = typeTree match {
-      case PrimitiveTypeTree(primitiveType, captureDescr) =>
+      case PrimitiveTypeShapeTree(primitiveType, captureDescr) =>
         primitiveType ^ captureDescr.map(computeCaptureDescr)
-      case NamedTypeTree(name, captureDescr) =>
+      case NamedTypeShapeTree(name, captureDescr) =>
         NamedTypeShape(name) ^ captureDescr.map(computeCaptureDescr)
-      case ArrayTypeTree(elemType, captureDescr, isModifiable) =>
+      case ArrayTypeShapeTree(elemType, captureDescr, isModifiable) =>
         ArrayTypeShape(computeType(elemType), isModifiable) ^ captureDescr.map(computeCaptureDescr)
     }
 
@@ -247,9 +253,13 @@ object AnalysisContext {
         structs.get(directSupertypeId) match {
           case Some((directSupertypeSig, _)) => {
             if (directSupertypeSig.isInterface) {
+              // TODO carefully check what happens here
+              // i.e. what elements each field is allowed to capture (fields of the super-/subtype)
+              // and what me refers to
               val tcCtx = TypeCheckingContext(
                 analysisContext = builtCtx,
-                meType = NamedTypeShape(directSupertypeId)
+                meId = directSupertypeId,
+                meCaptureDescr = directSupertypeSig.getCaptureDescr
               )
               for ((fldName, superFldInfo) <- directSupertypeSig.fields) {
                 structSig.fields.get(fldName) match {
