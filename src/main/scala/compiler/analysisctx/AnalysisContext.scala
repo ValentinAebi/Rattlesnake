@@ -6,7 +6,7 @@ import compiler.pipeline.CompilationStep.ContextCreation
 import compiler.reporting.Errors.{Err, ErrorReporter, errorsExitCode}
 import compiler.reporting.Position
 import compiler.typechecker.SubtypeRelation.subtypeOf
-import compiler.typechecker.{Environment, PathsConverter, TypeCheckingContext}
+import compiler.typechecker.{Environment, TypeCheckingContext}
 import identifiers.{FunOrVarId, IntrinsicsPackageId, TypeIdentifier}
 import lang.*
 import lang.CaptureDescriptors.*
@@ -160,22 +160,44 @@ object AnalysisContext {
     }
 
     private def computeType(typeTree: TypeTree): Type = typeTree match {
-      case PrimitiveTypeShapeTree(primitiveType, captureDescr) =>
-        primitiveType ^ captureDescr.map(computeCaptureDescr)
-      case NamedTypeShapeTree(name, captureDescr) =>
-        NamedTypeShape(name) ^ captureDescr.map(computeCaptureDescr)
-      case ArrayTypeShapeTree(elemType, captureDescr, isModifiable) =>
-        ArrayTypeShape(computeType(elemType), isModifiable) ^ captureDescr.map(computeCaptureDescr)
+      case CapturingTypeTree(typeShapeTree, captureDescr) =>
+        CapturingType(computeTypeShape(typeShapeTree), computeCaptureDescr(captureDescr))
+      case typeShapeTree: TypeShapeTree =>
+        computeTypeShape(typeShapeTree)
+    }
+    
+    private def computeTypeShape(typeShapeTree: TypeShapeTree): TypeShape = typeShapeTree match {
+      case ArrayTypeShapeTree(elemType, isModifiable) => ArrayTypeShape(computeType(elemType), isModifiable)
+      case castTargetTypeShapeTree: CastTargetTypeShapeTree => computeCastTargetTypeShape(castTargetTypeShapeTree)
+    }
+    
+    private def computeCastTargetTypeShape(castTargetTypeShapeTree: CastTargetTypeShapeTree): CastTargetTypeShape = {
+      castTargetTypeShapeTree match
+        case PrimitiveTypeShapeTree(primitiveType) => primitiveType
+        case NamedTypeShapeTree(name) => NamedTypeShape(name)
     }
 
     private def computeCaptureDescr(cdTree: CaptureDescrTree): CaptureDescriptor = cdTree match {
       case ExplicitCaptureSetTree(capturedExpressions) =>
         // checks that the expression is indeed capturable are delayed to the type-checker
-        CaptureSet(capturedExpressions.flatMap(PathsConverter.convertOrFailSilently).toSet)
+        CaptureSet(capturedExpressions.flatMap(convertOrFailSilently).toSet)
       case ImplicitRootCaptureSetTree() =>
         CaptureSet.singletonOfRoot
       case BrandTree() =>
         Brand
+    }
+    
+    private def convertOrFailSilently(expr: Expr): Option[Capturable] = expr match {
+      case VariableRef(name) => Some(IdPath(name))
+      case MeRef() => Some(MePath)
+      case PackageRef(pkgName) => Some(CapPackage(pkgName))
+      case DeviceRef(device) => Some(CapDevice(device))
+      case Select(lhs, selected) =>
+        convertOrFailSilently(lhs).flatMap {
+          case p: Path => Some(SelectPath(p, selected))
+          case _ => None
+        }
+      case _ => None
     }
 
     private def analyzeImports(moduleDef: ModuleDef) = {

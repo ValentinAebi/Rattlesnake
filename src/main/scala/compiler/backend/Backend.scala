@@ -667,7 +667,7 @@ final class Backend[V <: ClassVisitor](
       case cast@Cast(expr, tpe) => {
         generateCode(expr, ctx)
         if (!cast.isTransparentCast) {
-          TypeConversion.conversionFor(expr.getType, tpe) match
+          TypeConversion.conversionFor(expr.getType.shape, tpe.getResolvedTypeOpt) match
             case Some(TypeConversion.Int2Double) => mv.visitInsn(Opcodes.I2D)
             case Some(TypeConversion.Double2Int) => mv.visitInsn(Opcodes.D2I)
             case Some(TypeConversion.IntToChar) => mv.visitInsn(Opcodes.I2C)

@@ -208,17 +208,19 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
       }
     }
   } setName "maybeCaptureDescr"
+  
+  private lazy val primOrNamedShape = highName map { typeName =>
+    val primTypeOpt = Types.primTypeFor(typeName).map(PrimitiveTypeShapeTree(_))
+    primTypeOpt.getOrElse(NamedTypeShapeTree(typeName))
+  } setName "primOrNamedShape"
 
-  private lazy val primOrNamedType = highName ::: maybeCaptureDescr map {
-    case typeName ^: cdOpt => {
-      val primTypeOpt = Types.primTypeFor(typeName).map(PrimitiveTypeShapeTree(_, cdOpt))
-      primTypeOpt.getOrElse(NamedTypeShapeTree(typeName, cdOpt))
-    }
+  private lazy val primOrNamedType = primOrNamedShape ::: maybeCaptureDescr map {
+    case shape ^: cdOpt => shape ^ cdOpt
   } setName "primOrNamedType"
 
   private lazy val arrayType = recursive {
     opt(kw(Mut)) ::: kw(Arr).ignored ::: maybeCaptureDescr ::: typeTree map {
-      case mutOpt ^: cdOpt ^: tp => ArrayTypeShapeTree(tp, cdOpt, mutOpt.isDefined)
+      case mutOpt ^: cdOpt ^: tp => ArrayTypeShapeTree(tp, mutOpt.isDefined) ^ cdOpt
     }
   } setName "arrayType"
 
@@ -266,7 +268,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   private lazy val binopArg = recursive {
     (noBinopExpr OR mutPossiblyFilledArrayInit OR arrayInit OR structOrModuleInstantiation OR regionCreation)
-      ::: opt((kw(As) OR kw(Is)) ::: typeTree
+      ::: opt((kw(As) OR kw(Is)) ::: primOrNamedShape
     ) map {
       case expression ^: None => expression
       case expression ^: Some(As ^: tp) => Cast(expression, tp)

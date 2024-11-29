@@ -28,7 +28,9 @@ object Types {
       cdOpt.map(CapturingType(this, _)).getOrElse(this)
   }
   
-  enum PrimitiveTypeShape(val str: String) extends TypeShape {
+  sealed trait CastTargetTypeShape extends TypeShape
+  
+  enum PrimitiveTypeShape(val str: String) extends CastTargetTypeShape {
     case IntType extends PrimitiveTypeShape("Int")
     case DoubleType extends PrimitiveTypeShape("Double")
     case CharType extends PrimitiveTypeShape("Char")
@@ -46,7 +48,7 @@ object Types {
     PrimitiveTypeShape.values.find(_.str == name.stringId)
   }
   
-  final case class NamedTypeShape(typeName: TypeIdentifier) extends TypeShape {
+  final case class NamedTypeShape(typeName: TypeIdentifier) extends CastTargetTypeShape {
     override def toString: String = typeName.stringId
   }
 

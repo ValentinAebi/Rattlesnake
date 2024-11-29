@@ -12,7 +12,7 @@ enum TypeConversion(val from: Type, val to: Type) {
 
 object TypeConversion {
   
-  def conversionFor(from: Type, to: Type): Option[TypeConversion] = {
+  def conversionFor(from: TypeShape, to: TypeShape): Option[TypeConversion] = {
     TypeConversion.values.find(conv => conv.from == from && conv.to == to)
   }
   

@@ -1,7 +1,8 @@
 package compiler.typechecker
 
+import lang.CaptureDescriptors.*
 import lang.Types.Type
-import lang.{Brand, Capturable, CaptureDescriptor, CaptureSet, Path, SelectPath}
+import lang.{Capturable, Path, SelectPath}
 
 object SubcaptureRelation {
 
