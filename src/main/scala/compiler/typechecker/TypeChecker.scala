@@ -430,10 +430,12 @@ final class TypeChecker(errorReporter: ErrorReporter)
           case _ => ()
         }
         val elemType = checkType(elemTypeTree)
+        // TODO capture region
         ArrayTypeShape(elemType, modifiable = true)
 
       case filledArrayInit@FilledArrayInit(regionOpt, Nil) =>
         regionOpt.foreach(checkAndRequireRegion(_, tcCtx))
+        // TODO capture region
         reportError("cannot infer type of empty array, use 'arr <type>[0]' instead", filledArrayInit.getPosition)
 
       case filledArrayInit@FilledArrayInit(regionOpt, arrayElems) =>
@@ -441,8 +443,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val types = arrayElems.map(checkExpr)
         computeJoinOf(types.toSet, tcCtx) match {
           case Some(elemsJoin) =>
+            // TODO capture region
             ArrayTypeShape(elemsJoin, modifiable = regionOpt.isDefined)
           case None =>
+            // TODO capture region
             reportError("cannot infer array type", filledArrayInit.getPosition)
         }
 
