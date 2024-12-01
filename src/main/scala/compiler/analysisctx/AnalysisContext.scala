@@ -20,7 +20,7 @@ final case class AnalysisContext(
                                   modules: Map[TypeIdentifier, ModuleSignature],
                                   packages: Map[TypeIdentifier, PackageSignature],
                                   structs: Map[TypeIdentifier, StructSignature],
-                                  constants: Map[FunOrVarId, TypeShape]
+                                  constants: Map[FunOrVarId, Type]
                                 ) {
 
   def knowsUserDefType(tid: TypeIdentifier): Boolean =
@@ -84,7 +84,7 @@ object AnalysisContext {
       )
     )
     private val structs: mutable.Map[TypeIdentifier, (StructSignature, Option[Position])] = mutable.Map.empty
-    private val constants: mutable.Map[FunOrVarId, TypeShape] = mutable.Map.empty
+    private val constants: mutable.Map[FunOrVarId, Type] = mutable.Map.empty
 
     def addModule(moduleDef: ModuleDef): Unit = {
       val moduleName = moduleDef.moduleName

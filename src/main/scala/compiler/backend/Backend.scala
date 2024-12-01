@@ -128,7 +128,7 @@ final class Backend[V <: ClassVisitor](
       ccv.visitField(
         ACC_PUBLIC | ACC_STATIC,
         const.constName.stringId,
-        descriptorForType(const.value.getType),
+        descriptorForType(const.value.getType.shape),
         null,
         const.value.value
       )

@@ -237,9 +237,9 @@ object Asts {
 
     final override def children: List[Ast] = Nil
 
-    override def getTypeOpt: Option[TypeShape]
+    override def getTypeOpt: Option[Type]
 
-    final def getType: TypeShape = {
+    final override def getType: Type = {
       getTypeOpt match
         case Some(tpe) => tpe
         case None => throw new NoSuchElementException(s"type missing in $this")
@@ -518,9 +518,16 @@ object Asts {
         capDescr <- captureDescr.getResolvedDescrOpt
       } yield CapturingType(shape, capDescr)
     }
+
+    override def children: List[Ast] = List(typeShapeTree, captureDescr)
   }
 
-  final case class WrapperTypeTree(tpe: Type) extends TypeTree
+  // TODO use this instead of types like PrimitiveTypeTree
+  final case class WrapperTypeTree(tpe: Type) extends TypeTree {
+    override def getResolvedTypeOpt: Option[Type] = Some(tpe)
+
+    override def children: List[Ast] = Nil
+  }
   
   sealed trait TypeShapeTree extends TypeTree {
     
@@ -540,11 +547,25 @@ object Asts {
     override def getResolvedTypeOpt: Option[CastTargetTypeShape]
   }
 
-  final case class PrimitiveTypeShapeTree(primitiveType: PrimitiveTypeShape) extends CastTargetTypeShapeTree
+  final case class PrimitiveTypeShapeTree(primitiveType: PrimitiveTypeShape) extends CastTargetTypeShapeTree {
+    override def getResolvedTypeOpt: Option[CastTargetTypeShape] = Some(primitiveType)
 
-  final case class NamedTypeShapeTree(name: TypeIdentifier) extends CastTargetTypeShapeTree
+    override def children: List[Ast] = Nil
+  }
 
-  final case class ArrayTypeShapeTree(elemType: TypeTree, isModifiable: Boolean) extends TypeShapeTree
+  final case class NamedTypeShapeTree(name: TypeIdentifier) extends CastTargetTypeShapeTree {
+    override def getResolvedTypeOpt: Option[CastTargetTypeShape] = Some(NamedTypeShape(name))
+
+    override def children: List[Ast] = Nil
+  }
+
+  final case class ArrayTypeShapeTree(elemType: TypeTree, isModifiable: Boolean) extends TypeShapeTree {
+    override def getResolvedTypeOpt: Option[TypeShape] = {
+      elemType.getResolvedTypeOpt.map(ArrayTypeShape(_, isModifiable))
+    }
+
+    override def children: List[Ast] = List(elemType)
+  }
 
   sealed abstract class CaptureDescrTree extends Ast {
     private val descrMemo = new Memo[CaptureDescriptor]

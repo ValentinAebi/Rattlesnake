@@ -29,6 +29,8 @@ sealed trait TypeSignature {
 
   def constructorSig: FunctionSignature =
     FunctionSignature(ConstructorFunId, params.toList.map((id, info) => (Some(id), info.tpe)), VoidType)
+    
+  def getSelfReferringType: Type = NamedTypeShape(id) ^ getCaptureDescr
 }
 
 sealed trait ModuleOrPackageSignature extends TypeSignature {
@@ -117,6 +119,10 @@ final case class DeviceSignature(
   override def isModuleOrPackage: Boolean = false
 
   override def getCaptureDescr: CaptureDescriptor = CaptureSet.singletonOfRoot
+
+  override def typeOfSelectIfCapturable(sel: FunOrVarId): Option[Type] = None
+
+  override def params: mutable.LinkedHashMap[FunOrVarId, FieldInfo] = mutable.LinkedHashMap.empty
 }
 
 object StructSignature {
