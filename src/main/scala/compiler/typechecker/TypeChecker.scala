@@ -594,7 +594,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
     val pos = call.getPosition
     tcCtx.resolveFunc(owner, funName) match {
       case FunctionFound(funSig) =>
-        call.resolve(funSig)
+        call.setResolvedSig(funSig)
         call.cacheMeType(tcCtx.meType)
         checkCallArgs(funSig, call.receiverOpt, args, tcCtx, pos)
       case ModuleNotFound =>

@@ -14,7 +14,7 @@ object Asts {
   sealed abstract class Ast {
     // Positions are propagated by the TreeParser
     // Each AST is assigned the position of its leftmost token (by the map method of TreeParser)
-    private val positionMemo = Memo[Position]()
+    private val positionMemo = new Memo[Position]
     
     export positionMemo.setOpt as setPosition
     export positionMemo.set as setPosition
@@ -40,7 +40,7 @@ object Asts {
   sealed abstract class Statement extends Ast
 
   sealed abstract class Expr extends Statement {
-    private val typeMemo = Memo[Type]()
+    private val typeMemo = new Memo[Type]
 
     /**
      * Set the type that has been inferred for this expression
@@ -185,7 +185,7 @@ object Asts {
     private val signatureMemo = new Memo[FunctionSignature]
     
     export signatureMemo.set as setSignature
-    export signatureMemo.getOpt as getSignature
+    export signatureMemo.getOpt as getSignatureOpt
 
     override def children: List[Ast] = params ++ optRetType.toList :+ body
   }
@@ -317,7 +317,7 @@ object Asts {
     private val signatureMemo = new Memo[FunctionSignature]
     private val meTypeMemo = new Memo[Type]
     
-    export signatureMemo.set as resolve
+    export signatureMemo.set as setResolvedSig
     export signatureMemo.getOpt as getSignatureOpt
     export meTypeMemo.set as cacheMeType
     export meTypeMemo.getOpt as getMeTypeOpt

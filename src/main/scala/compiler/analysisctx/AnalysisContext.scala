@@ -137,15 +137,16 @@ object AnalysisContext {
       builtCtx
     }
 
-    private def extractFunctions(repo: ModuleOrPackageDefTree): Map[FunOrVarId, FunctionSignature] = {
+    private def extractFunctions(modOrMkg: ModuleOrPackageDefTree): Map[FunOrVarId, FunctionSignature] = {
       val functions = mutable.Map.empty[FunOrVarId, FunctionSignature]
-      for funDef <- repo.functions do {
+      for funDef <- modOrMkg.functions do {
         val name = funDef.funName
         if (functions.contains(name)) {
           reportError(s"redefinition of function '$name'", funDef.getPosition)
         } else {
           val funSig = computeFunctionSig(funDef)
           functions.put(name, funSig)
+          funDef.setSignature(funSig)
         }
       }
       functions.toMap

@@ -50,7 +50,9 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
   }
 
   private def lower(funDef: FunDef): FunDef = propagatePosition(funDef.getPosition) {
-    FunDef(funDef.funName, funDef.params.map(lower), funDef.optRetType, lower(funDef.body))
+    val loweredFunDef = FunDef(funDef.funName, funDef.params.map(lower), funDef.optRetType, lower(funDef.body))
+    loweredFunDef.setSignature(funDef.getSignatureOpt.get)
+    loweredFunDef
   }
 
   private def lower(structDef: StructDef): StructDef = propagatePosition(structDef.getPosition) {
@@ -84,7 +86,10 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
   private def lower(imp: Import): Import = imp
 
   private def lower(localDef: LocalDef): LocalDef = propagatePosition(localDef.getPosition) {
-    LocalDef(localDef.localName, localDef.optTypeAnnot.map(lower), lower(localDef.rhs), localDef.isReassignable)
+    val loweredLocal = LocalDef(localDef.localName, localDef.optTypeAnnot.map(lower), lower(localDef.rhs),
+      localDef.isReassignable)
+    loweredLocal.setVarType(localDef.getVarTypeOpt.get)
+    loweredLocal
   }
 
   private def lower(varAssig: VarAssig): VarAssig = propagatePosition(varAssig.getPosition) {
@@ -131,10 +136,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
       case meRef: MeRef => meRef
       case packageRef: PackageRef => packageRef
       case deviceRef: DeviceRef => deviceRef
-      case call: Call if call.receiverOpt.isEmpty && !Intrinsics.intrinsics.contains(call.function) =>
-        val receiver = MeRef().setType(call.getMeTypeOpt.get)
-        lower(call.copy(receiverOpt = Some(receiver)))
-      case call: Call => Call(call.receiverOpt.map(lower), call.function, call.args.map(lower))
+      case call: Call => lower(call)
       case indexing: Indexing => Indexing(lower(indexing.indexed), lower(indexing.arg))
       case arrayInit: ArrayInit => ArrayInit(lower(arrayInit.region), arrayInit.elemType, lower(arrayInit.size))
       case instantiation: StructOrModuleInstantiation =>
@@ -228,6 +230,18 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
     lowered.setTypeOpt(expr.getTypeOpt)
   }
 
+  private def lower(call: Call): Call = propagatePosition(call.getPosition){
+    val loweredReceiverOpt = call.receiverOpt.map(lower).orElse {
+      if Intrinsics.intrinsics.contains(call.getSignatureOpt.get.name)
+      then None
+      else Some(MeRef().setType(call.getMeTypeOpt.get))
+    }
+    val loweredCall = Call(loweredReceiverOpt, call.function, call.args.map(lower))
+    loweredCall.setResolvedSig(call.getSignatureOpt.get)
+    loweredCall.setType(call.getType)
+    loweredCall
+  }
+
   private def lower(statement: Statement): Statement = propagatePosition(statement.getPosition) {
     // call appropriate method for each type of statement
     statement match
@@ -269,11 +283,15 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
       ArrayTypeShapeTree(lower(elemType), isModifiable)
   }
 
-  private def lower(captureDescrTree: CaptureDescrTree): CaptureDescrTree = captureDescrTree match {
-    case ExplicitCaptureSetTree(capturedExpressions) =>
-      ExplicitCaptureSetTree(capturedExpressions.map(lower))
-    case implicitRootCaptureSetTree: ImplicitRootCaptureSetTree => implicitRootCaptureSetTree
-    case brandTree: BrandTree => brandTree
+  private def lower(captureDescrTree: CaptureDescrTree): CaptureDescrTree = {
+    val loweredCapDescr = captureDescrTree match {
+      case ExplicitCaptureSetTree(capturedExpressions) =>
+        ExplicitCaptureSetTree(capturedExpressions.map(lower))
+      case implicitRootCaptureSetTree: ImplicitRootCaptureSetTree => implicitRootCaptureSetTree
+      case brandTree: BrandTree => brandTree
+    }
+    loweredCapDescr.setResolvedDescr(captureDescrTree.getResolvedDescrOpt.get)
+    loweredCapDescr
   }
 
   private def propagatePosition[A <: Ast](pos: Option[Position], maxDepth: Int = 2)(ast: A): A = {

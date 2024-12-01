@@ -152,7 +152,7 @@ final class Backend[V <: ClassVisitor](
       cv.visitField(ACC_PRIVATE, varId.stringId, descriptorForType(moduleType.shape), null, null)
     }
     for func <- modOrPkg.functions do {
-      val desc = descriptorForFunc(func.getSignature.get)
+      val desc = descriptorForFunc(func.getSignatureOpt.get)
       val mv = cv.visitMethod(ACC_PUBLIC, func.funName.stringId, desc, null, null)
       addFunction(modOrPkg.name, func, mv, ctx)
     }
@@ -424,8 +424,9 @@ final class Backend[V <: ClassVisitor](
         for arg <- args do {
           generateCode(arg, ctx)
         }
-        val recvInternalName = internalNameOf(receiver.getType.shape)
-        val receiverTypeName = receiver.getType.asInstanceOf[NamedTypeShape].typeName
+        val receiverShape = receiver.getType.shape
+        val recvInternalName = internalNameOf(receiverShape)
+        val receiverTypeName = receiverShape.asInstanceOf[NamedTypeShape].typeName
         val funDescr = descriptorForFunc(ctx.resolveFunc(receiverTypeName, funName).getOrThrow())
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, recvInternalName, funName.stringId, funDescr, false)
       }
@@ -438,7 +439,7 @@ final class Backend[V <: ClassVisitor](
         mv.visitInsn(opcode)
 
       case arrayInit@ArrayInit(region, elemTypeTree, size) =>
-        val elemType = arrayInit.getType
+        val elemType = elemTypeTree.getResolvedType
         generateCode(region, ctx)
         generateCode(size, ctx)
         elemType.shape match {
