@@ -389,6 +389,36 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         addParenthList(capabilities)
         addAst(body)
 
+      case CapturingTypeTree(typeShapeTree, captureDescr) =>
+        addAst(typeShapeTree)
+        pps.add("^")
+        addAst(captureDescr)
+
+      case WrapperTypeTree(tpe) =>
+        pps.add(tpe.toString)
+
+      case ArrayTypeShapeTree(elemType, isModifiable) =>
+        if (isModifiable){
+          pps
+            .add(Mut.str)
+            .addSpace()
+        }
+        addAst(elemType)
+
+      case PrimitiveTypeShapeTree(primitiveType) =>
+        pps.add(primitiveType.toString)
+
+      case NamedTypeShapeTree(name) =>
+        pps.add(name)
+
+      case ExplicitCaptureSetTree(capturedExpressions) =>
+        addBracesList(capturedExpressions, ",", onMultipleLines = false)
+
+      case ImplicitRootCaptureSetTree() => ()
+
+      case BrandTree() =>
+        pps.add("#")
+
     }
   }
 
