@@ -1,6 +1,7 @@
 package lang
 
 import identifiers.*
+import lang.Capturables.*
 import lang.CaptureDescriptors.{CaptureDescriptor, CaptureSet}
 import lang.StructSignature.FieldInfo
 import lang.Types.PrimitiveTypeShape.VoidType
@@ -25,6 +26,9 @@ sealed trait TypeSignature {
   def params: mutable.LinkedHashMap[FunOrVarId, FieldInfo]
   
   def getCaptureDescr: CaptureDescriptor
+
+  def constructorSig: FunctionSignature =
+    FunctionSignature(ConstructorFunId, params.toList.map((id, info) => (Some(id), info.tpe)), VoidType)
 }
 
 sealed trait ModuleOrPackageSignature extends TypeSignature {
@@ -46,9 +50,6 @@ sealed trait ModuleOrPackageSignature extends TypeSignature {
 }
 
 sealed trait StructOrModuleSignature extends TypeSignature {
-  def constructorSig: FunctionSignature =
-    FunctionSignature(ConstructorFunId, params.toList.map((id, info) => (Some(id), info.tpe)), VoidType)
-
   def isShallowMutable: Boolean
 }
 

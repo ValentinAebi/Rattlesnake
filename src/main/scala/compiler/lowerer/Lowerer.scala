@@ -5,10 +5,10 @@ import compiler.analysisctx.AnalysisContext
 import compiler.pipeline.CompilerStep
 import compiler.reporting.Position
 import identifiers.IntrinsicsPackageId
-import lang.Intrinsics
+import lang.{Intrinsics, Types}
 import lang.Operator.*
 import lang.Types.PrimitiveTypeShape.*
-import lang.Types.{ArrayTypeShape, NamedTypeShape, PrimitiveTypeShape, UndefinedTypeShape}
+import lang.Types.*
 
 /**
  * Lowering replaces (this list may not be complete):
@@ -84,7 +84,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
   private def lower(imp: Import): Import = imp
 
   private def lower(localDef: LocalDef): LocalDef = propagatePosition(localDef.getPosition) {
-    LocalDef(localDef.localName, localDef.optType, lower(localDef.rhs), localDef.isReassignable)
+    LocalDef(localDef.localName, localDef.optTypeAnnot.map(lower), lower(localDef.rhs), localDef.isReassignable)
   }
 
   private def lower(varAssig: VarAssig): VarAssig = propagatePosition(varAssig.getPosition) {
@@ -132,7 +132,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
       case packageRef: PackageRef => packageRef
       case deviceRef: DeviceRef => deviceRef
       case call: Call if call.receiverOpt.isEmpty && !Intrinsics.intrinsics.contains(call.function) =>
-        val receiver = MeRef().setType(call.getSignature.get._1)
+        val receiver = MeRef().setType(call.getMeTypeOpt.get)
         lower(call.copy(receiverOpt = Some(receiver)))
       case call: Call => Call(call.receiverOpt.map(lower), call.function, call.args.map(lower))
       case indexing: Indexing => Indexing(lower(indexing.indexed), lower(indexing.arg))
@@ -152,9 +152,10 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
         val elemType = arrayType.elemType
         val arrValId = uniqueIdGenerator.next()
         val arrValRef = VariableRef(arrValId).setType(arrayType)
-        val arrInit = ArrayInit(region, elemType, IntLit(arrayElems.size)).setType(filledArrayInit.getType)
+        val arrInit = ArrayInit(region, WrapperTypeTree(elemType), IntLit(arrayElems.size)).setType(filledArrayInit.getType)
         // TODO the type of the temporary variable should capture the region (for consistency)
-        val arrayValDefinition = LocalDef(arrValId, Some(arrayType), arrInit, isReassignable = false)
+        val arrayValDefinition = LocalDef(arrValId, None, arrInit, isReassignable = false)
+        arrayValDefinition.setVarType(arrayType)
         val arrElemAssigStats = arrayElems.map(lower).zipWithIndex.map {
           (elem, idx) => VarAssig(Indexing(arrValRef, IntLit(idx)).setType(UndefinedTypeShape), elem)
         }
@@ -255,6 +256,26 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
     EnclosedStat(enclosedStat.capabilities.map(lower), lower(enclosedStat.body))
   }
   
+  private def lower(tpe: TypeTree): TypeTree = tpe match {
+    case CapturingTypeTree(typeShapeTree, captureDescr) =>
+      CapturingTypeTree(lower(typeShapeTree), lower(captureDescr))
+    case shape: TypeShapeTree => lower(shape)
+    case wrapperTypeTree: WrapperTypeTree => wrapperTypeTree
+  }
+  
+  private def lower(shape: TypeShapeTree): TypeShapeTree = shape match {
+    case shape: CastTargetTypeShapeTree => shape
+    case ArrayTypeShapeTree(elemType, isModifiable) =>
+      ArrayTypeShapeTree(lower(elemType), isModifiable)
+  }
+
+  private def lower(captureDescrTree: CaptureDescrTree): CaptureDescrTree = captureDescrTree match {
+    case ExplicitCaptureSetTree(capturedExpressions) =>
+      ExplicitCaptureSetTree(capturedExpressions.map(lower))
+    case implicitRootCaptureSetTree: ImplicitRootCaptureSetTree => implicitRootCaptureSetTree
+    case brandTree: BrandTree => brandTree
+  }
+
   private def propagatePosition[A <: Ast](pos: Option[Position], maxDepth: Int = 2)(ast: A): A = {
     if (maxDepth > 0 && ast.getPosition.isEmpty){
       ast.setPosition(pos)

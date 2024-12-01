@@ -152,7 +152,7 @@ final class Backend[V <: ClassVisitor](
       cv.visitField(ACC_PRIVATE, varId.stringId, descriptorForType(moduleType), null, null)
     }
     for func <- modOrPkg.functions do {
-      val desc = descriptorForFunc(func.computeSignatureUnsafe)
+      val desc = descriptorForFunc(func.getSignature.get)
       val mv = cv.visitMethod(ACC_PUBLIC, func.funName.stringId, desc, null, null)
       addFunction(modOrPkg.name, func, mv, ctx)
     }
@@ -193,9 +193,9 @@ final class Backend[V <: ClassVisitor](
     for param <- funDef.params do {
       param.paramNameOpt match {
         case None =>
-          ctx.addLocal(BackendGeneratedVarId(unnamedParamIdx.incrementAndGet()), param.tpe)
+          ctx.addLocal(BackendGeneratedVarId(unnamedParamIdx.incrementAndGet()), param.tpe.getResolvedType)
         case Some(paramName) =>
-          ctx.addLocal(paramName, param.tpe)
+          ctx.addLocal(paramName, param.tpe.getResolvedType)
       }
     }
     lastWrittenLine = -1
@@ -258,7 +258,7 @@ final class Backend[V <: ClassVisitor](
     mode.terminate(cv, structFilePath, errorReporter)
   }
 
-  private def generateGetter(structName: TypeIdentifier, fld: FunOrVarId, fldType: Types.TypeShape,
+  private def generateGetter(structName: TypeIdentifier, fld: FunOrVarId, fldType: Types.Type,
                              fieldDescr: String, cv: ClassVisitor, genImplementation: Boolean)
                             (using AnalysisContext): Unit = {
     val getterDescriptor = descriptorForFunc(FunctionSignature(fld, List.empty, fldType))
@@ -278,10 +278,10 @@ final class Backend[V <: ClassVisitor](
     getterVisitor.visitEnd()
   }
 
-  private def generateSetter(structName: TypeIdentifier, fld: FunOrVarId, fldType: Types.TypeShape,
+  private def generateSetter(structName: TypeIdentifier, fld: FunOrVarId, fldType: Types.Type,
                              fieldDescr: String, cv: ClassVisitor, genImplementation: Boolean)
                             (using AnalysisContext): Unit = {
-    val setterDescriptor = descriptorForFunc(FunctionSignature(fld, List(fldType), PrimitiveTypeShape.VoidType))
+    val setterDescriptor = descriptorForFunc(FunctionSignature(fld, List(None -> fldType), PrimitiveTypeShape.VoidType))
     var modifiers = ACC_PUBLIC
     if (!genImplementation) {
       modifiers |= ACC_ABSTRACT
@@ -301,21 +301,20 @@ final class Backend[V <: ClassVisitor](
   private def addConstructor(
                               cv: ClassVisitor,
                               visibility: Int,
-                              sig: TypeSignature
+                              typeSig: TypeSignature
                             )(using AnalysisContext): Unit = {
-    val fields = constructorParameters(sig)
-    val constructorSig = FunctionSignature(ConstructorFunId, fields.map(_._2), VoidType)
-    val constructorDescr = descriptorForFunc(constructorSig)
+    val constructorDescr = descriptorForFunc(typeSig.constructorSig)
     val constructorVisitor = cv.visitMethod(visibility, ConstructorFunId.stringId, constructorDescr, null, null)
     constructorVisitor.visitCode()
     constructorVisitor.visitVarInsn(Opcodes.ALOAD, 0)
     constructorVisitor.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/Object", ConstructorFunId.stringId, "()V", false)
     var varIdx = 1
-    for ((fldName, tpe) <- fields) do {
+    for ((fldName, fldInfo) <- typeSig.params) do {
+      val tpe = fldInfo.tpe
       val descr = descriptorForType(tpe)
       constructorVisitor.visitVarInsn(Opcodes.ALOAD, 0)
       constructorVisitor.visitIntInsn(opcodeFor(tpe, Opcodes.ILOAD, Opcodes.ALOAD), varIdx)
-      constructorVisitor.visitFieldInsn(Opcodes.PUTFIELD, sig.id.stringId, fldName, descr)
+      constructorVisitor.visitFieldInsn(Opcodes.PUTFIELD, typeSig.id.stringId, fldName.stringId, descr)
       varIdx += numSlotsFor(tpe)
     }
     constructorVisitor.visitInsn(Opcodes.RETURN)
@@ -326,7 +325,13 @@ final class Backend[V <: ClassVisitor](
   private def addFields(structDef: StructDef, cv: ClassVisitor)
                        (using AnalysisContext): Unit = {
     for field <- structDef.fields do {
-      val fieldVisitor = cv.visitField(Opcodes.ACC_PUBLIC, field.paramNameOpt.get.stringId, descriptorForType(field.tpe), null, null)
+      val fieldVisitor = cv.visitField(
+        Opcodes.ACC_PUBLIC,
+        field.paramNameOpt.get.stringId,
+        descriptorForType(field.tpe.getResolvedType),
+        null,
+        null
+      )
       fieldVisitor.visitEnd()
     }
   }
@@ -370,11 +375,11 @@ final class Backend[V <: ClassVisitor](
       case Block(stats) => generateSequence(ctx, stats, optFinalExpr = None)
       case Sequence(stats, expr) => generateSequence(ctx, stats, Some(expr))
 
-      case LocalDef(varName, tpeOpt, rhs, _) =>
+      case localDef@LocalDef(varName, tpeOpt, rhs, _) =>
         generateCode(rhs, ctx)
         val opcode = opcodeFor(rhs.getType, Opcodes.ISTORE, Opcodes.ASTORE)
         mv.visitVarInsn(opcode, ctx.currLocalIdx)
-        ctx.addLocal(varName, tpeOpt.get)
+        ctx.addLocal(varName, localDef.getVarTypeOpt.get)
 
       case IntLit(value) => mv.visitLdcInsn(value)
       case DoubleLit(value) => mv.visitLdcInsn(value)
@@ -432,7 +437,8 @@ final class Backend[V <: ClassVisitor](
         val opcode = opcodeFor(elemType, Opcodes.IALOAD, Opcodes.AALOAD)
         mv.visitInsn(opcode)
 
-      case ArrayInit(region, elemType, size) =>
+      case arrayInit@ArrayInit(region, elemTypeTree, size) =>
+        val elemType = arrayInit.getType
         generateCode(region, ctx)
         generateCode(size, ctx)
         elemType match {
@@ -615,7 +621,7 @@ final class Backend[V <: ClassVisitor](
             val structSig = ctx.structs.apply(ownerTypeName)
             val fieldType = structSig.fields.apply(fieldName).tpe
             if (structSig.isInterface) {
-              val setterSig = FunctionSignature(fieldName, List(fieldType), PrimitiveTypeShape.VoidType)
+              val setterSig = FunctionSignature(fieldName, List(None -> fieldType), PrimitiveTypeShape.VoidType)
               val setterDescriptor = descriptorForFunc(setterSig)
               mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, ownerTypeName.stringId, fieldName.stringId, setterDescriptor, true)
             } else {
@@ -667,18 +673,18 @@ final class Backend[V <: ClassVisitor](
       case cast@Cast(expr, tpe) => {
         generateCode(expr, ctx)
         if (!cast.isTransparentCast) {
-          TypeConversion.conversionFor(expr.getType.shape, tpe.getResolvedTypeOpt) match
+          TypeConversion.conversionFor(expr.getType.shape, tpe.getResolvedType) match
             case Some(TypeConversion.Int2Double) => mv.visitInsn(Opcodes.I2D)
             case Some(TypeConversion.Double2Int) => mv.visitInsn(Opcodes.D2I)
             case Some(TypeConversion.IntToChar) => mv.visitInsn(Opcodes.I2C)
             case Some(TypeConversion.CharToInt) => ()
-            case None => mv.visitTypeInsn(Opcodes.CHECKCAST, internalNameOf(tpe))
+            case None => mv.visitTypeInsn(Opcodes.CHECKCAST, internalNameOf(tpe.getResolvedType))
         }
       }
 
       case TypeTest(expr, tpe) => {
         generateCode(expr, ctx)
-        mv.visitTypeInsn(Opcodes.INSTANCEOF, internalNameOf(tpe))
+        mv.visitTypeInsn(Opcodes.INSTANCEOF, internalNameOf(tpe.getResolvedType))
       }
 
       case PanicStat(msg) =>
@@ -758,15 +764,6 @@ final class Backend[V <: ClassVisitor](
       mv.visitTypeInsn(Opcodes.CHECKCAST, internalNameOf(destType)(using ctx.analysisContext))
       mv.visitIntInsn(Opcodes.ASTORE, varIdx)
     }
-  }
-
-  private def constructorParameters(typeSig: TypeSignature): List[(String, Types.TypeShape)] = typeSig match {
-    case StructSignature(name, fields, directSupertypes, isInterface) =>
-      fields.toList.map((id, infos) => (id.stringId, infos.tpe))
-    case ModuleSignature(name, importedModules, importedPackages, importedDevices, functions) =>
-      importedModules.toList.map((id, tpe) => (id.stringId, tpe))
-    case _: PackageSignature => List.empty
-    case _ => shouldNotHappen()
   }
 
   private def addSourceNameIfKnown(cv: ClassVisitor, posOpt: Option[Position]): Unit = {

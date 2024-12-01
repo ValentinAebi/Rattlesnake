@@ -315,9 +315,12 @@ object Asts {
    */
   final case class Call(receiverOpt: Option[Expr], function: FunOrVarId, args: List[Expr]) extends Expr {
     private val signatureMemo = new Memo[FunctionSignature]
+    private val meTypeMemo = new Memo[Type]
     
     export signatureMemo.set as resolve
-    export signatureMemo.getOpt as getSignature
+    export signatureMemo.getOpt as getSignatureOpt
+    export meTypeMemo.set as cacheMeType
+    export meTypeMemo.getOpt as getMeTypeOpt
 
     override def children: List[Ast] = receiverOpt.toList ++ args
   }
@@ -502,6 +505,7 @@ object Asts {
 
   sealed trait TypeTree extends Ast {
     def getResolvedTypeOpt: Option[Type]
+    def getResolvedType: Type = getResolvedTypeOpt.get
   }
   
   final case class CapturingTypeTree(
@@ -515,6 +519,8 @@ object Asts {
       } yield CapturingType(shape, capDescr)
     }
   }
+
+  final case class WrapperTypeTree(tpe: Type) extends TypeTree
   
   sealed trait TypeShapeTree extends TypeTree {
     

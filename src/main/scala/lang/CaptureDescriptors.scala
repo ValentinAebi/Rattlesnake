@@ -1,5 +1,7 @@
 package lang
 
+import lang.Capturables.*
+
 object CaptureDescriptors {
 
   sealed trait CaptureDescriptor {

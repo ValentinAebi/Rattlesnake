@@ -19,12 +19,12 @@ object TypesConverter {
     tpe.getOpcode(intOpcode)
   }
 
-  def opcodeFor(tpe: Types.TypeShape, intOpcode: Int, refOpcode: => Int): Int = {
+  def opcodeFor(tpe: Types.Type, intOpcode: Int, refOpcode: => Int): Int = {
     convertToAsmType(tpe).map(safeGetOpcode(_, intOpcode)).getOrElse(refOpcode)
   }
 
-  def convertToAsmType(tpe: Types.TypeShape): Option[asm.Type] = {
-    tpe match
+  def convertToAsmType(tpe: Types.Type): Option[asm.Type] = {
+    tpe.shape match
       case PrimitiveTypeShape.IntType => INT_TYPE.toSome
       case PrimitiveTypeShape.DoubleType => DOUBLE_TYPE.toSome
       case PrimitiveTypeShape.CharType => CHAR_TYPE.toSome
@@ -36,8 +36,8 @@ object TypesConverter {
       case Types.UndefinedTypeShape => assert(false)
   }
 
-  def convertToAsmTypeCode(tpe: Types.TypeShape): Option[Int] = {
-    tpe match
+  def convertToAsmTypeCode(tpe: Types.Type): Option[Int] = {
+    tpe.shape match
       case PrimitiveTypeShape.IntType => Opcodes.T_INT.toSome
       case PrimitiveTypeShape.DoubleType => Opcodes.T_DOUBLE.toSome
       case PrimitiveTypeShape.CharType => Opcodes.T_CHAR.toSome
@@ -46,8 +46,8 @@ object TypesConverter {
       case _ => None
   }
   
-  def internalNameOf(tpe: Types.TypeShape)(using ctx: AnalysisContext): String = {
-    tpe match
+  def internalNameOf(tpe: Types.Type)(using ctx: AnalysisContext): String = {
+    tpe.shape match
       case PrimitiveTypeShape.IntType => "I"
       case PrimitiveTypeShape.DoubleType => "D"
       case PrimitiveTypeShape.CharType => "C"
@@ -62,7 +62,7 @@ object TypesConverter {
       case UndefinedTypeShape => assert(false)
   }
 
-  def numSlotsFor(tpe: Types.TypeShape): Int = {
+  def numSlotsFor(tpe: Types.Type): Int = {
     tpe match
       case DoubleType => 2
       case _ => 1

@@ -592,6 +592,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
     tcCtx.resolveFunc(owner, funName) match {
       case FunctionFound(funSig) =>
         call.resolve(funSig)
+        call.cacheMeType(tcCtx.meType)
         checkCallArgs(funSig, call.receiverOpt, args, tcCtx, pos)
       case ModuleNotFound =>
         args.foreach(checkExpr)
@@ -647,7 +648,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
     substitutor.subst(funSig.retType)
   }
-  
+
   private def saveArgMappingIfPath(
                                     substMap: mutable.Map[Capturable, Capturable],
                                     paramOpt: Option[Capturable],
