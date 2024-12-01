@@ -125,7 +125,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
     val expRetType = optRetType.getOrElse(VoidType)
     checkStat(body)(using tcCtx, environment)
     val endStatus = checkReturns(body)
-    if (!endStatus.alwaysStopped && expRetType.subtypeOf(VoidType)(using tcCtx)) {
+    if (!endStatus.alwaysStopped && !expRetType.subtypeOf(VoidType)(using tcCtx)) {
       reportError("missing return in non-Void function", funDef.getPosition)
     }
     val faultyTypes = endStatus.returned.filter(!_.subtypeOf(expRetType)(using tcCtx))
