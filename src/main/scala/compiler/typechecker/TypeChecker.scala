@@ -18,6 +18,9 @@ import lang.Operators.{BinaryOpSignature, UnaryOpSignature, binaryOperators, una
 import lang.StructSignature.FieldInfo
 import lang.Types.*
 import lang.Types.PrimitiveTypeShape.*
+import lang.Capturables.*
+
+import scala.collection.mutable
 
 final class TypeChecker(errorReporter: ErrorReporter)
   extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
@@ -457,12 +460,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
                 instantiation.getPosition
               )
             }
-            checkCallArgs(structSig.fields.values.map(_.tpe).toList, args, tcCtx, instantiation.getPosition)
-            NamedTypeShape(tid)
+            // FIXME should we replace the me reference here? recursive type?
+            checkCallArgs(structSig.constructorSig, None, args, tcCtx, instantiation.getPosition)
           case Some(moduleSig: ModuleSignature) =>
-            val expectedTypes = moduleSig.paramImports.values.toList
-            checkCallArgs(expectedTypes, args, tcCtx, instantiation.getPosition)
-            NamedTypeShape(tid)
+            // FIXME should we replace the me reference here? recursive type?
+            checkCallArgs(moduleSig.constructorSig, None, args, tcCtx, instantiation.getPosition)
           case _ => reportError(s"not found: structure or module '$tid'", instantiation.getPosition)
         }
 
@@ -589,9 +591,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
     val pos = call.getPosition
     tcCtx.resolveFunc(owner, funName) match {
       case FunctionFound(funSig) =>
-        checkCallArgs(funSig.argTypes, args, tcCtx, pos)
         call.resolve(funSig)
-        funSig.retType
+        checkCallArgs(funSig, call.receiverOpt, args, tcCtx, pos)
       case ModuleNotFound =>
         args.foreach(checkExpr)
         reportError(s"not found: package or module $owner", pos)
@@ -615,22 +616,27 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
   }
 
-  private def checkCallArgs(expTypes: List[TypeShape], args: List[Expr], ctx: TypeCheckingContext, callPos: Option[Position])
-                           (using TypeCheckingContext, Environment): Unit = {
-    val expTypesIter = expTypes.iterator
+  private def checkCallArgs(funSig: FunctionSignature, receiverOpt: Option[Expr], args: List[Expr], ctx: TypeCheckingContext, callPos: Option[Position])
+                           (using TypeCheckingContext, Environment): Type = {
+    val expTypesIter = funSig.args.iterator
     val argsIter = args.iterator
+    val substMap = mutable.Map.empty[Capturable, Capturable]
+    saveArgMappingIfPath(substMap, Some(MePath), receiverOpt)
+    val substitutor = CapturesSubstitutor.fromView(substMap)
     var errorFound = false
     while (expTypesIter.hasNext && argsIter.hasNext && !errorFound) {
-      val expType = expTypesIter.next()
+      val (paramNameOpt, expTypeRaw) = expTypesIter.next()
+      val expTypeSubst = substitutor.subst(expTypeRaw)
       val arg = argsIter.next()
       val actType = checkExpr(arg)
-      if (!actType.subtypeOf(expType)) {
-        reportError(s"expected '$expType', found '$actType'", arg.getPosition)
+      if (!actType.subtypeOf(expTypeSubst)) {
+        reportError(s"expected '$expTypeSubst', found '$actType'", arg.getPosition)
         errorFound = true
       }
+      saveArgMappingIfPath(substMap, paramNameOpt.map(IdPath(_)), Some(arg))
     }
     if (expTypesIter.hasNext && !errorFound) {
-      reportError(s"expected argument of type '${expTypesIter.next()}', found end of arguments list", callPos)
+      reportError(s"expected argument of type '${expTypesIter.next()._2}', found end of arguments list", callPos)
     }
     if (argsIter.hasNext && !errorFound) {
       val arg = argsIter.next()
@@ -638,6 +644,21 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
     for arg <- argsIter do {
       checkExpr(arg)
+    }
+    substitutor.subst(funSig.retType)
+  }
+  
+  private def saveArgMappingIfPath(
+                                    substMap: mutable.Map[Capturable, Capturable],
+                                    paramOpt: Option[Capturable],
+                                    argOpt: Option[Expr]
+                                  ): Unit = {
+    for {
+      param <- paramOpt
+      arg <- argOpt
+      argPath <- PathsConverter.convertOrFailSilently(arg)
+    } do {
+      substMap(param) = argPath
     }
   }
 

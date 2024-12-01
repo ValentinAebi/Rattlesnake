@@ -4,34 +4,38 @@ import identifiers.{FunOrVarId, TypeIdentifier}
 import lang.Device
 import lang.Types.Type
 
-sealed trait Capturable
+object Capturables {
 
-sealed trait ConcreteCapturable extends Capturable
+  sealed trait Capturable
 
-sealed trait Path extends ConcreteCapturable {
-  def dot(fld: FunOrVarId): Path = SelectPath(this, fld)
-}
+  sealed trait ConcreteCapturable extends Capturable
 
-final case class IdPath(id: FunOrVarId) extends Path {
-  override def toString: String = id.stringId
-}
+  sealed trait Path extends ConcreteCapturable {
+    def dot(fld: FunOrVarId): Path = SelectPath(this, fld)
+  }
 
-final case class SelectPath(root: Path, fld: FunOrVarId) extends Path {
-  override def toString: String = s"$root.$fld"
-}
+  final case class IdPath(id: FunOrVarId) extends Path {
+    override def toString: String = id.stringId
+  }
 
-case object MePath extends Path {
-  override def toString: String = Keyword.Me.str
-}
+  final case class SelectPath(root: Path, fld: FunOrVarId) extends Path {
+    override def toString: String = s"$root.$fld"
+  }
 
-final case class CapPackage(pkgName: TypeIdentifier) extends ConcreteCapturable {
-  override def toString: String = pkgName.stringId
-}
+  case object MePath extends Path {
+    override def toString: String = Keyword.Me.str
+  }
 
-final case class CapDevice(device: Device) extends ConcreteCapturable {
-  override def toString: String = device.toString
-}
+  final case class CapPackage(pkgName: TypeIdentifier) extends ConcreteCapturable {
+    override def toString: String = pkgName.stringId
+  }
 
-case object RootCapability extends Capturable {
-  override def toString: String = Keyword.Cap.str
+  final case class CapDevice(device: Device) extends ConcreteCapturable {
+    override def toString: String = device.toString
+  }
+
+  case object RootCapability extends Capturable {
+    override def toString: String = Keyword.Cap.str
+  }
+  
 }

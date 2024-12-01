@@ -2,7 +2,7 @@ package compiler.typechecker
 
 import lang.CaptureDescriptors.*
 import lang.Types.Type
-import lang.{Capturable, Path, SelectPath}
+import lang.Capturables.*
 
 object SubcaptureRelation {
 
