@@ -404,7 +404,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         checkFunCall(call, IntrinsicsPackageId, fallbackOwnerOpt = Some(tcCtx.meId))
 
       case call@Call(Some(receiver), funName, args) =>
-        checkExpr(receiver) match {
+        checkExpr(receiver).shape match {
           case namedType: NamedTypeShape =>
             checkFunCall(call, namedType.typeName, None)
           case recType =>
@@ -461,11 +461,13 @@ final class TypeChecker(errorReporter: ErrorReporter)
                 instantiation.getPosition
               )
             }
-            // FIXME should we replace the me reference here? recursive type?
             checkCallArgs(structSig.constructorSig, None, args, tcCtx, instantiation.getPosition)
-          case Some(moduleSig: ModuleSignature) =>
             // FIXME should we replace the me reference here? recursive type?
+            NamedTypeShape(tid) ^ computeCaptures(args)
+          case Some(moduleSig: ModuleSignature) =>
             checkCallArgs(moduleSig.constructorSig, None, args, tcCtx, instantiation.getPosition)
+            // FIXME should we replace the me reference here? recursive type?
+            NamedTypeShape(tid) ^ computeCaptures(args)
           case _ => reportError(s"not found: structure or module '$tid'", instantiation.getPosition)
         }
 
@@ -649,6 +651,9 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
     substitutor.subst(funSig.retType)
   }
+
+  private def computeCaptures(args: List[Expr]): CaptureSet =
+    CaptureSet(args.flatMap(PathsConverter.convertOrFailSilently).toSet)
 
   private def saveArgMappingIfPath(
                                     substMap: mutable.Map[Capturable, Capturable],
