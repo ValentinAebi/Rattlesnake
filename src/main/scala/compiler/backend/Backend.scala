@@ -149,7 +149,7 @@ final class Backend[V <: ClassVisitor](
       addInstanceFieldAndInitializer(modOrPkg, cv, pkgTypeDescr)
     }
     for (varId, moduleType) <- modOrPkgSig.asInstanceOf[ModuleOrPackageSignature].paramImports do {
-      cv.visitField(ACC_PRIVATE, varId.stringId, descriptorForType(moduleType), null, null)
+      cv.visitField(ACC_PRIVATE, varId.stringId, descriptorForType(moduleType.shape), null, null)
     }
     for func <- modOrPkg.functions do {
       val desc = descriptorForFunc(func.getSignature.get)
@@ -248,7 +248,7 @@ final class Backend[V <: ClassVisitor](
     val fieldsWithAccessors = if isInterface then structSig.fields.keySet else getInterfaceFieldsForStruct(structName, ctx.structs)
     for (fld <- fieldsWithAccessors) {
       val fldType = structSig.fields.apply(fld).tpe
-      val fieldDescr = descriptorForType(fldType)
+      val fieldDescr = descriptorForType(fldType.shape)
       generateGetter(structName, fld, fldType, fieldDescr, cv, genImplementation = !isInterface)
       if (structSig.fields.apply(fld).isReassignable) {
         generateSetter(structName, fld, fldType, fieldDescr, cv, genImplementation = !isInterface)
@@ -272,7 +272,7 @@ final class Backend[V <: ClassVisitor](
       getterVisitor.visitCode()
       getterVisitor.visitVarInsn(Opcodes.ALOAD, 0)
       getterVisitor.visitFieldInsn(Opcodes.GETFIELD, structName.stringId, fld.stringId, fieldDescr)
-      getterVisitor.visitInsn(opcodeFor(fldType, Opcodes.IRETURN, Opcodes.ARETURN))
+      getterVisitor.visitInsn(opcodeFor(fldType.shape, Opcodes.IRETURN, Opcodes.ARETURN))
       getterVisitor.visitMaxs(0, 0) // parameters are ignored because mode is COMPUTE_FRAMES
     }
     getterVisitor.visitEnd()
@@ -290,7 +290,7 @@ final class Backend[V <: ClassVisitor](
     if (genImplementation) {
       setterVisitor.visitCode()
       setterVisitor.visitVarInsn(Opcodes.ALOAD, 0)
-      setterVisitor.visitVarInsn(opcodeFor(fldType, Opcodes.ILOAD, Opcodes.ALOAD), 1)
+      setterVisitor.visitVarInsn(opcodeFor(fldType.shape, Opcodes.ILOAD, Opcodes.ALOAD), 1)
       setterVisitor.visitFieldInsn(Opcodes.PUTFIELD, structName.stringId, fld.stringId, fieldDescr)
       setterVisitor.visitInsn(Opcodes.RETURN)
       setterVisitor.visitMaxs(0, 0) // parameters are ignored because mode is COMPUTE_FRAMES
@@ -311,11 +311,11 @@ final class Backend[V <: ClassVisitor](
     var varIdx = 1
     for ((fldName, fldInfo) <- typeSig.params) do {
       val tpe = fldInfo.tpe
-      val descr = descriptorForType(tpe)
+      val descr = descriptorForType(tpe.shape)
       constructorVisitor.visitVarInsn(Opcodes.ALOAD, 0)
-      constructorVisitor.visitIntInsn(opcodeFor(tpe, Opcodes.ILOAD, Opcodes.ALOAD), varIdx)
+      constructorVisitor.visitIntInsn(opcodeFor(tpe.shape, Opcodes.ILOAD, Opcodes.ALOAD), varIdx)
       constructorVisitor.visitFieldInsn(Opcodes.PUTFIELD, typeSig.id.stringId, fldName.stringId, descr)
-      varIdx += numSlotsFor(tpe)
+      varIdx += numSlotsFor(tpe.shape)
     }
     constructorVisitor.visitInsn(Opcodes.RETURN)
     constructorVisitor.visitMaxs(0, 0) // parameters are ignored because mode is COMPUTE_FRAMES
@@ -328,7 +328,7 @@ final class Backend[V <: ClassVisitor](
       val fieldVisitor = cv.visitField(
         Opcodes.ACC_PUBLIC,
         field.paramNameOpt.get.stringId,
-        descriptorForType(field.tpe.getResolvedType),
+        descriptorForType(field.tpe.getResolvedType.shape),
         null,
         null
       )
@@ -377,7 +377,7 @@ final class Backend[V <: ClassVisitor](
 
       case localDef@LocalDef(varName, tpeOpt, rhs, _) =>
         generateCode(rhs, ctx)
-        val opcode = opcodeFor(rhs.getType, Opcodes.ISTORE, Opcodes.ASTORE)
+        val opcode = opcodeFor(rhs.getType.shape, Opcodes.ISTORE, Opcodes.ASTORE)
         mv.visitVarInsn(opcode, ctx.currLocalIdx)
         ctx.addLocal(varName, localDef.getVarTypeOpt.get)
 
@@ -390,14 +390,14 @@ final class Backend[V <: ClassVisitor](
       case varRef@VariableRef(name) => {
         ctx.getLocal(name) match
           case Some((tpe, localIdx)) =>
-            val opCode = opcodeFor(tpe, Opcodes.ILOAD, Opcodes.ALOAD)
+            val opCode = opcodeFor(tpe.shape, Opcodes.ILOAD, Opcodes.ALOAD)
             mv.visitVarInsn(opCode, localIdx)
           case None =>
             mv.visitFieldInsn(
               Opcodes.GETSTATIC,
               NamesForGeneratedClasses.constantsClassName,
               name.stringId,
-              descriptorForType(varRef.getType)
+              descriptorForType(varRef.getType.shape)
             )
       }
 
@@ -424,7 +424,7 @@ final class Backend[V <: ClassVisitor](
         for arg <- args do {
           generateCode(arg, ctx)
         }
-        val recvInternalName = internalNameOf(receiver.getType)
+        val recvInternalName = internalNameOf(receiver.getType.shape)
         val receiverTypeName = receiver.getType.asInstanceOf[NamedTypeShape].typeName
         val funDescr = descriptorForFunc(ctx.resolveFunc(receiverTypeName, funName).getOrThrow())
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, recvInternalName, funName.stringId, funDescr, false)
@@ -434,7 +434,7 @@ final class Backend[V <: ClassVisitor](
         generateCode(indexed, ctx)
         generateCode(arg, ctx)
         val elemType = indexed.getType.asInstanceOf[ArrayTypeShape].elemType
-        val opcode = opcodeFor(elemType, Opcodes.IALOAD, Opcodes.AALOAD)
+        val opcode = opcodeFor(elemType.shape, Opcodes.IALOAD, Opcodes.AALOAD)
         mv.visitInsn(opcode)
 
       case arrayInit@ArrayInit(region, elemTypeTree, size) =>
@@ -443,9 +443,9 @@ final class Backend[V <: ClassVisitor](
         generateCode(size, ctx)
         elemType match {
           case _: (PrimitiveTypeShape.StringType.type | NamedTypeShape | ArrayTypeShape | UnionTypeShape) =>
-            mv.visitTypeInsn(Opcodes.ANEWARRAY, internalNameOf(elemType))
+            mv.visitTypeInsn(Opcodes.ANEWARRAY, internalNameOf(elemType.shape))
           case _: Types.PrimitiveTypeShape =>
-            val elemTypeCode = convertToAsmTypeCode(elemType).get
+            val elemTypeCode = convertToAsmTypeCode(elemType.shape).get
             mv.visitIntInsn(Opcodes.NEWARRAY, elemTypeCode)
           case Types.UndefinedTypeShape => shouldNotHappen()
         }
@@ -575,7 +575,7 @@ final class Backend[V <: ClassVisitor](
             case Modulo => Opcodes.IREM
             case _ => throw new AssertionError(s"unexpected $operator in backend")
           }
-          val opcode = opcodeFor(tpe, intOpcode, shouldNotHappen())
+          val opcode = opcodeFor(tpe.shape, intOpcode, shouldNotHappen())
           mv.visitInsn(opcode)
         }
       }
@@ -590,7 +590,7 @@ final class Backend[V <: ClassVisitor](
           val getterDescriptor = descriptorForFunc(FunctionSignature(selected, List.empty, fieldType))
           mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, typeName.stringId, selected.stringId, getterDescriptor, true)
         } else {
-          mv.visitFieldInsn(Opcodes.GETFIELD, typeName.stringId, selected.stringId, descriptorForType(fieldType))
+          mv.visitFieldInsn(Opcodes.GETFIELD, typeName.stringId, selected.stringId, descriptorForType(fieldType.shape))
         }
 
       case VarAssig(lhs, rhs) =>
@@ -600,7 +600,7 @@ final class Backend[V <: ClassVisitor](
           case VariableRef(name) =>
             generateCode(rhs, ctx)
             val (varType, varIdx) = ctx.getLocal(name).get // cannot be a constant since it is an assignment
-            val opcode = opcodeFor(varType, Opcodes.ISTORE, Opcodes.ASTORE)
+            val opcode = opcodeFor(varType.shape, Opcodes.ISTORE, Opcodes.ASTORE)
             mv.visitVarInsn(opcode, varIdx)
 
           // x[y] = ...
@@ -610,7 +610,7 @@ final class Backend[V <: ClassVisitor](
             generateCode(arg, ctx)
             generateCode(rhs, ctx)
             val elemType = indexed.getType.asInstanceOf[ArrayTypeShape].elemType
-            mv.visitInsn(opcodeFor(elemType, Opcodes.IASTORE, Opcodes.AASTORE))
+            mv.visitInsn(opcodeFor(elemType.shape, Opcodes.IASTORE, Opcodes.AASTORE))
 
           // x.y = ...
           case Select(ownerStruct, fieldName) =>
@@ -625,7 +625,12 @@ final class Backend[V <: ClassVisitor](
               val setterDescriptor = descriptorForFunc(setterSig)
               mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, ownerTypeName.stringId, fieldName.stringId, setterDescriptor, true)
             } else {
-              mv.visitFieldInsn(Opcodes.PUTFIELD, ownerTypeName.stringId, fieldName.stringId, descriptorForType(fieldType))
+              mv.visitFieldInsn(
+                Opcodes.PUTFIELD,
+                ownerTypeName.stringId,
+                fieldName.stringId,
+                descriptorForType(fieldType.shape)
+              )
             }
 
           case _ => shouldNotHappen()
@@ -664,7 +669,7 @@ final class Backend[V <: ClassVisitor](
 
       case ReturnStat(Some(value)) =>
         generateCode(value, ctx)
-        val opcode = opcodeFor(value.getType, Opcodes.IRETURN, Opcodes.ARETURN)
+        val opcode = opcodeFor(value.getType.shape, Opcodes.IRETURN, Opcodes.ARETURN)
         mv.visitInsn(opcode)
 
       case ReturnStat(None) =>
@@ -673,18 +678,19 @@ final class Backend[V <: ClassVisitor](
       case cast@Cast(expr, tpe) => {
         generateCode(expr, ctx)
         if (!cast.isTransparentCast) {
-          TypeConversion.conversionFor(expr.getType.shape, tpe.getResolvedType) match
+          val resolvedType = tpe.getResolvedType
+          TypeConversion.conversionFor(expr.getType.shape, resolvedType) match
             case Some(TypeConversion.Int2Double) => mv.visitInsn(Opcodes.I2D)
             case Some(TypeConversion.Double2Int) => mv.visitInsn(Opcodes.D2I)
             case Some(TypeConversion.IntToChar) => mv.visitInsn(Opcodes.I2C)
             case Some(TypeConversion.CharToInt) => ()
-            case None => mv.visitTypeInsn(Opcodes.CHECKCAST, internalNameOf(tpe.getResolvedType))
+            case None => mv.visitTypeInsn(Opcodes.CHECKCAST, internalNameOf(resolvedType.shape))
         }
       }
 
       case TypeTest(expr, tpe) => {
         generateCode(expr, ctx)
-        mv.visitTypeInsn(Opcodes.INSTANCEOF, internalNameOf(tpe.getResolvedType))
+        mv.visitTypeInsn(Opcodes.INSTANCEOF, internalNameOf(tpe.getResolvedType.shape))
       }
 
       case PanicStat(msg) =>

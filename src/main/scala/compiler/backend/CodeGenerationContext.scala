@@ -35,7 +35,7 @@ final class CodeGenerationContext(
    */
   def addLocal(name: FunOrVarId, tpe: Type): Unit = {
     locals.head.put(name, (tpe, currLocalIdx))
-    currLocalIdx += numSlotsFor(tpe)
+    currLocalIdx += numSlotsFor(tpe.shape)
   }
 
   def getLocal(name: FunOrVarId): Option[(Type, Int)] = {

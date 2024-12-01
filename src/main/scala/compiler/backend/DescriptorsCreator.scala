@@ -10,8 +10,8 @@ object DescriptorsCreator {
   /**
    * @return JVM descriptor for [[tpe]]
    */
-  def descriptorForType(tpe: Type)(using ctx: AnalysisContext): String = {
-    tpe.shape match
+  def descriptorForType(tpe: TypeShape)(using ctx: AnalysisContext): String = {
+    tpe match
       case PrimitiveTypeShape.IntType => "I"
       case PrimitiveTypeShape.DoubleType => "D"
       case PrimitiveTypeShape.CharType => "C"
@@ -22,7 +22,7 @@ object DescriptorsCreator {
       case PrimitiveTypeShape.NothingType => "V"
       case Types.NamedTypeShape(typeName) if !ctx.resolveType(typeName).get.isInterface => s"L$typeName;"
       case Types.NamedTypeShape(_) | Types.UnionTypeShape(_) => "Ljava/lang/Object;"
-      case Types.ArrayTypeShape(elemType, _) => s"[${descriptorForType(elemType)}"
+      case Types.ArrayTypeShape(elemType, _) => s"[${descriptorForType(elemType.shape)}"
       case Types.UndefinedTypeShape => assert(false)
   }
 
@@ -31,7 +31,7 @@ object DescriptorsCreator {
    */
   def descriptorForFunc(funSig: FunctionSignature)(using AnalysisContext): String = {
     val FunctionSignature(_, argTypes, retType) = funSig
-    argTypes.map((_, tpe) => descriptorForType(tpe)).mkString("(", "", ")") ++ descriptorForType(retType)
+    argTypes.map((_, tpe) => descriptorForType(tpe.shape)).mkString("(", "", ")") ++ descriptorForType(retType.shape)
   }
 
 }
