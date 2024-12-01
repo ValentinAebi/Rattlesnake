@@ -441,7 +441,7 @@ final class Backend[V <: ClassVisitor](
         val elemType = arrayInit.getType
         generateCode(region, ctx)
         generateCode(size, ctx)
-        elemType match {
+        elemType.shape match {
           case _: (PrimitiveTypeShape.StringType.type | NamedTypeShape | ArrayTypeShape | UnionTypeShape) =>
             mv.visitTypeInsn(Opcodes.ANEWARRAY, internalNameOf(elemType.shape))
           case _: Types.PrimitiveTypeShape =>

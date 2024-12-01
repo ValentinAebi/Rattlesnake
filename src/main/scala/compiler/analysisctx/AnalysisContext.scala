@@ -165,6 +165,7 @@ object AnalysisContext {
         CapturingType(computeTypeShape(typeShapeTree), computeCaptureDescr(captureDescr))
       case typeShapeTree: TypeShapeTree =>
         computeTypeShape(typeShapeTree)
+      case WrapperTypeTree(tpe) => tpe
     }
     
     private def computeTypeShape(typeShapeTree: TypeShapeTree): TypeShape = typeShapeTree match {

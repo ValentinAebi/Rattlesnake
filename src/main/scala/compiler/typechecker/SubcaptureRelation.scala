@@ -11,6 +11,7 @@ object SubcaptureRelation {
       case (Brand, Brand) => true
       case (lcs: CaptureSet, rcs: CaptureSet) =>
         lcs.subcaptureOf(rcs)
+      case _ => false
     }
   }
 

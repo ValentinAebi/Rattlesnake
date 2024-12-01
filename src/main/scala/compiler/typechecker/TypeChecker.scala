@@ -166,6 +166,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         )
       case typeShapeTree: TypeShapeTree =>
         checkTypeShape(typeShapeTree)
+      case WrapperTypeTree(tpe) => tpe
   }
 
   private def checkTypeShape(typeShapeTree: TypeShapeTree)
