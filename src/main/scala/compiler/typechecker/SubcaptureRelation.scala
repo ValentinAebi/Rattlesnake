@@ -1,8 +1,7 @@
 package compiler.typechecker
 
-import lang.CaptureDescriptors.*
-import lang.Types.Type
 import lang.Capturables.*
+import lang.CaptureDescriptors.*
 
 object SubcaptureRelation {
 
@@ -21,7 +20,7 @@ object SubcaptureRelation {
   extension (l: Capturable) private def isCoveredBy(r: CaptureSet)(using ctx: TypeCheckingContext): Boolean = l match {
     case lPath if r.set.contains(lPath) => true
     case SelectPath(root, field) if root.isCoveredBy(r) => true
-    case lPath if ctx.lookup(lPath).captureDescriptor.subcaptureOf(r) => true
+    case IdPath(id) if ctx.getLocalOnly(id).exists(_.tpe.captureDescriptor.subcaptureOf(r)) => true
     case _ => false
   }
 

@@ -74,6 +74,8 @@ object Asts {
         case Some(tpe) => tpe
         case None => throw new NoSuchElementException(s"type missing in $this")
     }
+    
+    def getTypeShape: TypeShape = getType.shape
 
   }
 

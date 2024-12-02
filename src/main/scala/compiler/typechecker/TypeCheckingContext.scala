@@ -76,26 +76,6 @@ final case class TypeCheckingContext private(
       ownedLocals.addOne(name)
     }
   }
-  
-  def lookup(path: Capturable): Type = path match {
-    case Capturables.IdPath(id) =>
-      getLocalOnly(id).map(_.tpe).getOrElse(UndefinedTypeShape)
-    case Capturables.SelectPath(root, fld) =>
-      lookup(root) match {
-        case NamedTypeShape(typeName) =>
-          resolveType(typeName)
-            .flatMap(_.typeOfSelectIfCapturable(fld))
-            .getOrElse(UndefinedTypeShape)
-        case _ => UndefinedTypeShape
-      }
-    case Capturables.MePath => meType
-    case Capturables.CapPackage(pkgName) =>
-      packages.get(pkgName).map(_.getSelfReferringType).getOrElse(UndefinedTypeShape)
-    case Capturables.CapDevice(device) =>
-      device.sig.getSelfReferringType
-    case Capturables.RootCapability =>
-      UndefinedTypeShape
-  }
 
   def getLocalOnly(name: FunOrVarId): Option[LocalInfo] = locals.get(name)
 

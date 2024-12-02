@@ -128,7 +128,7 @@ final class Backend[V <: ClassVisitor](
       ccv.visitField(
         ACC_PUBLIC | ACC_STATIC,
         const.constName.stringId,
-        descriptorForType(const.value.getType.shape),
+        descriptorForType(const.value.getTypeShape),
         null,
         const.value.value
       )
@@ -377,7 +377,7 @@ final class Backend[V <: ClassVisitor](
 
       case localDef@LocalDef(varName, tpeOpt, rhs, _) =>
         generateCode(rhs, ctx)
-        val opcode = opcodeFor(rhs.getType.shape, Opcodes.ISTORE, Opcodes.ASTORE)
+        val opcode = opcodeFor(rhs.getTypeShape, Opcodes.ISTORE, Opcodes.ASTORE)
         mv.visitVarInsn(opcode, ctx.currLocalIdx)
         ctx.addLocal(varName, localDef.getVarTypeOpt.get)
 
@@ -397,7 +397,7 @@ final class Backend[V <: ClassVisitor](
               Opcodes.GETSTATIC,
               NamesForGeneratedClasses.constantsClassName,
               name.stringId,
-              descriptorForType(varRef.getType.shape)
+              descriptorForType(varRef.getTypeShape)
             )
       }
 
@@ -424,7 +424,7 @@ final class Backend[V <: ClassVisitor](
         for arg <- args do {
           generateCode(arg, ctx)
         }
-        val receiverShape = receiver.getType.shape
+        val receiverShape = receiver.getTypeShape
         val recvInternalName = internalNameOf(receiverShape)
         val receiverTypeName = receiverShape.asInstanceOf[NamedTypeShape].typeName
         val funDescr = descriptorForFunc(ctx.resolveFunc(receiverTypeName, funName).getOrThrow())
@@ -434,7 +434,7 @@ final class Backend[V <: ClassVisitor](
       case Indexing(indexed, arg) =>
         generateCode(indexed, ctx)
         generateCode(arg, ctx)
-        val elemType = indexed.getType.asInstanceOf[ArrayTypeShape].elemType
+        val elemType = indexed.getTypeShape.asInstanceOf[ArrayTypeShape].elemType
         val opcode = opcodeFor(elemType.shape, Opcodes.IALOAD, Opcodes.AALOAD)
         mv.visitInsn(opcode)
 
@@ -475,13 +475,13 @@ final class Backend[V <: ClassVisitor](
       case UnaryOp(operator, operand) =>
         generateCode(operand, ctx)
         operator match {
-          case Minus if operand.getType == IntType =>
+          case Minus if operand.getTypeShape == IntType =>
             mv.visitInsn(Opcodes.INEG)
-          case Minus if operand.getType == DoubleType =>
+          case Minus if operand.getTypeShape == DoubleType =>
             mv.visitInsn(Opcodes.DNEG)
-          case Sharp if operand.getType.isInstanceOf[ArrayTypeShape] =>
+          case Sharp if operand.getTypeShape.isInstanceOf[ArrayTypeShape] =>
             mv.visitInsn(Opcodes.ARRAYLENGTH)
-          case Sharp if operand.getType == StringType =>
+          case Sharp if operand.getTypeShape == StringType =>
             mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, stringTypeStr, "length", "()I", false)
           case _ => throw new AssertionError(s"unexpected $operator in code generation")
         }
@@ -489,7 +489,7 @@ final class Backend[V <: ClassVisitor](
       case BinaryOp(lhs, operator, rhs) => {
         generateCode(lhs, ctx)
         generateCode(rhs, ctx)
-        val tpe = lhs.getType
+        val tpe = lhs.getTypeShape
         if (operator == Equality && tpe == StringType) {
           mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, stringTypeStr, "equals", "(Ljava/lang/Object;)Z", false)
         } else if (operator == Equality && tpe == DoubleType) {
@@ -583,7 +583,7 @@ final class Backend[V <: ClassVisitor](
 
       case Select(lhs, selected) =>
         generateCode(lhs, ctx)
-        val typeName = lhs.getType.asInstanceOf[NamedTypeShape].typeName
+        val typeName = lhs.getTypeShape.asInstanceOf[NamedTypeShape].typeName
         val fieldType =
           analysisContext.structs.get(typeName).map(_.fields.apply(selected).tpe)
             .getOrElse(analysisContext.modules.apply(typeName).paramImports.apply(selected))
@@ -610,7 +610,7 @@ final class Backend[V <: ClassVisitor](
             genCheckCanModifyStackTop(mv)
             generateCode(arg, ctx)
             generateCode(rhs, ctx)
-            val elemType = indexed.getType.asInstanceOf[ArrayTypeShape].elemType
+            val elemType = indexed.getTypeShape.asInstanceOf[ArrayTypeShape].elemType
             mv.visitInsn(opcodeFor(elemType.shape, Opcodes.IASTORE, Opcodes.AASTORE))
 
           // x.y = ...
@@ -618,7 +618,7 @@ final class Backend[V <: ClassVisitor](
             generateCode(ownerStruct, ctx)
             genCheckCanModifyStackTop(mv)
             generateCode(rhs, ctx)
-            val ownerTypeName = ownerStruct.getType.asInstanceOf[NamedTypeShape].typeName
+            val ownerTypeName = ownerStruct.getTypeShape.asInstanceOf[NamedTypeShape].typeName
             val structSig = ctx.structs.apply(ownerTypeName)
             val fieldType = structSig.fields.apply(fieldName).tpe
             if (structSig.isInterface) {
@@ -670,7 +670,7 @@ final class Backend[V <: ClassVisitor](
 
       case ReturnStat(Some(value)) =>
         generateCode(value, ctx)
-        val opcode = opcodeFor(value.getType.shape, Opcodes.IRETURN, Opcodes.ARETURN)
+        val opcode = opcodeFor(value.getTypeShape, Opcodes.IRETURN, Opcodes.ARETURN)
         mv.visitInsn(opcode)
 
       case ReturnStat(None) =>
@@ -680,7 +680,7 @@ final class Backend[V <: ClassVisitor](
         generateCode(expr, ctx)
         if (!cast.isTransparentCast) {
           val resolvedType = tpe.getResolvedType
-          TypeConversion.conversionFor(expr.getType.shape, resolvedType) match
+          TypeConversion.conversionFor(expr.getTypeShape, resolvedType) match
             case Some(TypeConversion.Int2Double) => mv.visitInsn(Opcodes.I2D)
             case Some(TypeConversion.Double2Int) => mv.visitInsn(Opcodes.D2I)
             case Some(TypeConversion.IntToChar) => mv.visitInsn(Opcodes.I2C)
@@ -728,7 +728,7 @@ final class Backend[V <: ClassVisitor](
       generateCode(stat, newCtx)
       // if unused value put on the stack then drop it
       stat match {
-        case expr: Expr if expr.getType != VoidType => mv.visitInsn(Opcodes.POP)
+        case expr: Expr if expr.getTypeShape != VoidType => mv.visitInsn(Opcodes.POP)
         case _ => ()
       }
     }

@@ -430,12 +430,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
           case _ => ()
         }
         val elemType = checkType(elemTypeTree)
-        // TODO capture region
-        ArrayTypeShape(elemType, modifiable = true)
+        ArrayTypeShape(elemType, modifiable = true) ^ computeCaptures(List(region))
 
       case filledArrayInit@FilledArrayInit(regionOpt, Nil) =>
         regionOpt.foreach(checkAndRequireRegion(_, tcCtx))
-        // TODO capture region
         reportError("cannot infer type of empty array, use 'arr <type>[0]' instead", filledArrayInit.getPosition)
 
       case filledArrayInit@FilledArrayInit(regionOpt, arrayElems) =>
@@ -443,10 +441,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val types = arrayElems.map(checkExpr)
         computeJoinOf(types.toSet, tcCtx) match {
           case Some(elemsJoin) =>
-            // TODO capture region
-            ArrayTypeShape(elemsJoin, modifiable = regionOpt.isDefined)
+            ArrayTypeShape(elemsJoin, modifiable = regionOpt.isDefined) ^ computeCaptures(regionOpt.toList)
           case None =>
-            // TODO capture region
             reportError("cannot infer array type", filledArrayInit.getPosition)
         }
 
@@ -467,16 +463,16 @@ final class TypeChecker(errorReporter: ErrorReporter)
             }
             checkCallArgs(structSig.constructorSig, None, args, tcCtx, instantiation.getPosition)
             // FIXME should we replace the me reference here? recursive type?
-            NamedTypeShape(tid) ^ computeCaptures(args)
+            NamedTypeShape(tid) ^ computeCaptures(args ++ regionOpt)
           case Some(moduleSig: ModuleSignature) =>
             checkCallArgs(moduleSig.constructorSig, None, args, tcCtx, instantiation.getPosition)
             // FIXME should we replace the me reference here? recursive type?
-            NamedTypeShape(tid) ^ computeCaptures(args)
+            NamedTypeShape(tid) ^ computeCaptures(args ++ regionOpt)
           case _ => reportError(s"not found: structure or module '$tid'", instantiation.getPosition)
         }
 
       case RegionCreation() =>
-        RegionType
+        RegionType ^ CaptureSet.singletonOfRoot
 
       case unaryOp@UnaryOp(operator, operand) =>
         val operandType = checkExpr(operand)
@@ -656,8 +652,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
     substitutor.subst(funSig.retType)
   }
 
-  private def computeCaptures(args: List[Expr]): CaptureSet =
-    CaptureSet(args.flatMap(PathsConverter.convertOrFailSilently).toSet)
+  private def computeCaptures(captured: List[Expr]): CaptureDescriptor =
+    CaptureDescriptors.unionOf(captured.map(minimalCaptureSetFor))
 
   private def saveArgMappingIfPath(
                                     substMap: mutable.Map[Capturable, Capturable],
@@ -775,7 +771,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def exprMustBeArray(exprType: Type, ctx: TypeCheckingContext, posOpt: Option[Position], mustUpdate: Boolean): Type = {
-    exprType match
+    exprType.shape match
       case ArrayTypeShape(elemType, modifiable) =>
         if (mustUpdate && !modifiable) {
           reportError("update impossible: missing modification privileges on array", posOpt)
@@ -874,6 +870,14 @@ final class TypeChecker(errorReporter: ErrorReporter)
     types.forall {
       case NamedTypeShape(typeName) => ctx.resolveType(typeName).exists(_.isInstanceOf[StructSignature])
       case _ => false
+    }
+  }
+
+  private def minimalCaptureSetFor(expr: Expr): CaptureDescriptor  = {
+    PathsConverter.convertOrFailSilently(expr) map { path =>
+      CaptureSet(path)
+    } getOrElse {
+      expr.getType.captureDescriptor
     }
   }
 
