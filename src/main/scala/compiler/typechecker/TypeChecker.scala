@@ -354,7 +354,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       for (capability <- capabilities) {
         val capabilityType = checkExpr(capability)
         // TODO support devices, and maybe structs and arrays
-        checkSubtypingConstraint(RegionType, capabilityType, capability.getPosition, "enclosure permission", tcCtx)
+        checkSubtypingConstraint(RegionType ^ CaptureSet.singletonOfRoot, capabilityType, capability.getPosition, "enclosure permission", tcCtx)
       }
       checkStat(body)
   }
@@ -476,14 +476,15 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case unaryOp@UnaryOp(operator, operand) =>
         val operandType = checkExpr(operand)
+        val operandTypeShape = operandType.shape
         if (operator == Sharp) {
-          if (operandType.isInstanceOf[ArrayTypeShape] || operandType == StringType) {
+          if (operandTypeShape.isInstanceOf[ArrayTypeShape] || operandTypeShape == StringType) {
             IntType
           } else {
             reportError(s"operator # can only be applied to arrays and strings, found '$operandType'", unaryOp.getPosition)
           }
         } else {
-          unaryOperatorSignatureFor(operator, operandType) match {
+          unaryOperatorSignatureFor(operator, operandType.shape) match {
             case Some(sig) => sig.retType
             case None =>
               reportError(s"no definition of operator '$operator' found for operand '$operandType'", unaryOp.getPosition)
@@ -562,10 +563,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
   private def checkAndRequireRegion(region: Expr, ctx: TypeCheckingContext)(using TypeCheckingContext, Environment): Unit = {
     val regType = checkExpr(region)
-    checkSubtypingConstraint(PrimitiveTypeShape.RegionType, regType, region.getPosition, "region", ctx)
+    checkSubtypingConstraint(PrimitiveTypeShape.RegionType ^ CaptureSet.singletonOfRoot, regType,
+      region.getPosition, "region", ctx)
   }
 
-  private def unaryOperatorSignatureFor(operator: Operator, operand: Type)
+  private def unaryOperatorSignatureFor(operator: Operator, operand: TypeShape)
                                        (using TypeCheckingContext, Environment): Option[UnaryOpSignature] = {
     unaryOperators.find {
       case UnaryOpSignature(op, operandType, _) =>
@@ -573,7 +575,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
   }
 
-  private def binaryOperatorSigFor(left: Type, operator: Operator, right: Type)
+  private def binaryOperatorSigFor(left: TypeShape, operator: Operator, right: TypeShape)
                                   (using TypeCheckingContext, Environment): Option[BinaryOpSignature] = {
     binaryOperators.find {
       case BinaryOpSignature(leftOperandType, op, rightOperandType, _) =>
@@ -783,7 +785,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
   private def mustExistOperator(lhsType: Type, operator: Operator, rhsType: Type, position: Option[Position])
                                (using TypeCheckingContext, Environment): Type = {
-    binaryOperatorSigFor(lhsType, operator, rhsType) match {
+    binaryOperatorSigFor(lhsType.shape, operator, rhsType.shape) match {
       case Some(sig) => sig.retType
       case None =>
         reportError(s"no definition of operator '$operator' found for operands '$lhsType' and '$rhsType'", position)
