@@ -123,15 +123,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
     val optRetType = optRetTypeTree.map(checkType(_)(using tcCtx, environment))
     val expRetType = optRetType.getOrElse(VoidType)
-    checkStat(body)(using tcCtx, environment)
+    checkStat(body)(using tcCtx, environment, expRetType)
     val endStatus = checkReturns(body)
     if (!endStatus.alwaysStopped && !expRetType.subtypeOf(VoidType)(using tcCtx)) {
       reportError("missing return in non-Void function", funDef.getPosition)
-    }
-    val faultyTypes = endStatus.returned.filter(!_.subtypeOf(expRetType)(using tcCtx))
-    if (faultyTypes.nonEmpty) {
-      val faultyTypeStr = faultyTypes.map("'" + _ + "'").mkString(", ")
-      reportError(s"function '$funName' should return '$expRetType', found $faultyTypeStr", funDef.getPosition)
     }
     if (expRetType == NothingType && !endStatus.alwaysStopped) {
       reportError(s"cannot prove that function '$funName' with return type '$NothingType' cannot return", funDef.getPosition)
@@ -238,7 +233,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
   }
 
-  private def checkStat(statement: Statement)(using tcCtx: TypeCheckingContext, env: Environment): Unit = statement match {
+  private def checkStat(statement: Statement)
+                       (using tcCtx: TypeCheckingContext, env: Environment, expRetType: Type): Unit = statement match {
 
     case expr: Expr => checkExpr(expr)
 
@@ -341,9 +337,15 @@ final class TypeChecker(errorReporter: ErrorReporter)
       checkStat(body)(using smartCastsAwareCtx)
       newCtx.writeLocalsRelatedWarnings(errorReporter)
 
-    case ReturnStat(valueOpt) =>
+    case retStat@ReturnStat(valueOpt) =>
       valueOpt.foreach { value =>
-        checkExpr(value)
+        val retType = checkExpr(value)
+        checkSubtypingConstraint(expRetType, retType, retStat.getPosition, "returned value", tcCtx)
+      }
+      if (expRetType == NothingType){
+        reportError(s"unexpected return in function returning $NothingType", retStat.getPosition)
+      } else if (expRetType != VoidType && valueOpt.isEmpty){
+        reportError("expected an expression after return", retStat.getPosition)
       }
 
     case panicStat@PanicStat(msg) =>
@@ -689,7 +691,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
    * @param alwaysStopped indicates whether the control-flow can reach the end of the considered construct without
    *                      encountering an instruction that terminates the function (`return` or `panic`)
    */
-  private case class EndStatus(returned: Set[Type], alwaysStopped: Boolean)
+  private case class EndStatus(alwaysStopped: Boolean)
 
   /**
    * Traverses the program, looking for instructions that end the function they are in (`return` and `panic`)
@@ -701,30 +703,27 @@ final class TypeChecker(errorReporter: ErrorReporter)
         for df <- defs do {
           checkReturns(df)
         }
-        EndStatus(Set.empty, false)
+        EndStatus(false)
 
       case Block(stats) =>
         var alreadyReportedDeadCode = false
-        var endStatus = EndStatus(Set.empty, false)
+        var endStatus = EndStatus(false)
         for stat <- stats do {
           if (endStatus.alwaysStopped && !alreadyReportedDeadCode) {
             reportError("dead code", stat.getPosition)
             alreadyReportedDeadCode = true
           }
           val statEndStatus = checkReturns(stat)
-          endStatus = EndStatus(
-            endStatus.returned ++ statEndStatus.returned,
-            endStatus.alwaysStopped || statEndStatus.alwaysStopped
-          )
+          endStatus = EndStatus(endStatus.alwaysStopped || statEndStatus.alwaysStopped)
         }
         endStatus
 
       case ifThenElse@IfThenElse(_, thenBr, elseBrOpt) =>
         val thenEndStatus = checkReturns(thenBr)
-        val elseEndStatus = elseBrOpt.map(checkReturns).getOrElse(EndStatus(Set.empty, alwaysStopped = false))
-        EndStatus(thenEndStatus.returned ++ elseEndStatus.returned, thenEndStatus.alwaysStopped && elseEndStatus.alwaysStopped)
+        val elseEndStatus = elseBrOpt.map(checkReturns).getOrElse(EndStatus(alwaysStopped = false))
+        EndStatus(thenEndStatus.alwaysStopped && elseEndStatus.alwaysStopped)
 
-      case _: Ternary => EndStatus(Set.empty, false)
+      case _: Ternary => EndStatus(false)
 
       case whileLoop@WhileLoop(_, body) =>
         val bodyEndStatus = checkReturns(body)
@@ -745,10 +744,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
         if (retType.isEmpty) {
           reportError("could not infer type of returned value", retStat.getPosition)
         }
-        EndStatus(Set(retType.getOrElse(NothingType)), true)
+        EndStatus(true)
 
       case _: PanicStat =>
-        EndStatus(Set(NothingType), true)
+        EndStatus(true)
 
       case EnclosedStat(_, body) =>
         checkReturns(body)
@@ -756,7 +755,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case _: (FunDef | StructDef | Param) =>
         assert(false)
 
-      case _ => EndStatus(Set.empty, false)
+      case _ => EndStatus(false)
 
     }
   }
