@@ -45,6 +45,7 @@ enum Operator(val str: String) {
   case ModuloEq extends Operator("%=")
   
   case Hat extends Operator("^")
+  case HatOpenBrace extends Operator("^{")
   case At extends Operator("@")
 
   override def toString: String = str

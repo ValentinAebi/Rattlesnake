@@ -13,6 +13,7 @@ import lang.Keyword.{Enclosed, *}
 import lang.Operator.*
 import lang.Types.{ArrayTypeShape, NamedTypeShape, TypeShape}
 import lang.*
+import lang.Capturables.*
 
 import scala.compiletime.uninitialized
 
@@ -114,7 +115,8 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "moduleDef"
 
   private lazy val funDef = {
-    kw(Fn).ignored ::: lowName ::: openParenth ::: repeatWithSep(param, comma) ::: closeParenth ::: opt(-> ::: typeTree) ::: block map {
+    kw(Fn).ignored ::: lowName ::: openParenth ::: repeatWithSep(param, comma) ::: closeParenth
+      ::: opt(-> ::: typeTree) ::: block map {
       case funName ^: params ^: optRetType ^: body =>
         FunDef(funName, params, optRetType, body)
     }
@@ -177,49 +179,44 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   
   private lazy val varRef = lowName map (VariableRef(_))
   
-  private lazy val paths = recursive {
+  private lazy val path = recursive {
     (me OR varRef) ::: repeat(dot ::: lowName) map {
       case root ^: selects => selects.foldLeft[Expr](root)(Select(_, _))
     }
-  } setName "paths"
+  } setName "path"
 
   private lazy val capturableExpr = recursive {
-    pkgRef OR deviceRef OR paths
+    pkgRef OR deviceRef OR path
   } setName "capturableExpr"
 
+  private lazy val implicitRootCapOrBrand = recursive {
+    op(Hat) ::: opt(op(QuestionMark)) map {
+      case hat ^: None => ImplicitRootCaptureSetTree()
+      case hat ^: Some(_) => BrandTree()
+    }
+  } setName "implicitRootCapOrBrand"
+
   private lazy val captureSet = recursive {
-    openBrace ::: repeatWithSep(capturableExpr, comma) ::: closeBrace map {
-      case captured => ExplicitCaptureSetTree(captured)
+    op(HatOpenBrace) ::: repeatWithSep(expr, comma) ::: closeBrace map {
+      case _ ^: expressions => ExplicitCaptureSetTree(expressions)
     }
   } setName "captureSet"
-
-  private lazy val brand = {
-    op(QuestionMark) map (_ => BrandTree())
-  } setName "brand"
-
-  private lazy val captureDescr: P[CaptureDescrTree] = recursive {
-    captureSet OR brand
-  } setName "captureDescr"
   
-  private lazy val maybeCaptureDescr: P[Option[CaptureDescrTree]] = recursive {
-    opt(op(Hat) ::: opt(captureDescr)) map { maybeHatAndDescr =>
-      maybeHatAndDescr.map {
-        case _ ^: descrOpt => descrOpt.getOrElse(ImplicitRootCaptureSetTree())
-      }
-    }
-  } setName "maybeCaptureDescr"
+  private lazy val captureDescr: P[CaptureDescrTree] = recursive {
+    implicitRootCapOrBrand OR captureSet
+  } setName "captureDescr"
   
   private lazy val primOrNamedShape = highName map { typeName =>
     val primTypeOpt = Types.primTypeFor(typeName).map(PrimitiveTypeShapeTree(_))
     primTypeOpt.getOrElse(NamedTypeShapeTree(typeName))
   } setName "primOrNamedShape"
 
-  private lazy val primOrNamedType = primOrNamedShape ::: maybeCaptureDescr map {
+  private lazy val primOrNamedType = primOrNamedShape ::: opt(captureDescr) map {
     case shape ^: cdOpt => shape ^ cdOpt
   } setName "primOrNamedType"
 
   private lazy val arrayType = recursive {
-    opt(kw(Mut)) ::: kw(Arr).ignored ::: maybeCaptureDescr ::: typeTree map {
+    opt(kw(Mut)) ::: kw(Arr).ignored ::: opt(captureDescr) ::: typeTree map {
       case mutOpt ^: cdOpt ^: tp => ArrayTypeShapeTree(tp, mutOpt.isDefined) ^ cdOpt
     }
   } setName "arrayType"
