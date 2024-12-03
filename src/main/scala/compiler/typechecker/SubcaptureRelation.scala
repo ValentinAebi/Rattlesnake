@@ -17,7 +17,7 @@ object SubcaptureRelation {
   extension (l: CaptureSet) def subcaptureOf(r: CaptureSet)(using ctx: TypeCheckingContext): Boolean =
     l.set.forall(_.isCoveredBy(r))
 
-  extension (l: Capturable) private def isCoveredBy(r: CaptureSet)(using ctx: TypeCheckingContext): Boolean = l match {
+  extension (l: Capturable) def isCoveredBy(r: CaptureSet)(using ctx: TypeCheckingContext): Boolean = l match {
     case lPath if r.set.contains(lPath) => true
     case SelectPath(root, field) if root.isCoveredBy(r) => true
     case IdPath(id) if ctx.getLocalOnly(id).exists(_.tpe.captureDescriptor.subcaptureOf(r)) => true

@@ -46,4 +46,6 @@ object CaptureDescriptors {
     captureDescriptors.foldLeft[CaptureDescriptor](CaptureSet.empty)(_.union(_))
   }
 
+  val singletonSetOfRoot: CaptureDescriptor = CaptureSet.singletonOfRoot
+
 }

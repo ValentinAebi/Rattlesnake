@@ -8,17 +8,18 @@ import compiler.pipeline.CompilationStep.TypeChecking
 import compiler.pipeline.CompilerStep
 import compiler.reporting.Errors.{Err, ErrorReporter, Warning}
 import compiler.reporting.Position
+import compiler.typechecker.SubcaptureRelation.{subcaptureOf, isCoveredBy}
 import compiler.typechecker.SubtypeRelation.subtypeOf
 import compiler.typechecker.TypeCheckingContext.LocalInfo
 import identifiers.{FunOrVarId, IntrinsicsPackageId, NormalTypeId, TypeIdentifier}
 import lang.*
+import lang.Capturables.*
 import lang.CaptureDescriptors.{Brand, CaptureDescriptor, CaptureSet}
 import lang.Operator.{Equality, Inequality, Sharp}
 import lang.Operators.{BinaryOpSignature, UnaryOpSignature, binaryOperators, unaryOperators}
 import lang.StructSignature.FieldInfo
 import lang.Types.*
 import lang.Types.PrimitiveTypeShape.*
-import lang.Capturables.*
 
 import scala.collection.mutable
 
@@ -153,15 +154,65 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def checkType(typeTree: TypeTree)(using tcCtx: TypeCheckingContext, env: Environment): Type = {
-    typeTree match
+    val tpe = typeTree match {
       case CapturingTypeTree(typeShapeTree, captureDescrTree) =>
-        CapturingType(
-          checkTypeShape(typeShapeTree),
-          checkCaptureDescr(captureDescrTree)
-        )
+        val shape = checkTypeShape(typeShapeTree)
+        val descriptor = checkCaptureDescr(captureDescrTree)
+        warnOnCapturingNonCapability(captureDescrTree)
+        CapturingType(shape, descriptor)
       case typeShapeTree: TypeShapeTree =>
         checkTypeShape(typeShapeTree)
-      case WrapperTypeTree(tpe) => tpe
+      case WrapperTypeTree(tpe) =>
+        tpe
+    }
+    warnWhenPrimitiveHasInappropriateCaptureDescr(tpe, typeTree.getPosition)
+    warnOnRedundantCaptures(tpe.captureDescriptor, typeTree.getPosition)
+    tpe
+  }
+
+  private def warnOnCapturingNonCapability(captureDescrTree: CaptureDescrTree)
+                                          (using tcCtx: TypeCheckingContext, env: Environment): Unit = {
+    captureDescrTree match
+      case ExplicitCaptureSetTree(capturedExpressions) =>
+        for (captured <- capturedExpressions){
+          if (captured.getType.captureDescriptor.isEmpty){
+            reportError("captured expression is not a resource", captured.getPosition, isWarning = true)
+          }
+        }
+      case ImplicitRootCaptureSetTree() => ()
+      case BrandTree() => ()
+  }
+
+  private def warnWhenPrimitiveHasInappropriateCaptureDescr(tpe: Type, posOpt: Option[Position])
+                                                           (using tcCtx: TypeCheckingContext, env: Environment): Unit = {
+    tpe.shape match {
+      case RegionType if !CaptureDescriptors.singletonSetOfRoot.subcaptureOf(tpe.captureDescriptor) =>
+        reportError(
+          s"type $tpe is not inhabited, as a region always captures the root capability",
+          posOpt,
+          isWarning = true
+        )
+      case primType: PrimitiveTypeShape if primType != RegionType && !tpe.captureDescriptor.isEmpty =>
+        reportError(
+          s"capture set is useless, as values of type ${tpe.shape} never capture capabilities",
+          posOpt,
+          isWarning = true
+        )
+      case _ => ()
+    }
+  }
+
+  private def warnOnRedundantCaptures(captureDescr: CaptureDescriptor, posOpt: Option[Position])
+                                     (using tcCtx: TypeCheckingContext, env: Environment): Unit = captureDescr match {
+    case CaptureSet(set) if set.size >= 2 =>
+      set.find(capability => capability.isCoveredBy(CaptureSet(set - capability))).foreach { capability =>
+        reportError(
+          s"redundant capability: $capability is already covered by ${CaptureSet(set - capability)}",
+          posOpt,
+          isWarning = true
+        )
+      }
+    case _ => ()
   }
 
   private def checkTypeShape(typeShapeTree: TypeShapeTree)
@@ -344,9 +395,9 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val retType = checkExpr(value)
         checkSubtypingConstraint(expRetType, retType, retStat.getPosition, "returned value", tcCtx)
       }
-      if (expRetType == NothingType){
+      if (expRetType == NothingType) {
         reportError(s"unexpected return in function returning $NothingType", retStat.getPosition)
-      } else if (expRetType != VoidType && valueOpt.isEmpty){
+      } else if (expRetType != VoidType && valueOpt.isEmpty) {
         reportError("expected an expression after return", retStat.getPosition)
       }
 
@@ -876,7 +927,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
   }
 
-  private def minimalCaptureSetFor(expr: Expr): CaptureDescriptor  = {
+  private def minimalCaptureSetFor(expr: Expr): CaptureDescriptor = {
     PathsConverter.convertOrFailSilently(expr) map { path =>
       CaptureSet(path)
     } getOrElse {
