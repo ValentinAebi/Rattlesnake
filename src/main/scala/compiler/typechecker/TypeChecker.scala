@@ -800,7 +800,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
                                  mustUpdateField: Boolean
                                ): Type = {
     val exprType = expr.getType
-    exprType match {
+    exprType.shape match {
       case NamedTypeShape(typeName) =>
         ctx.resolveType(typeName) match {
           case Some(StructSignature(_, fields, _, _)) if fields.contains(fieldName) =>
