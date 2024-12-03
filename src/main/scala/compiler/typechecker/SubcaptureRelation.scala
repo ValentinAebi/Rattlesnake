@@ -2,26 +2,57 @@ package compiler.typechecker
 
 import lang.Capturables.*
 import lang.CaptureDescriptors.*
+import scala.collection.mutable
 
 object SubcaptureRelation {
 
   extension (l: CaptureDescriptor) def subcaptureOf(r: CaptureDescriptor)(using ctx: TypeCheckingContext): Boolean = {
-    (l, r) match {
-      case (Brand, Brand) => true
-      case (lcs: CaptureSet, rcs: CaptureSet) =>
-        lcs.subcaptureOf(rcs)
-      case _ => false
-    }
+    SubcapturingComputer(ctx).isSubcapture(l, r)
   }
 
-  extension (l: CaptureSet) def subcaptureOf(r: CaptureSet)(using ctx: TypeCheckingContext): Boolean =
-    l.set.forall(_.isCoveredBy(r))
+  extension (l: CaptureSet) def subcaptureOf(r: CaptureSet)(using ctx: TypeCheckingContext): Boolean = {
+    SubcapturingComputer(ctx).isSubcapture(l, r)
+  }
 
-  extension (l: Capturable) def isCoveredBy(r: CaptureSet)(using ctx: TypeCheckingContext): Boolean = l match {
-    case lPath if r.set.contains(lPath) => true
-    case SelectPath(root, field) if root.isCoveredBy(r) => true
-    case IdPath(id) if ctx.getLocalOnly(id).exists(_.tpe.captureDescriptor.subcaptureOf(r)) => true
-    case _ => false
+  extension (l: Capturable) def isCoveredBy(r: CaptureSet)(using ctx: TypeCheckingContext): Boolean = {
+    SubcapturingComputer(ctx).isCovered(l, r)
+  }
+
+  /**
+   * Defense mechanism against cyclic subcapturing on malformed programs
+   */
+  private class SubcapturingComputer(private val ctx: TypeCheckingContext) {
+    private val stackedRequests = mutable.Set.empty[(Capturable, CaptureSet)]
+
+    def isSubcapture(l: CaptureDescriptor, r: CaptureDescriptor): Boolean = {
+      (l, r) match {
+        case (Brand, Brand) => true
+        case (lcs: CaptureSet, rcs: CaptureSet) =>
+          isSubcapture(lcs, rcs)
+        case _ => false
+      }
+    }
+    
+    def isSubcapture(l: CaptureSet, r: CaptureSet): Boolean = {
+      l.set.forall(isCovered(_, r))
+    }
+
+    def isCovered(l: Capturable, r: CaptureSet): Boolean = {
+      val query = (l, r)
+      if stackedRequests.contains(query) then false
+      else {
+        stackedRequests.add(query)
+        val result = l match {
+          case lPath if r.set.contains(lPath) => true
+          case SelectPath(root, field) if isCovered(root, r) => true
+          case IdPath(id) if ctx.getLocalOnly(id).exists(info => isSubcapture(info.tpe.captureDescriptor, r)) => true
+          case _ => false
+        }
+        stackedRequests.remove(query)
+        result
+      }
+    }
+
   }
 
 }
