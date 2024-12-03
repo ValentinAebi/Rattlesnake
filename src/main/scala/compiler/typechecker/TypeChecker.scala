@@ -187,7 +187,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
   private def checkCaptureDescr(captureDescrTree: CaptureDescrTree)
                                (using tcCtx: TypeCheckingContext, env: Environment): CaptureDescriptor = {
-    captureDescrTree match {
+    val captureDescr = captureDescrTree match {
       case ExplicitCaptureSetTree(capturedExpressions) =>
         CaptureSet(capturedExpressions.flatMap { expr =>
           checkCapturedExpr(expr, errorReporter)(using tcCtx)
@@ -195,6 +195,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case ImplicitRootCaptureSetTree() => CaptureSet.singletonOfRoot
       case BrandTree() => Brand
     }
+    captureDescrTree.setResolvedDescr(captureDescr)
+    captureDescr
   }
 
   private def checkCapturedExpr(expr: Expr, er: ErrorReporter)
