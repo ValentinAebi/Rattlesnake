@@ -186,6 +186,7 @@ object Asts {
   final case class FunDef(funName: FunOrVarId, params: List[Param], optRetType: Option[TypeTree], body: Block) extends Ast {
     private val signatureMemo = new Memo[FunctionSignature]
     
+    export signatureMemo.setOpt as setSignatureOpt
     export signatureMemo.set as setSignature
     export signatureMemo.getOpt as getSignatureOpt
 
@@ -226,6 +227,7 @@ object Asts {
 
     private val varTypeMemo = new Memo[Type]
     
+    export varTypeMemo.setOpt as setVarTypeOpt
     export varTypeMemo.set as setVarType
     export varTypeMemo.getOpt as getVarTypeOpt
 
@@ -319,8 +321,10 @@ object Asts {
     private val signatureMemo = new Memo[FunctionSignature]
     private val meTypeMemo = new Memo[Type]
     
+    export signatureMemo.setOpt as setResolvedSigOpt
     export signatureMemo.set as setResolvedSig
     export signatureMemo.getOpt as getSignatureOpt
+    export meTypeMemo.setOpt as setMeTypeOpt
     export meTypeMemo.set as cacheMeType
     export meTypeMemo.getOpt as getMeTypeOpt
 
@@ -572,6 +576,7 @@ object Asts {
   sealed abstract class CaptureDescrTree extends Ast {
     private val descrMemo = new Memo[CaptureDescriptor]
     
+    export descrMemo.setOpt as setResolvedDescrOpt
     export descrMemo.set as setResolvedDescr
     export descrMemo.getOpt as getResolvedDescrOpt
   }

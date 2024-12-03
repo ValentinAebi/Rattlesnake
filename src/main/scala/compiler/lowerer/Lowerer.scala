@@ -1,14 +1,13 @@
 package compiler.lowerer
 
-import compiler.irs.Asts.*
 import compiler.analysisctx.AnalysisContext
+import compiler.irs.Asts.*
 import compiler.pipeline.CompilerStep
 import compiler.reporting.Position
-import identifiers.IntrinsicsPackageId
-import lang.{Intrinsics, Types}
 import lang.Operator.*
-import lang.Types.PrimitiveTypeShape.*
 import lang.Types.*
+import lang.Types.PrimitiveTypeShape.*
+import lang.{Intrinsics, Types}
 
 /**
  * Lowering replaces (this list may not be complete):
@@ -51,7 +50,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
 
   private def lower(funDef: FunDef): FunDef = propagatePosition(funDef.getPosition) {
     val loweredFunDef = FunDef(funDef.funName, funDef.params.map(lower), funDef.optRetType, lower(funDef.body))
-    loweredFunDef.setSignature(funDef.getSignatureOpt.get)
+    loweredFunDef.setSignatureOpt(funDef.getSignatureOpt)
     loweredFunDef
   }
 
@@ -79,16 +78,29 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
     )
   }
 
-  private def lower(constDef: ConstDef): ConstDef = constDef
+  private def lower(constDef: ConstDef): ConstDef = ConstDef(
+    constDef.constName,
+    constDef.tpeOpt.map(lower),
+    constDef.value  // no need to lower literals
+  )
 
-  private def lower(param: Param): Param = param
+  private def lower(param: Param): Param = Param(
+    param.paramNameOpt,
+    lower(param.tpe),
+    param.isReassignable
+  )
 
-  private def lower(imp: Import): Import = imp
+  private def lower(imp: Import): Import = imp match {
+    case ParamImport(paramId, paramType) =>
+      ParamImport(paramId, lower(paramType))
+    case packageImport: PackageImport => packageImport
+    case deviceImport: DeviceImport => deviceImport
+  }
 
   private def lower(localDef: LocalDef): LocalDef = propagatePosition(localDef.getPosition) {
     val loweredLocal = LocalDef(localDef.localName, localDef.optTypeAnnot.map(lower), lower(localDef.rhs),
       localDef.isReassignable)
-    loweredLocal.setVarType(localDef.getVarTypeOpt.get)
+    loweredLocal.setVarTypeOpt(localDef.getVarTypeOpt)
     loweredLocal
   }
 
@@ -234,11 +246,11 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
     val loweredReceiverOpt = call.receiverOpt.map(lower).orElse {
       if Intrinsics.intrinsics.contains(call.getSignatureOpt.get.name)
       then None
-      else Some(MeRef().setType(call.getMeTypeOpt.get))
+      else Some(MeRef().setTypeOpt(call.getMeTypeOpt))
     }
     val loweredCall = Call(loweredReceiverOpt, call.function, call.args.map(lower))
-    loweredCall.setResolvedSig(call.getSignatureOpt.get)
-    loweredCall.setType(call.getType)
+    loweredCall.setResolvedSigOpt(call.getSignatureOpt)
+    loweredCall.setTypeOpt(call.getTypeOpt)
     loweredCall
   }
 
@@ -290,7 +302,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
       case implicitRootCaptureSetTree: ImplicitRootCaptureSetTree => implicitRootCaptureSetTree
       case brandTree: BrandTree => brandTree
     }
-    loweredCapDescr.setResolvedDescr(captureDescrTree.getResolvedDescrOpt.get)
+    loweredCapDescr.setResolvedDescrOpt(captureDescrTree.getResolvedDescrOpt)
     loweredCapDescr
   }
 
