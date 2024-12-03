@@ -8,7 +8,7 @@ import compiler.pipeline.CompilationStep.TypeChecking
 import compiler.pipeline.CompilerStep
 import compiler.reporting.Errors.{Err, ErrorReporter, Warning}
 import compiler.reporting.Position
-import compiler.typechecker.SubcaptureRelation.{subcaptureOf, isCoveredBy}
+import compiler.typechecker.SubcaptureRelation.{isCoveredBy, subcaptureOf}
 import compiler.typechecker.SubtypeRelation.subtypeOf
 import compiler.typechecker.TypeCheckingContext.LocalInfo
 import identifiers.{FunOrVarId, IntrinsicsPackageId, NormalTypeId, TypeIdentifier}
@@ -158,29 +158,14 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case CapturingTypeTree(typeShapeTree, captureDescrTree) =>
         val shape = checkTypeShape(typeShapeTree)
         val descriptor = checkCaptureDescr(captureDescrTree)
-        warnOnCapturingNonCapability(captureDescrTree)
+        warnOnNonCapAndRedundantCaptures(captureDescrTree)
         CapturingType(shape, descriptor)
       case typeShapeTree: TypeShapeTree =>
         checkTypeShape(typeShapeTree)
-      case WrapperTypeTree(tpe) =>
-        tpe
+      case WrapperTypeTree(tpe) => tpe
     }
     warnWhenPrimitiveHasInappropriateCaptureDescr(tpe, typeTree.getPosition)
-    warnOnRedundantCaptures(tpe.captureDescriptor, typeTree.getPosition)
     tpe
-  }
-
-  private def warnOnCapturingNonCapability(captureDescrTree: CaptureDescrTree)
-                                          (using tcCtx: TypeCheckingContext, env: Environment): Unit = {
-    captureDescrTree match
-      case ExplicitCaptureSetTree(capturedExpressions) =>
-        for (captured <- capturedExpressions){
-          if (captured.getType.captureDescriptor.isEmpty){
-            reportError("captured expression is not a resource", captured.getPosition, isWarning = true)
-          }
-        }
-      case ImplicitRootCaptureSetTree() => ()
-      case BrandTree() => ()
   }
 
   private def warnWhenPrimitiveHasInappropriateCaptureDescr(tpe: Type, posOpt: Option[Position])
@@ -202,17 +187,34 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
   }
 
-  private def warnOnRedundantCaptures(captureDescr: CaptureDescriptor, posOpt: Option[Position])
-                                     (using tcCtx: TypeCheckingContext, env: Environment): Unit = captureDescr match {
-    case CaptureSet(set) if set.size >= 2 =>
-      set.find(capability => capability.isCoveredBy(CaptureSet(set - capability))).foreach { capability =>
-        reportError(
-          s"redundant capability: $capability is already covered by ${CaptureSet(set - capability)}",
-          posOpt,
-          isWarning = true
-        )
-      }
-    case _ => ()
+  private def warnOnNonCapAndRedundantCaptures(captureDescrTree: CaptureDescrTree)
+                                     (using tcCtx: TypeCheckingContext, env: Environment): Unit = {
+    captureDescrTree match {
+      case ExplicitCaptureSetTree(capturedExpressions) =>
+        var foundNotCap = false
+        capturedExpressions.foreach { captExpr =>
+          if (captExpr.getType.captureDescriptor.isEmpty) {
+            reportError("captured expression is not a capability", captExpr.getPosition, isWarning = true)
+            foundNotCap = true
+          }
+        }
+        if (!foundNotCap){
+          // do not try to find redundant capabilities if we have already found a problem on this capture set
+          captureDescrTree.getResolvedDescrOpt.foreach {
+            case CaptureSet(set) =>
+              set.find(c => c.isCoveredBy(CaptureSet(set - c)))
+                .foreach { capability =>
+                  reportError(
+                    s"redundant capability: $capability is already covered by the rest of the capture set",
+                    captureDescrTree.getPosition,
+                    isWarning = true
+                  )
+                }
+            case _ => ()
+          }
+        }
+      case _ => ()
+    }
   }
 
   private def checkTypeShape(typeShapeTree: TypeShapeTree)
