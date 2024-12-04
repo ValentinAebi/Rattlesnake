@@ -243,7 +243,9 @@ final class TypeChecker(errorReporter: ErrorReporter)
     val captureDescr = captureDescrTree match {
       case ExplicitCaptureSetTree(capturedExpressions) =>
         CaptureSet(capturedExpressions.flatMap { expr =>
-          checkCapturedExpr(expr, errorReporter)(using tcCtx)
+          val exprType = checkExpr(expr)
+          if exprType.captureDescriptor.isEmpty then None
+          else checkCapturedExpr(expr, errorReporter)(using tcCtx)
         }.toSet)
       case ImplicitRootCaptureSetTree() => CaptureSet.singletonOfRoot
       case BrandTree() => Brand
@@ -260,7 +262,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
       None
     }
 
-    checkExpr(expr)
     expr match {
       case VariableRef(name) =>
         Some(IdPath(name))
@@ -270,7 +271,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case Select(lhs, selected) =>
         checkCapturedExpr(lhs, er).flatMap {
           case lhsPath: Path => {
-            lhs.getType match {
+            lhs.getType.shape match {
               case NamedTypeShape(lhsTypeId) =>
                 tcCtx.resolveType(lhsTypeId).flatMap { lhsTypeSig =>
                   lhsTypeSig.params.get(selected).flatMap { fieldInfo =>
