@@ -519,11 +519,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
                 instantiation.getPosition
               )
             }
-            checkCallArgs(structSig.constructorSig, None, args, tcCtx, instantiation.getPosition)
+            checkCallArgs(structSig.constructorSig, None, args, instantiation.getPosition)
             // FIXME should we replace the me reference here? recursive type?
             NamedTypeShape(tid) ^ computeCaptures(args ++ regionOpt)
           case Some(moduleSig: ModuleSignature) =>
-            checkCallArgs(moduleSig.constructorSig, None, args, tcCtx, instantiation.getPosition)
+            checkCallArgs(moduleSig.constructorSig, None, args, instantiation.getPosition)
             // FIXME should we replace the me reference here? recursive type?
             NamedTypeShape(tid) ^ computeCaptures(args ++ regionOpt)
           case _ => reportError(s"not found: structure or module '$tid'", instantiation.getPosition)
@@ -656,7 +656,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case FunctionFound(funSig) =>
         call.setResolvedSig(funSig)
         call.cacheMeType(tcCtx.meType)
-        checkCallArgs(funSig, call.receiverOpt, args, tcCtx, pos)
+        checkCallArgs(funSig, call.receiverOpt, args, pos)
       case ModuleNotFound =>
         args.foreach(checkExpr)
         reportError(s"not found: package or module $owner", pos)
@@ -680,24 +680,31 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
   }
 
-  private def checkCallArgs(funSig: FunctionSignature, receiverOpt: Option[Expr], args: List[Expr], ctx: TypeCheckingContext, callPos: Option[Position])
-                           (using TypeCheckingContext, Environment): Type = {
+  private def checkCallArgs(
+                             funSig: FunctionSignature,
+                             receiverOpt: Option[Expr],
+                             args: List[Expr],
+                             callPos: Option[Position]
+                           )(using tcCtx: TypeCheckingContext, env: Environment): Type = {
     val expTypesIter = funSig.args.iterator
     val argsIter = args.iterator
-    val substMap = mutable.Map.empty[Capturable, Capturable]
-    saveArgMappingIfPath(substMap, Some(MePath), receiverOpt)
-    val substitutor = CapturesSubstitutor.fromView(substMap)
+    val substitutor = PathsSubstitutor(tcCtx, errorReporter)
+    receiverOpt.foreach { receiver =>
+      substitutor(MePath) = minimalCaptureSetFor(receiver)
+    }
     var errorFound = false
     while (expTypesIter.hasNext && argsIter.hasNext && !errorFound) {
       val (paramNameOpt, expTypeRaw) = expTypesIter.next()
-      val expTypeSubst = substitutor.subst(expTypeRaw)
       val arg = argsIter.next()
+      val expTypeSubst = substitutor.subst(expTypeRaw, arg.getPosition)
       val actType = checkExpr(arg)
       if (!actType.subtypeOf(expTypeSubst)) {
         reportError(s"expected '$expTypeSubst', found '$actType'", arg.getPosition)
         errorFound = true
       }
-      saveArgMappingIfPath(substMap, paramNameOpt.map(IdPath(_)), Some(arg))
+      paramNameOpt.foreach { paramName =>
+        substitutor(IdPath(paramName)) = minimalCaptureSetFor(arg)
+      }
     }
     if (expTypesIter.hasNext && !errorFound) {
       reportError(s"expected argument of type '${expTypesIter.next()._2}', found end of arguments list", callPos)
@@ -709,25 +716,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
     for arg <- argsIter do {
       checkExpr(arg)
     }
-    substitutor.subst(funSig.retType)
+    substitutor.subst(funSig.retType, callPos)
   }
 
   private def computeCaptures(captured: List[Expr]): CaptureDescriptor =
     CaptureDescriptors.unionOf(captured.map(minimalCaptureSetFor))
-
-  private def saveArgMappingIfPath(
-                                    substMap: mutable.Map[Capturable, Capturable],
-                                    paramOpt: Option[Capturable],
-                                    argOpt: Option[Expr]
-                                  ): Unit = {
-    for {
-      param <- paramOpt
-      arg <- argOpt
-      argPath <- PathsConverter.convertOrFailSilently(arg)
-    } do {
-      substMap(param) = argPath
-    }
-  }
 
   private def detectSmartCasts(expr: Expr, ctx: TypeCheckingContext): Map[FunOrVarId, CastTargetTypeShape] = {
     expr match {
