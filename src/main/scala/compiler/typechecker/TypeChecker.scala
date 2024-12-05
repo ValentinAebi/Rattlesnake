@@ -528,6 +528,12 @@ final class TypeChecker(errorReporter: ErrorReporter)
                 s"cannot instantiate '$tid' without providing a region, since at least one of its fields is reassignable",
                 instantiation.getPosition
               )
+            } else if (!structSig.isShallowMutable && regionOpt.isDefined){
+              reportError(
+                s"providing a region is not necessary here, as ${structSig.id} does not have reassignable fields",
+                regionOpt.get.getPosition,
+                isWarning = true
+              )
             }
             checkCallArgs(structSig.constructorSig, None, args, instantiation.getPosition)
             // FIXME should we replace the me reference here? recursive type?
