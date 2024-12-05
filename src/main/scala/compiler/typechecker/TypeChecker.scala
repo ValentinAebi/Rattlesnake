@@ -82,6 +82,13 @@ final class TypeChecker(errorReporter: ErrorReporter)
             }
           )
         }
+        if (param.isReassignable) {
+          tpe.captureDescriptor match {
+            case cs: CaptureSet if RootCapability.isCoveredBy(cs)(using tcCtx) =>
+              reportError(s"reassignable field '${param.paramNameOpt.getOrElse("<missing name>")}' cannot capture the root capability", param.getPosition)
+            case _ => ()
+          }
+        }
       }
 
     case constDef@ConstDef(constName, tpeOpt, value) =>
@@ -737,7 +744,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   /**
-   * @param returned      types of all the expressions found after a `return`
    * @param alwaysStopped indicates whether the control-flow can reach the end of the considered construct without
    *                      encountering an instruction that terminates the function (`return` or `panic`)
    */
