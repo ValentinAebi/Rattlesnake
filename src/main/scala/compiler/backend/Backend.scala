@@ -457,17 +457,20 @@ final class Backend[V <: ClassVisitor](
       case StructOrModuleInstantiation(regionOpt, tid, args) =>
         val constructorSig = ctx.resolveType(tid).get.asInstanceOf[StructOrModuleSignature].constructorSig
         val constructorDescr = descriptorForFunc(constructorSig)
+        regionOpt.foreach { region =>
+          generateCode(region, ctx)(using mv)
+        }
         mv.visitTypeInsn(Opcodes.NEW, tid.stringId)
         mv.visitInsn(Opcodes.DUP)
-        regionOpt.foreach { region =>
-          mv.visitInsn(Opcodes.DUP)
-          generateCode(region, ctx)(using mv)
-          RuntimeMethod.SaveNewObjectInRegion.generateCall(mv)
-        }
         for (arg <- args) {
           generateCode(arg, ctx)
         }
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, tid.stringId, ConstructorFunId.stringId, constructorDescr, false)
+        regionOpt.foreach { _ =>
+          mv.visitInsn(Opcodes.DUP_X1)
+          mv.visitInsn(Opcodes.SWAP)
+          RuntimeMethod.SaveNewObjectInRegion.generateCall(mv)
+        }
 
       case RegionCreation() =>
         RuntimeMethod.NewRegion.generateCall(mv)
