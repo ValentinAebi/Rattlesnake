@@ -21,8 +21,6 @@ import lang.StructSignature.FieldInfo
 import lang.Types.*
 import lang.Types.PrimitiveTypeShape.*
 
-import scala.collection.mutable
-
 final class TypeChecker(errorReporter: ErrorReporter)
   extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
 
@@ -120,6 +118,9 @@ final class TypeChecker(errorReporter: ErrorReporter)
           }, forbiddenTypeCallback = { () =>
             reportError(s"parameter '${param.paramNameOpt}' of function '$funName' has type '$paramType', which is forbidden", param.getPosition)
           })
+      }
+      if (param.isReassignable && param.paramNameOpt.isEmpty){
+        reportError("unnamed reassignable parameter", param.getPosition, isWarning = true)
       }
     }
     val optRetType = optRetTypeTree.map(checkType(_)(using tcCtx, environment))
