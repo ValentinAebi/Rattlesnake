@@ -43,9 +43,9 @@ object SubcaptureRelation {
       else {
         stackedRequests.add(query)
         val result = l match {
-          case lPath if r.set.contains(lPath) => true
-          case SelectPath(root, field) if isCovered(root, r) => true
-          case IdPath(id) if ctx.getLocalOnly(id).exists(info => isSubcapture(info.tpe.captureDescriptor, r)) => true
+          case lCapt if r.set.contains(lCapt) => true
+          case SelectPath(directRoot, field) if isCovered(directRoot, r) => true
+          case lCapt: ConcreteCapturable if isSubcapture(ctx.lookup(lCapt).captureDescriptor, r) => true
           case _ => false
         }
         stackedRequests.remove(query)

@@ -162,7 +162,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
          * meant to be immutable. The type of the expression is therefore an immutable array type that captures no 
          * region, hence the region does not exit the code in the Sequence. */
         val region = regionOpt.getOrElse(RegionCreation())
-        val arrayType = filledArrayInit.getType.asInstanceOf[ArrayTypeShape]
+        val arrayType = filledArrayInit.getType.shape.asInstanceOf[ArrayTypeShape]
         val elemType = arrayType.elemType
         val arrValId = uniqueIdGenerator.next()
         val arrValRef = VariableRef(arrValId).setType(arrayType)

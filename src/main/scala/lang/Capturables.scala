@@ -11,19 +11,25 @@ object Capturables {
   sealed trait ConcreteCapturable extends Capturable
 
   sealed trait Path extends ConcreteCapturable {
+    def root: RootPath
     def dot(fld: FunOrVarId): Path = SelectPath(this, fld)
   }
+  
+  sealed trait RootPath extends Path {
+    override def root: RootPath = this
+  }
 
-  final case class IdPath(id: FunOrVarId) extends Path {
+  final case class IdPath(id: FunOrVarId) extends RootPath {
     override def toString: String = id.stringId
   }
 
-  final case class SelectPath(root: Path, fld: FunOrVarId) extends Path {
-    override def toString: String = s"$root.$fld"
+  case object MePath extends RootPath {
+    override def toString: String = Keyword.Me.str
   }
 
-  case object MePath extends Path {
-    override def toString: String = Keyword.Me.str
+  final case class SelectPath(directRoot: Path, fld: FunOrVarId) extends Path {
+    override def root: RootPath = directRoot.root
+    override def toString: String = s"$directRoot.$fld"
   }
 
   final case class CapPackage(pkgName: TypeIdentifier) extends ConcreteCapturable {

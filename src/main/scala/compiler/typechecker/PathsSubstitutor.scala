@@ -1,7 +1,6 @@
 package compiler.typechecker
 
-import compiler.pipeline.CompilationStep.TypeChecking
-import compiler.reporting.Errors.{Err, ErrorReporter}
+import compiler.reporting.Errors.ErrorReporter
 import compiler.reporting.Position
 import lang.Capturables.*
 import lang.CaptureDescriptors.*
@@ -11,16 +10,24 @@ import lang.{Capturables, CaptureDescriptors, Types}
 import scala.collection.mutable
 
 final class PathsSubstitutor(tcCtx: TypeCheckingContext, er: ErrorReporter) {
-  private val substMap: mutable.Map[Path, CaptureDescriptor] = mutable.Map.empty
+  private val substMap: mutable.Map[Path, Capturable] = mutable.Map.empty
 
   export substMap.update
+  
+  def subst(path: Path): Option[Capturable] = path match {
+    case path: (IdPath | MePath.type) =>
+      substMap.get(path)
+    case SelectPath(directRoot, fld) =>
+      subst(directRoot) match {
+        case Some(substDirectRoot: Path) => Some(substDirectRoot.dot(fld))
+        case _ => None
+      }
+  }
 
   def subst(capturable: Capturable, posOpt: Option[Position]): CaptureDescriptor = capturable match {
     case path: Capturables.Path =>
-      substMap.getOrElse(path, {
-        er.push(Err(TypeChecking, s"unexpected path '$path' in capture set", posOpt))
-        CaptureSet.singletonOfRoot
-      })
+      subst(path).map(CaptureSet(_))
+        .getOrElse(tcCtx.lookup(path).captureDescriptor)
     case other: (CapPackage | CapDevice | RootCapability.type) => CaptureSet(other)
   }
 

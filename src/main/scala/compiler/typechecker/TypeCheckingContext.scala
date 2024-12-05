@@ -1,17 +1,16 @@
 package compiler.typechecker
 
 import compiler.analysisctx.AnalysisContext
-import compiler.irs.Asts.{Expr, Indexing, Select, VariableRef}
 import compiler.pipeline.CompilationStep.TypeChecking
 import compiler.reporting.Errors.{ErrorReporter, Warning}
 import compiler.reporting.{Errors, Position}
 import compiler.typechecker.TypeCheckingContext.{LocalInfo, LocalUsesCollector}
 import identifiers.{FunOrVarId, TypeIdentifier}
 import lang.*
-import lang.Capturables.{Capturable, Path}
+import lang.Capturables.{ConcreteCapturable, Path}
 import lang.CaptureDescriptors.*
-import lang.Types.PrimitiveTypeShape.{NothingType, VoidType}
 import lang.Types.*
+import lang.Types.PrimitiveTypeShape.{NothingType, VoidType}
 
 import scala.collection.mutable
 
@@ -19,7 +18,7 @@ import scala.collection.mutable
  * Mutable context for type checking
  */
 final case class TypeCheckingContext private(
-                                              private val analysisContext: AnalysisContext,
+                                              analysisContext: AnalysisContext,
                                               private val locals: mutable.Map[FunOrVarId, LocalInfo] = mutable.Map.empty,
                                               meId: TypeIdentifier,
                                               meCaptureDescr: CaptureDescriptor
@@ -86,6 +85,29 @@ final case class TypeCheckingContext private(
         // defPos and declHasTypeAnnot are never used for constants, as long as constants can only be of primitive types
         .map(tpe => LocalInfo(name, tpe, isReassignable = false, defPos = None, declHasTypeAnnot = false))
     )
+  }
+  
+  def lookup(path: Path): Type = path match {
+    case Capturables.IdPath(id) =>
+      getLocalOnly(id).filter(!_.isReassignable).map(_.tpe)
+        .getOrElse(UndefinedTypeShape)
+    case Capturables.MePath => meType
+    case Capturables.SelectPath(directRoot, fld) =>
+      lookup(directRoot).shape match {
+        case NamedTypeShape(typeName) =>
+          resolveType(typeName).flatMap(_.typeOfSelectIfCapturable(fld))
+            .getOrElse(UndefinedTypeShape)
+        case _ => UndefinedTypeShape
+      }
+  }
+
+  def lookup(capturable: ConcreteCapturable): Type = capturable match {
+    case path: Path => lookup(path)
+    case Capturables.CapPackage(pkgName) =>
+      packages.get(pkgName).map(_.getSelfReferringType)
+        .getOrElse(UndefinedTypeShape)
+    case Capturables.CapDevice(device) =>
+      device.sig.getSelfReferringType
   }
 
   def localIsQueried(localId: FunOrVarId): Unit = {

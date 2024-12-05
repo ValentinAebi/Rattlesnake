@@ -61,8 +61,8 @@ object AnalysisContext {
     def getOrThrow(): FunctionSignature
   }
 
-  final case class FunctionFound(signature: FunctionSignature) extends MethodResolutionResult {
-    override def getOrThrow(): FunctionSignature = signature
+  final case class FunctionFound(funSig: FunctionSignature) extends MethodResolutionResult {
+    override def getOrThrow(): FunctionSignature = funSig
   }
 
   object ModuleNotFound extends MethodResolutionResult {
@@ -109,7 +109,7 @@ object AnalysisContext {
     def addStruct(structDef: StructDef): Unit = {
       val name = structDef.structName
       if (checkTypeNotAlreadyDefined(name, structDef.getPosition)) {
-        val fieldsMap = buildFieldsMap(structDef)
+        val fieldsMap = buildStructFieldsMap(structDef)
         val sig = StructSignature(name, fieldsMap, structDef.directSupertypes, structDef.isInterface)
         structs.put(name, (sig, structDef.getPosition))
       }
@@ -155,22 +155,22 @@ object AnalysisContext {
     private def computeFunctionSig(funDef: FunDef): FunctionSignature = {
       val argsTypesB = List.newBuilder[(Option[FunOrVarId], Type)]
       for (Param(paramNameOpt, tpe, isReassignable) <- funDef.params) {
-        argsTypesB.addOne(paramNameOpt, computeType(tpe))
+        argsTypesB.addOne(paramNameOpt, computeType(tpe, idsAreFields = false))
       }
-      val retType = funDef.optRetType.map(computeType).getOrElse(VoidType)
+      val retType = funDef.optRetType.map(computeType(_, idsAreFields = false)).getOrElse(VoidType)
       FunctionSignature(funDef.funName, argsTypesB.result(), retType)
     }
 
-    private def computeType(typeTree: TypeTree): Type = typeTree match {
+    private def computeType(typeTree: TypeTree, idsAreFields: Boolean): Type = typeTree match {
       case CapturingTypeTree(typeShapeTree, captureDescr) =>
-        CapturingType(computeTypeShape(typeShapeTree), computeCaptureDescr(captureDescr))
+        CapturingType(computeTypeShape(typeShapeTree, idsAreFields), computeCaptureDescr(captureDescr, idsAreFields))
       case typeShapeTree: TypeShapeTree =>
-        computeTypeShape(typeShapeTree)
+        computeTypeShape(typeShapeTree, idsAreFields)
       case WrapperTypeTree(tpe) => tpe
     }
     
-    private def computeTypeShape(typeShapeTree: TypeShapeTree): TypeShape = typeShapeTree match {
-      case ArrayTypeShapeTree(elemType, isModifiable) => ArrayTypeShape(computeType(elemType), isModifiable)
+    private def computeTypeShape(typeShapeTree: TypeShapeTree, idsAreFields: Boolean): TypeShape = typeShapeTree match {
+      case ArrayTypeShapeTree(elemType, isModifiable) => ArrayTypeShape(computeType(elemType, idsAreFields), isModifiable)
       case castTargetTypeShapeTree: CastTargetTypeShapeTree => computeCastTargetTypeShape(castTargetTypeShapeTree)
     }
     
@@ -180,10 +180,10 @@ object AnalysisContext {
         case NamedTypeShapeTree(name) => NamedTypeShape(name)
     }
 
-    private def computeCaptureDescr(cdTree: CaptureDescrTree): CaptureDescriptor = cdTree match {
+    private def computeCaptureDescr(cdTree: CaptureDescrTree, idsAreFields: Boolean): CaptureDescriptor = cdTree match {
       case ExplicitCaptureSetTree(capturedExpressions) =>
         // checks that the expression is indeed capturable are delayed to the type-checker
-        CaptureSet(capturedExpressions.flatMap(convertOrFailSilently).toSet)
+        CaptureSet(capturedExpressions.flatMap(convertOrFailSilently(_, idsAreFields)).toSet)
       case ImplicitRootCaptureSetTree() =>
         CaptureSet.singletonOfRoot
       case BrandTree() =>
@@ -196,7 +196,7 @@ object AnalysisContext {
       val devicesSet = new mutable.LinkedHashSet[Device]()
       moduleDef.imports.foreach {
         case ParamImport(instanceId, moduleType) =>
-          importsMap.put(instanceId, computeType(moduleType))
+          importsMap.put(instanceId, computeType(moduleType, idsAreFields = true))
         case PackageImport(packageId) =>
           packagesSet.add(packageId)
         case DeviceImport(device) =>
@@ -218,14 +218,14 @@ object AnalysisContext {
       (packages, devices)
     }
 
-    private def buildFieldsMap(structDef: StructDef) = {
+    private def buildStructFieldsMap(structDef: StructDef) = {
       val fieldsMap = new mutable.LinkedHashMap[FunOrVarId, StructSignature.FieldInfo]()
       for param <- structDef.fields do {
         param.paramNameOpt match {
           case None =>
             reportError("struct fields must be named", param.getPosition)
           case Some(paramName) =>
-            val tpe = computeType(param.tpe)
+            val tpe = computeType(param.tpe, idsAreFields = true)
             if (checkIsNotVoidOrNothing(tpe, param.getPosition)) {
               if (!fieldsMap.contains(paramName)) {
                 // the absence of duplicate fields will be reported by the type-checker

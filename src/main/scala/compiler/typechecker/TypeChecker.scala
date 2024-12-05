@@ -83,11 +83,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
           )
         }
         if (param.isReassignable) {
-          tpe.captureDescriptor match {
-            case cs: CaptureSet if RootCapability.isCoveredBy(cs)(using tcCtx) =>
-              reportError(s"reassignable field '${param.paramNameOpt.getOrElse("<missing name>")}' cannot capture the root capability", param.getPosition)
-            case _ => ()
-          }
+          typeShouldNotCaptureRoot(tpe, s"reassignable field '${param.paramNameOpt.getOrElse("<missing name>")}' " +
+            "cannot capture the root capability", tcCtx, param.getPosition)
         }
       }
 
@@ -105,6 +102,14 @@ final class TypeChecker(errorReporter: ErrorReporter)
           tcCtx
         )(using tcCtx, Environment.empty)
       }
+  }
+
+  private def typeShouldNotCaptureRoot(tpe: Type, msg: String, tcCtx: TypeCheckingContext, posOpt: Option[Position]) = {
+    tpe.captureDescriptor match {
+      case cs: CaptureSet if RootCapability.isCoveredBy(cs)(using tcCtx) =>
+        reportError(msg, posOpt)
+      case _ => ()
+    }
   }
 
   private def checkFunction(
@@ -126,7 +131,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
             reportError(s"parameter '${param.paramNameOpt}' of function '$funName' has type '$paramType', which is forbidden", param.getPosition)
           })
       }
-      if (param.isReassignable && param.paramNameOpt.isEmpty){
+      if (param.isReassignable && param.paramNameOpt.isEmpty) {
         reportError("unnamed reassignable parameter", param.getPosition, isWarning = true)
       }
     }
@@ -196,7 +201,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def warnOnNonCapAndRedundantCaptures(captureDescrTree: CaptureDescrTree)
-                                     (using tcCtx: TypeCheckingContext, env: Environment): Unit = {
+                                              (using tcCtx: TypeCheckingContext, env: Environment): Unit = {
     captureDescrTree match {
       case ExplicitCaptureSetTree(capturedExpressions) =>
         var foundNotCap = false
@@ -206,7 +211,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
             foundNotCap = true
           }
         }
-        if (!foundNotCap){
+        if (!foundNotCap) {
           // do not try to find redundant capabilities if we have already found a problem on this capture set
           captureDescrTree.getResolvedDescrOpt.foreach {
             case CaptureSet(set) =>
@@ -227,8 +232,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
   private def checkTypeShape(typeShapeTree: TypeShapeTree)
                             (using tcCtx: TypeCheckingContext, env: Environment): TypeShape = typeShapeTree match {
-    case ArrayTypeShapeTree(elemType, isModifiable) =>
-      ArrayTypeShape(checkType(elemType), isModifiable)
+    case ArrayTypeShapeTree(elemTypeTree, isModifiable) =>
+      val elemType = checkType(elemTypeTree)
+      typeShouldNotCaptureRoot(elemType, "array elements are not allowed to capture the root capability",
+        tcCtx, elemTypeTree.getPosition)
+      ArrayTypeShape(elemType, isModifiable)
     case castTargetTypeShapeTree: CastTargetTypeShapeTree =>
       checkCastTargetTypeShape(castTargetTypeShapeTree)
   }
@@ -344,7 +352,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
           checkSubtypingConstraint(lhsType, rhsType, varAssig.getPosition, "", tcCtx)
         case select@Select(structExpr, selected) =>
           val structType = checkExpr(structExpr)
-          val fieldType = exprMustHaveField(structExpr, selected, tcCtx, varAssig.getPosition, mustUpdateField = true)
+          val fieldType = checkFieldAccess(structExpr, selected, tcCtx, varAssig.getPosition, mustUpdateField = true)
           checkSubtypingConstraint(fieldType, rhsType, varAssig.getPosition, "", tcCtx)
           select.setType(fieldType)
         case _ =>
@@ -368,7 +376,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
           checkSubtypingConstraint(inPlaceModifiedElemType, operatorRetType, varModif.getPosition, "", tcCtx)
         case select@Select(structExpr, selected) =>
           val structType = checkExpr(structExpr)
-          val inPlaceModifiedFieldType = exprMustHaveField(structExpr, selected, tcCtx, varModif.getPosition, mustUpdateField = true)
+          val inPlaceModifiedFieldType = checkFieldAccess(structExpr, selected, tcCtx, varModif.getPosition, mustUpdateField = true)
           val operatorRetType = mustExistOperator(inPlaceModifiedFieldType, op, rhsType, varModif.getPosition)
           checkSubtypingConstraint(inPlaceModifiedFieldType, operatorRetType, varModif.getPosition, "", tcCtx)
           select.setType(inPlaceModifiedFieldType)
@@ -481,6 +489,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case indexing@Indexing(indexed, arg) =>
         val indexedType = checkExpr(indexed)
+        checkUnboxedType(indexedType, indexing.getPosition)
         val argType = checkExpr(arg)
         checkSubtypingConstraint(IntType, argType, indexing.getPosition, "array index", tcCtx)
         exprMustBeArray(indexed.getType, tcCtx, indexed.getPosition, mustUpdate = false)
@@ -528,19 +537,17 @@ final class TypeChecker(errorReporter: ErrorReporter)
                 s"cannot instantiate '$tid' without providing a region, since at least one of its fields is reassignable",
                 instantiation.getPosition
               )
-            } else if (!structSig.isShallowMutable && regionOpt.isDefined){
+            } else if (!structSig.isShallowMutable && regionOpt.isDefined) {
               reportError(
                 s"providing a region is not necessary here, as ${structSig.id} does not have reassignable fields",
                 regionOpt.get.getPosition,
                 isWarning = true
               )
             }
-            checkCallArgs(structSig.constructorSig, None, args, instantiation.getPosition)
-            // FIXME should we replace the me reference here? recursive type?
+            checkCallArgs(tid, structSig.constructorSig, None, args, instantiation.getPosition)
             NamedTypeShape(tid) ^ computeCaptures(args ++ regionOpt)
           case Some(moduleSig: ModuleSignature) =>
-            checkCallArgs(moduleSig.constructorSig, None, args, instantiation.getPosition)
-            // FIXME should we replace the me reference here? recursive type?
+            checkCallArgs(tid, moduleSig.constructorSig, None, args, instantiation.getPosition)
             NamedTypeShape(tid) ^ computeCaptures(args ++ regionOpt)
           case _ => reportError(s"not found: structure or module '$tid'", instantiation.getPosition)
         }
@@ -583,7 +590,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case select@Select(lhs, selected) =>
         val lhsType = checkExpr(lhs)
-        exprMustHaveField(lhs, selected, tcCtx, select.getPosition, mustUpdateField = false)
+        checkFieldAccess(lhs, selected, tcCtx, select.getPosition, mustUpdateField = false)
 
       case ternary@Ternary(cond, thenBr, elseBr) =>
         val condType = checkExpr(cond)
@@ -672,7 +679,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case FunctionFound(funSig) =>
         call.setResolvedSig(funSig)
         call.cacheMeType(tcCtx.meType)
-        checkCallArgs(funSig, call.receiverOpt, args, pos)
+        checkCallArgs(owner, funSig, call.receiverOpt, args, pos)
       case ModuleNotFound =>
         args.foreach(checkExpr)
         reportError(s"not found: package or module $owner", pos)
@@ -686,6 +693,37 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
   }
 
+  private def checkUnboxedType(tpe: Type, posOpt: Option[Position])(using tcCtx: TypeCheckingContext): Unit = tpe match {
+    case CapturingType(shape, captureDescriptor) =>
+      checkUnboxedType(shape, posOpt)
+      checkUnboxedCaptureDescr(captureDescriptor, posOpt)
+    case ArrayTypeShape(elemType, modifiable) =>
+      checkUnboxedType(elemType, posOpt)
+    case UnionTypeShape(unitedTypes) =>
+      unitedTypes.foreach(checkUnboxedType(_, posOpt))
+    case _: (UndefinedTypeShape.type | PrimitiveTypeShape | NamedTypeShape) => ()
+  }
+
+  private def checkUnboxedCaptureDescr(captureDescriptor: CaptureDescriptor, posOpt: Option[Position])
+                                      (using tcCtx: TypeCheckingContext): Unit = {
+    captureDescriptor match
+      case CaptureDescriptors.Brand => ()
+      case CaptureSet(set) =>
+        set.foreach {
+          case path: Path =>
+            path.root match {
+              case IdPath(id) =>
+                if (tcCtx.getLocalOnly(id).isEmpty) {
+                  reportError(s"type cannot be unboxed: '$id' is not defined in current scope", posOpt)
+                }
+              case MePath => ()
+            }
+          case RootCapability =>
+            reportError(s"type cannot be unboxed, as it captures the root capability", posOpt)
+          case _: (CapPackage | CapDevice) => ()
+        }
+  }
+
   private def structCastResult(srcType: TypeShape, destType: TypeShape, ctx: TypeCheckingContext)
                               (using TypeCheckingContext, Environment): Option[NamedTypeShape] = {
     (srcType, destType) match {
@@ -697,16 +735,23 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def checkCallArgs(
+                             funMeTypeName: TypeIdentifier,
                              funSig: FunctionSignature,
                              receiverOpt: Option[Expr],
                              args: List[Expr],
                              callPos: Option[Position]
-                           )(using tcCtx: TypeCheckingContext, env: Environment): Type = {
+                           )(using callerCtx: TypeCheckingContext, env: Environment): Type = {
+    // .get is safe here because funSig found implies owner type found
+    val funMeCapDescr = callerCtx.resolveType(funMeTypeName).map(_.getSelfReferringType.captureDescriptor).get
     val expTypesIter = funSig.args.iterator
     val argsIter = args.iterator
-    val substitutor = PathsSubstitutor(tcCtx, errorReporter)
-    receiverOpt.foreach { receiver =>
-      substitutor(MePath) = minimalCaptureSetFor(receiver)
+    val calleeCtx = TypeCheckingContext(callerCtx.analysisContext, funMeTypeName, funMeCapDescr)
+    val substitutor = PathsSubstitutor(calleeCtx, errorReporter)
+    for {
+      receiver <- receiverOpt
+      receiverPath <- PathsConverter.convertOrFailSilently(receiver, idsAreFields = false)
+    } do {
+      substitutor(MePath) = receiverPath
     }
     var errorFound = false
     while (expTypesIter.hasNext && argsIter.hasNext && !errorFound) {
@@ -718,8 +763,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
         reportError(s"expected '$expTypeSubst', found '$actType'", arg.getPosition)
         errorFound = true
       }
-      paramNameOpt.foreach { paramName =>
-        substitutor(IdPath(paramName)) = minimalCaptureSetFor(arg)
+      for {
+        paramName <- paramNameOpt
+        argPath <- PathsConverter.convertOrFailSilently(arg, idsAreFields = false)
+      } do {
+        substitutor(IdPath(paramName)) = argPath
       }
     }
     if (expTypesIter.hasNext && !errorFound) {
@@ -851,32 +899,49 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
   }
 
-  private def exprMustHaveField(
-                                 expr: Expr,
-                                 fieldName: FunOrVarId,
-                                 ctx: TypeCheckingContext,
-                                 posOpt: Option[Position],
-                                 mustUpdateField: Boolean
-                               ): Type = {
+  private def checkFieldAccess(
+                                expr: Expr,
+                                fieldName: FunOrVarId,
+                                callerCtx: TypeCheckingContext,
+                                posOpt: Option[Position],
+                                mustUpdateField: Boolean
+                              ): Type = {
+
+    def performSubst(rawType: Type, structOrModuleSignature: StructOrModuleSignature): Type = {
+      val calleeCtx = TypeCheckingContext(
+        callerCtx.analysisContext,
+        structOrModuleSignature.id,
+        structOrModuleSignature.getCaptureDescr
+      )
+      for ((paramName, fieldInfo) <- structOrModuleSignature.params) {
+        calleeCtx.addLocal(paramName, fieldInfo.tpe, None, false, true, () => (), () => ())
+      }
+      val substitutor = PathsSubstitutor(calleeCtx, errorReporter)
+      PathsConverter.convertOrFailSilently(expr, idsAreFields = false).foreach { path =>
+        substitutor(MePath) = path
+      }
+      substitutor.subst(rawType, expr.getPosition)
+    }
+
     val exprType = expr.getType
     exprType.shape match {
       case NamedTypeShape(typeName) =>
-        ctx.resolveType(typeName) match {
-          case Some(StructSignature(_, fields, _, _)) if fields.contains(fieldName) =>
+        callerCtx.resolveType(typeName) match {
+          case Some(structSig@StructSignature(_, fields, _, _)) if fields.contains(fieldName) =>
             val FieldInfo(fieldType, fieldIsReassig) = fields.apply(fieldName)
             val missingFieldMutability = mustUpdateField && !fieldIsReassig
             if (missingFieldMutability) {
               reportError(s"cannot update immutable field '$fieldName'", posOpt)
             }
-            fieldType
-          case Some(ModuleSignature(_, paramImports, _, _, _)) if paramImports.contains(fieldName) =>
+            performSubst(fieldType, structSig)
+          case Some(modSig@ModuleSignature(_, paramImports, _, _, _)) if paramImports.contains(fieldName) =>
             if (!expr.isInstanceOf[MeRef]) {
               reportError(s"references to module imports are only allowed when using the '${Keyword.Me}' keyword", posOpt)
             }
             if (mustUpdateField) {
               reportError("cannot update module field", posOpt)
             }
-            paramImports.apply(fieldName)
+            performSubst(paramImports.apply(fieldName), modSig)
           case _ =>
             reportError(s"'$exprType' has no field named '$fieldName'", posOpt)
         }
@@ -935,7 +1000,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def minimalCaptureSetFor(expr: Expr): CaptureDescriptor = {
-    PathsConverter.convertOrFailSilently(expr) map { path =>
+    PathsConverter.convertOrFailSilently(expr, idsAreFields = false) map { path =>
       CaptureSet(path)
     } getOrElse {
       expr.getType.captureDescriptor
