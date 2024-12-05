@@ -459,8 +459,6 @@ object Asts {
    * `return` statement, with or without return value
    */
   final case class ReturnStat(optVal: Option[Expr]) extends Statement {
-    def getRetType: Option[Type] = if optVal.isDefined then optVal.get.getTypeOpt else Some(VoidType)
-
     override def children: List[Ast] = optVal.toList
   }
 

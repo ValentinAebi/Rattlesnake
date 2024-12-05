@@ -410,6 +410,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
         reportError(s"unexpected return in function returning $NothingType", retStat.getPosition)
       } else if (expRetType != VoidType && valueOpt.isEmpty) {
         reportError("expected an expression after return", retStat.getPosition)
+      } else if (expRetType == VoidType && valueOpt.isDefined) {
+        reportError("unexpected expression after return", valueOpt.get.getPosition)
       }
 
     case panicStat@PanicStat(msg) =>
@@ -796,10 +798,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
         bodyEndStatus
 
       case retStat: ReturnStat =>
-        val retType = retStat.getRetType
-        if (retType.isEmpty) {
-          reportError("could not infer type of returned value", retStat.getPosition)
-        }
         EndStatus(true)
 
       case _: PanicStat =>
