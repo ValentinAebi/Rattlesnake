@@ -183,7 +183,7 @@ object AnalysisContext {
     private def computeCaptureDescr(cdTree: CaptureDescrTree, idsAreFields: Boolean): CaptureDescriptor = cdTree match {
       case ExplicitCaptureSetTree(capturedExpressions) =>
         // checks that the expression is indeed capturable are delayed to the type-checker
-        CaptureSet(capturedExpressions.flatMap(mkCapturableOfFailSilently(_, idsAreFields)).toSet)
+        CaptureSet(capturedExpressions.flatMap(mkCapturableOrFailSilently(_, idsAreFields)).toSet)
       case ImplicitRootCaptureSetTree() =>
         CaptureSet.singletonOfRoot
       case BrandTree() =>
@@ -262,13 +262,13 @@ object AnalysisContext {
      * (e.g. it won't reject a capture of a variable). These checks should be performed by the type-checker instead.
      * If the expression is obviously not capturable (e.g. a call), return None
      */
-    private def mkCapturableOfFailSilently(expr: Expr, idsAreFields: Boolean): Option[Capturable] = expr match {
+    private def mkCapturableOrFailSilently(expr: Expr, idsAreFields: Boolean): Option[Capturable] = expr match {
       case VariableRef(name) => Some(if idsAreFields then MePath.dot(name) else IdPath(name))
       case MeRef() => Some(MePath)
       case PackageRef(pkgName) => Some(CapPackage(pkgName))
       case DeviceRef(device) => Some(CapDevice(device))
       case Select(lhs, selected) =>
-        mkCapturableOfFailSilently(lhs, idsAreFields).flatMap {
+        mkCapturableOrFailSilently(lhs, idsAreFields).flatMap {
           case p: Path => Some(SelectPath(p, selected))
           case _ => None
         }
