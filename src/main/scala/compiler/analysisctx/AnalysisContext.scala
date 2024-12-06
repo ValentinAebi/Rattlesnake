@@ -3,7 +3,7 @@ package compiler.analysisctx
 import compiler.analysisctx.AnalysisContext.{FunctionFound, FunctionNotFound, MethodResolutionResult, ModuleNotFound}
 import compiler.irs.Asts.*
 import compiler.pipeline.CompilationStep.ContextCreation
-import compiler.reporting.Errors.{Err, ErrorReporter, errorsExitCode}
+import compiler.reporting.Errors.{Err, ErrorReporter}
 import compiler.reporting.Position
 import compiler.typechecker.PathsConverter.convertOrFailSilently
 import compiler.typechecker.SubtypeRelation.subtypeOf
@@ -41,10 +41,10 @@ final case class AnalysisContext(
     modules.get(owner)
       .orElse(packages.get(owner))
       .orElse(Device.deviceTypeToSig.get(owner))
-      .map { modOrPkg =>
-        modOrPkg.functions.get(methodName) map { sig =>
-          FunctionFound(sig)
-        } getOrElse FunctionNotFound
+      .map { ownerSig =>
+        ownerSig.functions.get(methodName) map { sig =>
+          FunctionFound(ownerSig, sig)
+        } getOrElse FunctionNotFound(ownerSig)
       } getOrElse ModuleNotFound
   }
 
@@ -58,19 +58,19 @@ final case class AnalysisContext(
 object AnalysisContext {
 
   sealed trait MethodResolutionResult {
-    def getOrThrow(): FunctionSignature
+    def getFunSigOrThrow(): FunctionSignature
   }
 
-  final case class FunctionFound(funSig: FunctionSignature) extends MethodResolutionResult {
-    override def getOrThrow(): FunctionSignature = funSig
+  final case class FunctionFound(typeSig: ModOrPkgOrDeviceSignature, funSig: FunctionSignature) extends MethodResolutionResult {
+    override def getFunSigOrThrow(): FunctionSignature = funSig
   }
 
   object ModuleNotFound extends MethodResolutionResult {
-    override def getOrThrow(): FunctionSignature = throw new NoSuchElementException()
+    override def getFunSigOrThrow(): FunctionSignature = throw new NoSuchElementException()
   }
 
-  object FunctionNotFound extends MethodResolutionResult {
-    override def getOrThrow(): FunctionSignature = throw new NoSuchElementException()
+  final case class FunctionNotFound(typeSig: ModOrPkgOrDeviceSignature) extends MethodResolutionResult {
+    override def getFunSigOrThrow(): FunctionSignature = throw new NoSuchElementException()
   }
 
   final class Builder(errorReporter: ErrorReporter) {

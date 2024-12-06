@@ -201,7 +201,7 @@ final class Backend[V <: ClassVisitor](
     lastWrittenLine = -1
     mv.visitCode()
     generateCode(funDef.body, ctx)(using mv)
-    if (ctx.resolveFunc(owner, funDef.funName).getOrThrow().retType == VoidType) {
+    if (ctx.resolveFunc(owner, funDef.funName).getFunSigOrThrow().retType == VoidType) {
       mv.visitInsn(Opcodes.RETURN)
     }
     mv.visitMaxs(0, 0) // parameters are ignored because mode is COMPUTE_FRAMES
@@ -427,7 +427,7 @@ final class Backend[V <: ClassVisitor](
         val receiverShape = receiver.getTypeShape
         val recvInternalName = internalNameOf(receiverShape)
         val receiverTypeName = receiverShape.asInstanceOf[NamedTypeShape].typeName
-        val funDescr = descriptorForFunc(ctx.resolveFunc(receiverTypeName, funName).getOrThrow())
+        val funDescr = descriptorForFunc(ctx.resolveFunc(receiverTypeName, funName).getFunSigOrThrow())
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, recvInternalName, funName.stringId, funDescr, false)
       }
 

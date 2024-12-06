@@ -33,7 +33,9 @@ sealed trait TypeSignature {
   def getSelfReferringType: Type = NamedTypeShape(id) ^ getCaptureDescr
 }
 
-sealed trait ModuleOrPackageSignature extends TypeSignature {
+sealed trait ModOrPkgOrDeviceSignature extends TypeSignature
+
+sealed trait ModuleOrPackageSignature extends ModOrPkgOrDeviceSignature {
 
   def paramImports: mutable.LinkedHashMap[FunOrVarId, Type]
 
@@ -112,7 +114,7 @@ final case class StructSignature(
 final case class DeviceSignature(
                                   id: TypeIdentifier,
                                   functions: Map[FunOrVarId, FunctionSignature]
-                                ) extends TypeSignature {
+                                ) extends ModOrPkgOrDeviceSignature {
 
   override def isInterface: Boolean = false
 

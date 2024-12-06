@@ -544,10 +544,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
                 isWarning = true
               )
             }
-            checkCallArgs(tid, structSig.constructorSig, None, args, instantiation.getPosition)
+            checkCallArgs(structSig, structSig.constructorSig, None, args, instantiation.getPosition)
             NamedTypeShape(tid) ^ computeCaptures(args ++ regionOpt)
           case Some(moduleSig: ModuleSignature) =>
-            checkCallArgs(tid, moduleSig.constructorSig, None, args, instantiation.getPosition)
+            checkCallArgs(moduleSig, moduleSig.constructorSig, None, args, instantiation.getPosition)
             NamedTypeShape(tid) ^ computeCaptures(args ++ regionOpt)
           case _ => reportError(s"not found: structure or module '$tid'", instantiation.getPosition)
         }
@@ -676,19 +676,23 @@ final class TypeChecker(errorReporter: ErrorReporter)
     val args = call.args
     val pos = call.getPosition
     tcCtx.resolveFunc(owner, funName) match {
-      case FunctionFound(funSig) =>
+      case FunctionFound(typeSig, funSig) =>
         call.setResolvedSig(funSig)
         call.cacheMeType(tcCtx.meType)
-        checkCallArgs(owner, funSig, call.receiverOpt, args, pos)
+        val someReceiver = call.receiverOpt.orElse {
+          if typeSig.id == IntrinsicsPackageId then None
+          else Some(MeRef().setType(tcCtx.meType))
+        }
+        checkCallArgs(typeSig, funSig, someReceiver, args, pos)
       case ModuleNotFound =>
         args.foreach(checkExpr)
         reportError(s"not found: package or module $owner", pos)
-      case FunctionNotFound =>
+      case FunctionNotFound(typeSig) =>
         fallbackOwnerOpt map { fallbackOwner =>
           checkFunCall(call, fallbackOwner, None)
         } getOrElse {
           args.foreach(checkExpr)
-          reportError(s"function not found: '$funName'", pos)
+          reportError(s"function not found: '$funName' in '$typeSig'", pos)
         }
     }
   }
@@ -735,17 +739,15 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def checkCallArgs(
-                             funMeTypeName: TypeIdentifier,
+                             funOwnerSig: TypeSignature,
                              funSig: FunctionSignature,
                              receiverOpt: Option[Expr],
                              args: List[Expr],
                              callPos: Option[Position]
                            )(using callerCtx: TypeCheckingContext, env: Environment): Type = {
-    // .get is safe here because funSig found implies owner type found
-    val funMeCapDescr = callerCtx.resolveType(funMeTypeName).map(_.getSelfReferringType.captureDescriptor).get
     val expTypesIter = funSig.args.iterator
     val argsIter = args.iterator
-    val calleeCtx = TypeCheckingContext(callerCtx.analysisContext, funMeTypeName, funMeCapDescr)
+    val calleeCtx = TypeCheckingContext(callerCtx.analysisContext, funOwnerSig.id, funOwnerSig.getCaptureDescr)
     val substitutor = PathsSubstitutor(calleeCtx, errorReporter)
     for {
       receiver <- receiverOpt
