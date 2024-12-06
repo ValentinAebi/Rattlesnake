@@ -13,7 +13,7 @@ package A {
 
 package B {
     fn b() -> Void {
-        // fs;
+        val fileSystem: FileSystem^ = fs;
     }
 }
 
@@ -54,6 +54,8 @@ package Main {
 
         // TODO can unboxing check reject the program with a forbidden capture other than the root capability?
         // mkBaz(r).cells[0];
+
+        val b: B = B;
 
         restricted(B){
             restricted(A){

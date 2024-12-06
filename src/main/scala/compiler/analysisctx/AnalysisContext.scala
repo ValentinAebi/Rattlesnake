@@ -9,19 +9,20 @@ import compiler.typechecker.SubtypeRelation.subtypeOf
 import compiler.typechecker.{Environment, TypeCheckingContext}
 import identifiers.{FunOrVarId, IntrinsicsPackageId, TypeIdentifier}
 import lang.*
-import lang.Capturables.{CapDevice, CapPackage, Capturable, IdPath, MePath, Path, SelectPath}
+import lang.Capturables.*
 import lang.CaptureDescriptors.*
 import lang.Types.*
 import lang.Types.PrimitiveTypeShape.{NothingType, VoidType}
 
 import scala.collection.mutable
+import scala.reflect.ClassTag
 
-final case class AnalysisContext(
-                                  modules: Map[TypeIdentifier, ModuleSignature],
-                                  packages: Map[TypeIdentifier, PackageSignature],
-                                  structs: Map[TypeIdentifier, StructSignature],
-                                  constants: Map[FunOrVarId, Type]
-                                ) {
+final case class AnalysisContext private(
+                                          modules: Map[TypeIdentifier, ModuleSignature],
+                                          packages: Map[TypeIdentifier, PackageSignature],
+                                          structs: Map[TypeIdentifier, StructSignature],
+                                          constants: Map[FunOrVarId, Type]
+                                        ) {
 
   def knowsUserDefType(tid: TypeIdentifier): Boolean =
     knowsPackageOrModule(tid) || knowsStruct(tid)
@@ -35,12 +36,17 @@ final case class AnalysisContext(
   def knowsStruct(tid: TypeIdentifier): Boolean = structs.contains(tid)
 
   def resolveType(tid: TypeIdentifier): Option[TypeSignature] =
-    structs.get(tid).orElse(modules.get(tid)).orElse(packages.get(tid))
+    structs.get(tid)
+      .orElse(modules.get(tid))
+      .orElse(packages.get(tid))
+
+  def resolveTypeAs[S <: TypeSignature : ClassTag](tid: TypeIdentifier): Option[S] = resolveType(tid) match {
+    case Some(s: S) => Some(s)
+    case _ => None
+  }
 
   def resolveFunc(owner: TypeIdentifier, methodName: FunOrVarId): MethodResolutionResult = {
-    modules.get(owner)
-      .orElse(packages.get(owner))
-      .orElse(Device.deviceTypeToSig.get(owner))
+    resolveTypeAs[FunctionsProviderSig](owner)
       .map { ownerSig =>
         ownerSig.functions.get(methodName) map { sig =>
           FunctionFound(ownerSig, sig)
@@ -61,7 +67,7 @@ object AnalysisContext {
     def getFunSigOrThrow(): FunctionSignature
   }
 
-  final case class FunctionFound(typeSig: ModOrPkgOrDeviceSignature, funSig: FunctionSignature) extends MethodResolutionResult {
+  final case class FunctionFound(typeSig: FunctionsProviderSig, funSig: FunctionSignature) extends MethodResolutionResult {
     override def getFunSigOrThrow(): FunctionSignature = funSig
   }
 
@@ -69,7 +75,7 @@ object AnalysisContext {
     override def getFunSigOrThrow(): FunctionSignature = throw new NoSuchElementException()
   }
 
-  final case class FunctionNotFound(typeSig: ModOrPkgOrDeviceSignature) extends MethodResolutionResult {
+  final case class FunctionNotFound(typeSig: FunctionsProviderSig) extends MethodResolutionResult {
     override def getFunSigOrThrow(): FunctionSignature = throw new NoSuchElementException()
   }
 
@@ -82,7 +88,14 @@ object AnalysisContext {
         importedDevices = mutable.LinkedHashSet.empty,
         functions = Intrinsics.intrinsics
       )
-    )
+    ) ++ Device.values.map { device =>
+      device.typeName -> PackageSignature(
+        id = device.typeName,
+        importedPackages = mutable.LinkedHashSet.empty,
+        importedDevices = mutable.LinkedHashSet.empty,
+        functions = device.api.functions
+      )
+    }
     private val structs: mutable.Map[TypeIdentifier, (StructSignature, Option[Position])] = mutable.Map.empty
     private val constants: mutable.Map[FunOrVarId, Type] = mutable.Map.empty
 
@@ -168,12 +181,12 @@ object AnalysisContext {
         computeTypeShape(typeShapeTree, idsAreFields)
       case WrapperTypeTree(tpe) => tpe
     }
-    
+
     private def computeTypeShape(typeShapeTree: TypeShapeTree, idsAreFields: Boolean): TypeShape = typeShapeTree match {
       case ArrayTypeShapeTree(elemType, isModifiable) => ArrayTypeShape(computeType(elemType, idsAreFields), isModifiable)
       case castTargetTypeShapeTree: CastTargetTypeShapeTree => computeCastTargetTypeShape(castTargetTypeShapeTree)
     }
-    
+
     private def computeCastTargetTypeShape(castTargetTypeShapeTree: CastTargetTypeShapeTree): CastTargetTypeShape = {
       castTargetTypeShapeTree match
         case PrimitiveTypeShapeTree(primitiveType) => primitiveType
@@ -219,7 +232,7 @@ object AnalysisContext {
     }
 
     private def buildStructFieldsMap(structDef: StructDef) = {
-      val fieldsMap = new mutable.LinkedHashMap[FunOrVarId, StructSignature.FieldInfo]()
+      val fieldsMap = new mutable.LinkedHashMap[FunOrVarId, FieldInfo]()
       for param <- structDef.fields do {
         param.paramNameOpt match {
           case None =>
@@ -229,7 +242,7 @@ object AnalysisContext {
             if (checkIsNotVoidOrNothing(tpe, param.getPosition)) {
               if (!fieldsMap.contains(paramName)) {
                 // the absence of duplicate fields will be reported by the type-checker
-                fieldsMap.put(paramName, StructSignature.FieldInfo(tpe, param.isReassignable))
+                fieldsMap.put(paramName, FieldInfo(tpe, param.isReassignable))
               }
             }
         }
@@ -258,7 +271,7 @@ object AnalysisContext {
     }
 
     /**
-     * Create a capturable for the given expression, without performing any check 
+     * Create a capturable for the given expression, without performing any check
      * (e.g. it won't reject a capture of a variable). These checks should be performed by the type-checker instead.
      * If the expression is obviously not capturable (e.g. a call), return None
      */
@@ -289,7 +302,7 @@ object AnalysisContext {
               val tcCtx = TypeCheckingContext(
                 analysisContext = builtCtx,
                 meId = directSupertypeId,
-                meCaptureDescr = directSupertypeSig.getCaptureDescr
+                meCaptureDescr = directSupertypeSig.getNonSubstitutedCaptureDescr
               )
               for ((fldName, superFldInfo) <- directSupertypeSig.fields) {
                 structSig.fields.get(fldName) match {

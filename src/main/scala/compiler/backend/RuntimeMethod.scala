@@ -13,6 +13,7 @@ enum RuntimeMethod(name: String, mthDescr: String) {
   case AssertResourceAllowed extends RuntimeMethod("assertResourceAllowed", "(I)V")
   case AssertCanModifyRegionOf extends RuntimeMethod("assertCanModifyRegionOf", "(Ljava/lang/Object;)V")
   case AssertFilesystemAllowed extends RuntimeMethod("assertFilesystemAllowed", "()V")
+  case GetFileSystem extends RuntimeMethod("getFileSystem", "()Ljava/lang/FileSystem;")
   
   def generateCall(mv: MethodVisitor)(using AnalysisContext): Unit = {
     mv.visitMethodInsn(Opcodes.INVOKESTATIC, runtimeClassName, name, mthDescr, false)

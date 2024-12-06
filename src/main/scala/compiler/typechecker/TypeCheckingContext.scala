@@ -95,7 +95,7 @@ final case class TypeCheckingContext private(
     case Capturables.SelectPath(directRoot, fld) =>
       lookup(directRoot).shape match {
         case NamedTypeShape(typeName) =>
-          resolveType(typeName).flatMap(_.typeOfSelectIfCapturable(fld))
+          resolveTypeAs[SelectableSig](typeName).flatMap(_.typeOfSelectIfCapturable(fld))
             .getOrElse(UndefinedTypeShape)
         case _ => UndefinedTypeShape
       }
@@ -107,7 +107,7 @@ final case class TypeCheckingContext private(
       packages.get(pkgName).map(_.getNonSubstitutedType)
         .getOrElse(UndefinedTypeShape)
     case Capturables.CapDevice(device) =>
-      device.sig.getNonSubstitutedType
+      device.tpe
   }
 
   def localIsQueried(localId: FunOrVarId): Unit = {

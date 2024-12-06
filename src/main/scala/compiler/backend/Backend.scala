@@ -86,6 +86,8 @@ final class Backend[V <: ClassVisitor](
       if (mode.generateRuntime) {
         val runtimeFilePath = outputDir.resolve(mode.withExtension(NamesForGeneratedClasses.runtimeClassName))
         copyRuntimeClass(runtimeFilePath)
+        val fileSystemFilePath = outputDir.resolve(mode.withExtension(Device.FileSystem.typeName.stringId))
+        copyRuntimeClass(fileSystemFilePath)
         generatedClassFiles.addOne(runtimeFilePath)
       }
 
@@ -96,13 +98,14 @@ final class Backend[V <: ClassVisitor](
   }
 
   private def copyRuntimeClass(path: Path): Unit = {
-    val runtimeClassStream = getClass.getClassLoader.getResourceAsStream(runtimeClass)
-    if (runtimeClassStream == null) {
+    val stream = getClass.getClassLoader.getResourceAsStream(runtimeClass)
+    if (stream == null) {
       throw new AssertionError("Compiler packaging error: runtime class not found.\n" +
-        s"Please make sure that the executable of the compiler contains $runtimeClass in a resource directory.\n" +
+        s"Please make sure that the executable of the compiler contains $runtimeClass and " +
+        s"its utilities in a resource directory.\n" +
         "Also see the Makefile in runtime_src.")
     }
-    Using(new FileOutputStream(path.toFile))(runtimeClassStream.transferTo).get
+    Using(new FileOutputStream(path.toFile))(stream.transferTo).get
   }
 
   /**
@@ -138,7 +141,7 @@ final class Backend[V <: ClassVisitor](
   }
 
   private def generateModuleOrPackageFile(modOrPkg: ModuleOrPackageDefTree, path: Path)(using ctx: AnalysisContext): Unit = {
-    val modOrPkgSig = ctx.resolveType(modOrPkg.name).get
+    val modOrPkgSig = ctx.resolveTypeAs[ConstructibleSig](modOrPkg.name).get
     val cv: V = mode.createVisitor(path)
     addSourceNameIfKnown(cv, modOrPkg.getPosition)
     cv.visit(javaVersionCode, ACC_PUBLIC | ACC_FINAL, modOrPkg.name.stringId, null, objectTypeStr, null)
@@ -148,7 +151,7 @@ final class Backend[V <: ClassVisitor](
     if (modOrPkg.isInstanceOf[PackageDef]) {
       addInstanceFieldAndInitializer(modOrPkg, cv, pkgTypeDescr)
     }
-    for (varId, moduleType) <- modOrPkgSig.asInstanceOf[ModuleOrPackageSignature].paramImports do {
+    for (varId, moduleType) <- modOrPkgSig.asInstanceOf[ImporterSig].paramImports do {
       cv.visitField(ACC_PRIVATE, varId.stringId, descriptorForType(moduleType.shape), null, null)
     }
     for func <- modOrPkg.functions do {
@@ -301,9 +304,9 @@ final class Backend[V <: ClassVisitor](
   private def addConstructor(
                               cv: ClassVisitor,
                               visibility: Int,
-                              typeSig: TypeSignature
+                              typeSig: ConstructibleSig
                             )(using AnalysisContext): Unit = {
-    val constructorDescr = descriptorForFunc(typeSig.constructorSig)
+    val constructorDescr = descriptorForFunc(typeSig.voidInitMethodSig)
     val constructorVisitor = cv.visitMethod(visibility, ConstructorFunId.stringId, constructorDescr, null, null)
     constructorVisitor.visitCode()
     constructorVisitor.visitVarInsn(Opcodes.ALOAD, 0)
@@ -410,8 +413,8 @@ final class Backend[V <: ClassVisitor](
         val descr = descriptorForType(packageShapeType)
         mv.visitFieldInsn(Opcodes.GETSTATIC, internalName, packageInstanceName, descr)
 
-      case DeviceRef(device) =>
-        ???
+      case DeviceRef(Device.FileSystem) =>
+        RuntimeMethod.GetFileSystem.generateCall(mv)
 
       case Call(None, funName, args) => {
         val generateArgs: () => Unit = { () =>
@@ -458,7 +461,7 @@ final class Backend[V <: ClassVisitor](
         RuntimeMethod.SaveNewObjectInRegion.generateCall(mv)
 
       case StructOrModuleInstantiation(regionOpt, tid, args) =>
-        val constructorSig = ctx.resolveType(tid).get.asInstanceOf[StructOrModuleSignature].constructorSig
+        val constructorSig = ctx.resolveTypeAs[ConstructibleSig](tid).get.voidInitMethodSig
         val constructorDescr = descriptorForFunc(constructorSig)
         regionOpt.foreach { region =>
           generateCode(region, ctx)(using mv)

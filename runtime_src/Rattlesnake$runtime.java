@@ -66,4 +66,13 @@ final class Rattlesnake$runtime {
         assertResourceAllowed(FILE_SYSTEM_ID);
     }
 
+
+    ///////////////////// Devices /////////////////////
+    
+    private static FileSystem FILE_SYSTEM = null;
+    
+    public static FileSystem getFileSystem(){
+        return FILE_SYSTEM;
+    }
+
 }

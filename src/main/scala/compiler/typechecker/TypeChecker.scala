@@ -17,7 +17,6 @@ import lang.Capturables.*
 import lang.CaptureDescriptors.{Brand, CaptureDescriptor, CaptureSet}
 import lang.Operator.{Equality, Inequality, Sharp}
 import lang.Operators.{BinaryOpSignature, UnaryOpSignature, binaryOperators, unaryOperators}
-import lang.StructSignature.FieldInfo
 import lang.Types.*
 import lang.Types.PrimitiveTypeShape.*
 
@@ -44,18 +43,18 @@ final class TypeChecker(errorReporter: ErrorReporter)
   private def checkTopLevelDef(topLevelDef: TopLevelDef, analysisContext: AnalysisContext): Unit = topLevelDef match {
 
     case PackageDef(packageName, functions) =>
-      val packageSig = analysisContext.resolveType(packageName).get.asInstanceOf[PackageSignature]
+      val packageSig = analysisContext.resolveTypeAs[PackageSignature](packageName).get
       val environment = Environment(
         packageSig.importedPackages.toSet,
         packageSig.importedDevices.toSet
       )
       for func <- functions do {
-        checkFunction(func, analysisContext, packageName, packageSig.getCaptureDescr, environment)
+        checkFunction(func, analysisContext, packageName, packageSig.getNonSubstitutedCaptureDescr, environment)
       }
 
     case ModuleDef(moduleName, imports, functions) =>
-      val moduleSig = analysisContext.resolveType(moduleName).get.asInstanceOf[ModuleSignature]
-      val tcCtx = TypeCheckingContext(analysisContext, moduleName, moduleSig.getCaptureDescr)
+      val moduleSig = analysisContext.resolveTypeAs[ModuleSignature](moduleName).get
+      val tcCtx = TypeCheckingContext(analysisContext, moduleName, moduleSig.getNonSubstitutedCaptureDescr)
       for imp <- imports do {
         checkImport(imp, tcCtx)
       }
@@ -64,12 +63,12 @@ final class TypeChecker(errorReporter: ErrorReporter)
         moduleSig.importedDevices.toSet
       )
       for func <- functions do {
-        checkFunction(func, analysisContext, moduleName, moduleSig.getCaptureDescr, environment)
+        checkFunction(func, analysisContext, moduleName, moduleSig.getNonSubstitutedCaptureDescr, environment)
       }
 
     case StructDef(structName, fields, _, _) =>
-      val structSig = analysisContext.resolveType(structName).get.asInstanceOf[StructSignature]
-      val tcCtx = TypeCheckingContext(analysisContext, structName, structSig.getCaptureDescr)
+      val structSig = analysisContext.resolveTypeAs[StructSignature](structName).get
+      val tcCtx = TypeCheckingContext(analysisContext, structName, structSig.getNonSubstitutedCaptureDescr)
       for (param@Param(paramNameOpt, typeTree, isReassignable) <- fields) {
         val tpe = checkType(typeTree, idsAreFields = true)(using tcCtx, analysisContext.unrestrictedEnvironment)
         paramNameOpt.foreach { paramName =>
@@ -297,7 +296,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
           case lhsPath: Path => {
             lhs.getType.shape match {
               case NamedTypeShape(lhsTypeId) =>
-                tcCtx.resolveType(lhsTypeId).flatMap { lhsTypeSig =>
+                tcCtx.resolveTypeAs[SelectableSig & ConstructibleSig](lhsTypeId).flatMap { lhsTypeSig =>
                   lhsTypeSig.params.get(selected).flatMap { fieldInfo =>
                     if fieldInfo.isReassignable
                     then maybeReportError(s"field $selected of $lhsTypeId is not capturable, as it is reassignable")
@@ -506,7 +505,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
             devRef.getPosition
           )
         }
-        NamedTypeShape(device.sig.id)
+        device.tpe
 
       case call@Call(None, funName, args) =>
         checkFunCall(call, IntrinsicsPackageId, fallbackOwnerOpt = Some(tcCtx.meId))
@@ -576,10 +575,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
                 isWarning = true
               )
             }
-            checkCallArgs(structSig, structSig.constructorSig, None, args, instantiation.getPosition)
+            checkCallArgs(structSig, structSig.voidInitMethodSig, None, args, instantiation.getPosition)
             NamedTypeShape(tid) ^ computeCaptures(args ++ regionOpt)
           case Some(moduleSig: ModuleSignature) =>
-            checkCallArgs(moduleSig, moduleSig.constructorSig, None, args, instantiation.getPosition)
+            checkCallArgs(moduleSig, moduleSig.voidInitMethodSig, None, args, instantiation.getPosition)
             NamedTypeShape(tid) ^ computeCaptures(args ++ regionOpt)
           case _ => reportError(s"not found: structure or module '$tid'", instantiation.getPosition)
         }
@@ -779,7 +778,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
                            )(using callerCtx: TypeCheckingContext, env: Environment): Type = {
     val expTypesIter = funSig.args.iterator
     val argsIter = args.iterator
-    val calleeCtx = TypeCheckingContext(callerCtx.analysisContext, funOwnerSig.id, funOwnerSig.getCaptureDescr)
+    val calleeCtx = TypeCheckingContext(callerCtx.analysisContext, funOwnerSig.id, funOwnerSig.getNonSubstitutedCaptureDescr)
     val substitutor = PathsSubstitutor(calleeCtx, errorReporter)
     for {
       receiver <- receiverOpt
@@ -942,11 +941,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
     val receiverCaptOpt = convertToCapturable(receiver, erOpt = None, idsAreFields = false)
 
-    def performSubstIfApplicable(rawType: Type, structOrModuleSignature: StructOrModuleSignature): Type = {
+    def performSubstIfApplicable(rawType: Type, structOrModuleSignature: ConstructibleSig): Type = {
       val calleeCtx = TypeCheckingContext(
         callerCtx.analysisContext,
         structOrModuleSignature.id,
-        structOrModuleSignature.getCaptureDescr
+        structOrModuleSignature.getNonSubstitutedCaptureDescr
       )
       for ((paramName, fieldInfo) <- structOrModuleSignature.params) {
         calleeCtx.addLocal(paramName, fieldInfo.tpe, None, false, true, () => (), () => ())

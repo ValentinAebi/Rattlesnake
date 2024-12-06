@@ -50,7 +50,7 @@ object SubtypeRelation {
       if (curr == superT) {
         return true
       }
-      tcCtx.structs.apply(curr).directSupertypes.foreach(registerIfNew)
+      tcCtx.structs.get(curr).foreach(_.directSupertypes.foreach(registerIfNew))
     }
     false
   }
