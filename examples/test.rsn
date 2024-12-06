@@ -1,0 +1,67 @@
+
+struct Foo { r: Region^, xs: mut arr^{r} Int }
+
+struct Cell { value: Foo^ }
+
+struct Baz { r: Region^, cells: arr Cell^{r} }
+
+struct Bar { r: Region^, x: Foo^, y: Foo^{r} }
+
+package A {
+    fn a() -> Void {}
+}
+
+package B {
+    fn b() -> Void {
+        // fs;
+    }
+}
+
+package Main {
+
+    fn printFoo(foo: Foo^){
+        for var i = 0; i < #(foo.xs); i += 1 {
+            print(intToString(foo.xs[i]) + " ");
+        };
+        print("\n");
+    }
+
+    fn initializeArray(s: Region^, array: mut arr^{s} Int){
+        for var i = 0; i < #array; i += 1 {
+            array[i] = 0;
+        }
+    }
+
+    fn createFoo(y: Region^, size: Int) -> Foo^{y} {
+        val ys = arr@y Int[size];
+        initializeArray(y, ys);
+        val foo: Foo^{y} = new Foo(y, ys);
+        return foo;
+    }
+
+    fn mkBaz(r: Region^) -> Baz^{r} {
+        return new Baz(r, [new Cell(createFoo(r, 2)), new Cell(createFoo(r, 1))]);
+    }
+
+    fn main(arr String){
+        val r = newregion;
+        val foo = createFoo(r, 5);
+        printFoo(foo);
+        val s = newregion;
+        val bar1: Bar^{r} = new Bar(r, foo, createFoo(r, 10));
+        val bar2: Bar^{bar1, s} = new Bar(s, bar1.x, createFoo(s, 2));
+        printFoo(bar2.y);
+
+        // TODO can unboxing check reject the program with a forbidden capture other than the root capability?
+        // mkBaz(r).cells[0];
+
+        restricted(B){
+            restricted(A){
+                A.a();
+            };
+            B.b();
+        }
+
+    }
+
+}
