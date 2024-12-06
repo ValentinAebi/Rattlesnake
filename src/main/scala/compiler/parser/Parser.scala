@@ -274,9 +274,9 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     }
   } setName "binopArg"
 
-  private lazy val callArgs = recursive {
+  private lazy val parenthArgsList = recursive {
     openParenth ::: repeatWithSep(expr, comma) ::: closeParenth
-  } setName "callArgs"
+  } setName "parenthArgsList"
 
   private lazy val indexing = recursive {
     openingBracket ::: expr ::: closingBracket
@@ -288,7 +288,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   private lazy val deviceRef = device map (DeviceRef(_))
 
-  private lazy val varRefOrIntrinsicCall = lowName ::: opt(callArgs) map {
+  private lazy val varRefOrIntrinsicCall = lowName ::: opt(parenthArgsList) map {
     case name ^: Some(args) => Call(None, name, args)
     case name ^: None => VariableRef(name)
   } setName "varRefOrIntrinsicCall"
@@ -298,7 +298,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "atomicExpr"
 
   private lazy val selectOrIndexingChain = recursive {
-    atomicExpr ::: repeat((dot ::: lowName ::: opt(callArgs)) OR indexing) map {
+    atomicExpr ::: repeat((dot ::: lowName ::: opt(parenthArgsList)) OR indexing) map {
       case atExpr ^: repeated =>
         repeated.foldLeft(atExpr) {
           case (acc, name ^: Some(args)) => Call(Some(acc), name, args)
@@ -345,7 +345,8 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val regionCreation = kw(NewRegion) map (_ => RegionCreation()) setName "regionCreation"
 
   private lazy val stat: P[Statement] = {
-    exprOrAssig OR valDef OR varDef OR whileLoop OR forLoop OR ifThenElse OR returnStat OR panicStat OR enclosedStat
+    exprOrAssig OR valDef OR varDef OR whileLoop OR forLoop OR ifThenElse OR
+      returnStat OR panicStat OR restrictedStat OR enclosedStat
   } setName "stat"
 
   private lazy val valDef = {
@@ -392,9 +393,15 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   private lazy val panicStat = {
     kw(Panic).ignored ::: expr map PanicStat.apply
   } setName "panicStat"
+  
+  private lazy val restrictedStat = {
+    kw(Restricted).ignored ::: parenthArgsList ::: block map {
+      case args ^: body => RestrictedStat(args, body)
+    }
+  } setName "restrictedStat"
 
   private lazy val enclosedStat = {
-    kw(Enclosed).ignored ::: callArgs ::: block map {
+    kw(Enclosed).ignored ::: parenthArgsList ::: block map {
       case args ^: body => EnclosedStat(args, body)
     }
   } setName "enclosedStat"

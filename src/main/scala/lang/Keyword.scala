@@ -21,6 +21,7 @@ enum Keyword(val str: String) {
   case NewRegion extends Keyword("newregion")
   case Package extends Keyword("package")
   case Panic extends Keyword("panic")
+  case Restricted extends Keyword("restricted")
   case Return extends Keyword("return")
   case Struct extends Keyword("struct")
   case Test extends Keyword("test")

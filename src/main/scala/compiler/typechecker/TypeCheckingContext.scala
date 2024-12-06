@@ -104,10 +104,10 @@ final case class TypeCheckingContext private(
   def lookup(capturable: ConcreteCapturable): Type = capturable match {
     case path: Path => lookup(path)
     case Capturables.CapPackage(pkgName) =>
-      packages.get(pkgName).map(_.getSelfReferringType)
+      packages.get(pkgName).map(_.getNonSubstitutedType)
         .getOrElse(UndefinedTypeShape)
     case Capturables.CapDevice(device) =>
-      device.sig.getSelfReferringType
+      device.sig.getNonSubstitutedType
   }
 
   def localIsQueried(localId: FunOrVarId): Unit = {

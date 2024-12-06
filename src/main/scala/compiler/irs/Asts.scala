@@ -490,6 +490,10 @@ object Asts {
   final case class PanicStat(msg: Expr) extends Statement {
     override def children: List[Ast] = List(msg)
   }
+  
+  final case class RestrictedStat(capabilities: List[Expr], body: Block) extends Statement {
+    override def children: List[Ast] = capabilities :+ body
+  }
 
   final case class EnclosedStat(capabilities: List[Expr], body: Block) extends Statement {
     override def children: List[Ast] = capabilities :+ body

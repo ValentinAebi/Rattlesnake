@@ -283,7 +283,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         tcCtx.getLocalOnly(name) match {
           case None => None // do not report, an error will be reported checkExpr anyways
           case Some(localInfo) if localInfo.isReassignable =>
-            maybeReportError(s"cannot capture '$name, as it is a variable")
+            maybeReportError(s"'$name is not capturable, as it is a var")
           case Some(localInfo) if idsAreFields =>
             Some(MePath.dot(name))
           case Some(localInfo) =>
@@ -300,7 +300,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
                 tcCtx.resolveType(lhsTypeId).flatMap { lhsTypeSig =>
                   lhsTypeSig.params.get(selected).flatMap { fieldInfo =>
                     if fieldInfo.isReassignable
-                    then maybeReportError(s"cannot capture field $selected of $lhsTypeId, as it is reassignable")
+                    then maybeReportError(s"field $selected of $lhsTypeId is not capturable, as it is reassignable")
                     else Some(lhsPath.dot(selected))
                   }
                 }
@@ -309,7 +309,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
           }
           case _ => None
         }
-      case _ => maybeReportError(s"not a path")
+      case _ => maybeReportError(s"expression is not capturable")
     }
   }
 
@@ -434,6 +434,24 @@ final class TypeChecker(errorReporter: ErrorReporter)
       val msgType = checkExpr(msg)
       checkSubtypingConstraint(StringType, msgType, panicStat.getPosition, "panic", tcCtx)
 
+    case RestrictedStat(capabilitiesExpressions, body) =>
+      // TODO also support regions? or even structs and arrays?
+      val allowedPackagesB = Set.newBuilder[TypeIdentifier]
+      val allowedDevicesB = Set.newBuilder[Device]
+      for (capabilityExpr <- capabilitiesExpressions) {
+        checkExpr(capabilityExpr)
+        convertToCapturable(capabilityExpr, Some(errorReporter), idsAreFields = false).foreach {
+          case CapPackage(pkgName) =>
+            allowedPackagesB.addOne(pkgName)
+          case CapDevice(device) =>
+            allowedDevicesB.addOne(device)
+          case capability =>
+            reportError("unexpected capability, only packages and devices are allowed here", capabilityExpr.getPosition)
+        }
+      }
+      val environment = Environment(allowedPackagesB.result(), allowedDevicesB.result())
+      checkStat(body)(using tcCtx, environment)
+
     case EnclosedStat(capabilities, body) =>
       for (capability <- capabilities) {
         val capabilityType = checkExpr(capability)
@@ -470,17 +488,23 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case pkg@PackageRef(packageName) =>
         if (!env.allowsPackage(packageName)) {
-          reportError(s"illegal reference to $packageName, which is not imported in this module", pkg.getPosition)
+          reportError(
+            s"illegal reference to $packageName (the current module or restricted block does not allow it)",
+            pkg.getPosition
+          )
         }
         tcCtx.resolveType(packageName) match {
-          case Some(packageSignature: PackageSignature) => NamedTypeShape(packageName)
+          case Some(packageSignature: PackageSignature) => packageSignature.getNonSubstitutedType
           case Some(_) => reportError(s"$packageName is not a package and is thus not allowed here", pkg.getPosition)
           case None => reportError(s"not found: $packageName", pkg.getPosition)
         }
 
       case devRef@DeviceRef(device) =>
         if (!env.allowsDevice(device)) {
-          reportError(s"illegal reference to device $device, which is not imported in this module", devRef.getPosition)
+          reportError(
+            s"illegal reference to device $device (the current module or restricted block does not allow it)",
+            devRef.getPosition
+          )
         }
         NamedTypeShape(device.sig.id)
 

@@ -30,7 +30,7 @@ sealed trait TypeSignature {
   def constructorSig: FunctionSignature =
     FunctionSignature(ConstructorFunId, params.toList.map((id, info) => (Some(id), info.tpe)), VoidType)
     
-  def getSelfReferringType: Type = NamedTypeShape(id) ^ getCaptureDescr
+  def getNonSubstitutedType: Type = NamedTypeShape(id) ^ getCaptureDescr
 }
 
 sealed trait ModOrPkgOrDeviceSignature extends TypeSignature

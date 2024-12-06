@@ -410,6 +410,9 @@ final class Backend[V <: ClassVisitor](
         val descr = descriptorForType(packageShapeType)
         mv.visitFieldInsn(Opcodes.GETSTATIC, internalName, packageInstanceName, descr)
 
+      case DeviceRef(device) =>
+        ???
+
       case Call(None, funName, args) => {
         val generateArgs: () => Unit = { () =>
           for arg <- args do {
@@ -705,6 +708,9 @@ final class Backend[V <: ClassVisitor](
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, "java/lang/RuntimeException",
           ConstructorFunId.stringId, s"(L$stringTypeStr;)V", false)
         mv.visitInsn(Opcodes.ATHROW)
+
+      case RestrictedStat(capabilities, body) =>
+        generateCode(body, ctx)
 
       case EnclosedStat(capabilities, body) =>
         for (capability <- capabilities) {
