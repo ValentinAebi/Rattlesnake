@@ -14,14 +14,15 @@ interface I {
 
 package Test {
 
-    fn mulX(z: I, factor: Int){
+    fn mulX(r: Region^, z: I^{r}, factor: Int){
         z.x *= factor;
     }
     
     fn testF() -> Int {
-        val a = new A(25, 12.5);
+        val s = newregion;
+        val a = new@s A(25, 12.5);
         var t = a.x;
-        me.mulX(a, 32);
+        me.mulX(s, a, 32);
         t -= a.x;
         return t;
     }
