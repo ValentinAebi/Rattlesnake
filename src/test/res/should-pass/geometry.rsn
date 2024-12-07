@@ -6,7 +6,7 @@ struct Vertex {
 
 package Geometry {
     
-    fn computeArea(rectangle: Rectangle) -> Double {
+    fn computeArea(rectangle: Rectangle^) -> Double {
         return rectangle.width * rectangle.height
     }
     
@@ -16,11 +16,12 @@ package Test {
 
     // creates the rectangles described by rectDims (leftUpperX, leftUpperY, width, height) and returns them
     // fills 'areas' with their areas
-    fn createRectangles(rectDims: arr Double, areas: mut arr Double) -> arr Rectangle {
+    fn createRectangles(rectDims: arr^ Double, areas: mut arr^ Double) -> arr^ Rectangle {
         if #rectDims % 4 != 0 {
             panic "length of rectDims should be a multiple of 4"
         };
-        val rectangles = arr Rectangle[#rectDims / 4];
+        val r = newregion;
+        val rectangles = arr@r Rectangle[#rectDims / 4];
         var i = 0;
         for ; i < #rectDims; i += 4 {
             rectangles[i / 4] = new Rectangle(new Vertex(rectDims[i], rectDims[i + 1]), rectDims[i + 2], rectDims[i + 3])
