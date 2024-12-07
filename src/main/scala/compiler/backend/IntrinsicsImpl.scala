@@ -15,8 +15,7 @@ object IntrinsicsImpl {
     Intrinsics.intToString -> generateIntToStringCall,
     Intrinsics.doubleToString -> generateDoubleToStringCall,
     Intrinsics.charToString -> generateCharToStringCall,
-    Intrinsics.boolToString -> generateBoolToStringCall,
-    Intrinsics.toCharArray -> generateToCharArrayCall
+    Intrinsics.boolToString -> generateBoolToStringCall
   )
 
   private def generatePrintCall(generateArg: () => Unit, mv: MethodVisitor)(using AnalysisContext): Unit = {
@@ -43,12 +42,6 @@ object IntrinsicsImpl {
   private def generateBoolToStringCall(generateArg: () => Unit, mv: MethodVisitor)
                               (using AnalysisContext): Unit = {
     generateToStringCallFor("Boolean", descriptorForType(BoolType), mv, generateArg)
-  }
-
-  private def generateToCharArrayCall(generateArg: () => Unit, mv: MethodVisitor): Unit = {
-    generateArg()
-    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "toCharArray",
-      "()[C", false)
   }
   
   private def generateToStringCallFor(javaType: String, typeDescriptor: String, mv: MethodVisitor, generateArg: () => Unit): Unit = {

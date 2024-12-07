@@ -1,5 +1,5 @@
-import compiler.gennames.NamesForGeneratedClasses.packageInstanceName
-import compiler.gennames.{FileExtensions, NamesForGeneratedClasses}
+import compiler.gennames.ClassesNames.packageInstanceName
+import compiler.gennames.{FileExtensions, ClassesNames}
 import compiler.io.{SourceCodeProvider, SourceFile}
 import compiler.pipeline.TasksPipelines
 import org.objectweb.asm.Opcodes.{V11, V17, V1_8}

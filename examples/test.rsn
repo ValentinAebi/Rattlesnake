@@ -51,19 +51,27 @@ package Main {
         val bar1: Bar^{r} = new Bar(r, foo, createFoo(r, 10));
         val bar2: Bar^{bar1, s} = new Bar(s, bar1.x, createFoo(s, 2));
         printFoo(bar2.y);
-
-        // TODO can unboxing check reject the program with a forbidden capture other than the root capability?
+        
         // mkBaz(r).cells[0];
 
-        val b: B = B;
+        val b: B^{fs} = B;
 
-        restricted(B){
+        restricted(B, A){
             restricted(A){
                 A.a();
             };
             B.b();
-        }
+        };
 
+        printChars("Hello");
+
+    }
+
+    fn printChars(s: String){
+        for var i = 0; i < #s; i += 1 {
+            print(charToString(s[i]));
+            print(when i < #s-1 then "-" else "\n");
+        }
     }
 
 }

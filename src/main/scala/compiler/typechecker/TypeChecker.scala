@@ -2,7 +2,7 @@ package compiler.typechecker
 
 import compiler.analysisctx.AnalysisContext
 import compiler.analysisctx.AnalysisContext.{FunctionFound, FunctionNotFound, ModuleNotFound}
-import compiler.gennames.NamesForGeneratedClasses.constantsClassName
+import compiler.gennames.ClassesNames.constantsClassName
 import compiler.irs.Asts.*
 import compiler.pipeline.CompilationStep.TypeChecking
 import compiler.pipeline.CompilerStep
@@ -355,7 +355,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
           varRef.setType(varType)
         case indexing@Indexing(indexed, _) =>
           checkExpr(indexing)
-          val lhsType = exprMustBeArray(indexed.getType, tcCtx, varAssig.getPosition, mustUpdate = true)
+          val lhsType = exprMustBeIndexable(indexed.getType, tcCtx, varAssig.getPosition,
+            mustUpdate = true, allowString = false)
           checkSubtypingConstraint(lhsType, rhsType, varAssig.getPosition, "", tcCtx)
         case select@Select(structExpr, selected) =>
           val structType = checkExpr(structExpr)
@@ -378,7 +379,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
           varRef.setType(inPlaceModifiedType)
         case indexing@Indexing(indexed, _) =>
           checkExpr(indexing)
-          val inPlaceModifiedElemType = exprMustBeArray(indexed.getType, tcCtx, varModif.getPosition, mustUpdate = true)
+          val inPlaceModifiedElemType = exprMustBeIndexable(indexed.getType, tcCtx, varModif.getPosition,
+            mustUpdate = true, allowString = false)
           val operatorRetType = mustExistOperator(inPlaceModifiedElemType, op, rhsType, varModif.getPosition)
           checkSubtypingConstraint(inPlaceModifiedElemType, operatorRetType, varModif.getPosition, "", tcCtx)
         case select@Select(structExpr, selected) =>
@@ -523,7 +525,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         checkUnboxedType(indexedType, indexing.getPosition)
         val argType = checkExpr(arg)
         checkSubtypingConstraint(IntType, argType, indexing.getPosition, "array index", tcCtx)
-        exprMustBeArray(indexed.getType, tcCtx, indexed.getPosition, mustUpdate = false)
+        exprMustBeIndexable(indexed.getType, tcCtx, indexed.getPosition, mustUpdate = false, allowString = true)
 
       case arrayInit@ArrayInit(region, elemTypeTree, size) =>
         checkAndRequireRegion(region, tcCtx)
@@ -912,15 +914,24 @@ final class TypeChecker(errorReporter: ErrorReporter)
         tpe
   }
 
-  private def exprMustBeArray(exprType: Type, ctx: TypeCheckingContext, posOpt: Option[Position], mustUpdate: Boolean): Type = {
+  private def exprMustBeIndexable(
+                                   exprType: Type,
+                                   ctx: TypeCheckingContext,
+                                   posOpt: Option[Position],
+                                   mustUpdate: Boolean,
+                                   allowString: Boolean
+                                 ): Type = {
+    require(!(mustUpdate && allowString))
     exprType.shape match
       case ArrayTypeShape(elemType, modifiable) =>
         if (mustUpdate && !modifiable) {
           reportError("update impossible: missing modification privileges on array", posOpt)
         }
         elemType
+      case StringType if allowString => CharType
       case _ =>
-        reportError(s"expected an array, found '$exprType'", posOpt)
+        val expectedDescr = if allowString then "an array or a string" else "an array"
+        reportError(s"expected $expectedDescr, found '$exprType'", posOpt)
   }
 
   private def mustExistOperator(lhsType: Type, operator: Operator, rhsType: Type, position: Option[Position])

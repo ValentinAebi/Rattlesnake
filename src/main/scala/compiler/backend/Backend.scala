@@ -3,8 +3,8 @@ package compiler.backend
 import compiler.analysisctx.AnalysisContext
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
 import compiler.backend.TypesConverter.{convertToAsmTypeCode, internalNameOf, numSlotsFor, opcodeFor}
-import compiler.gennames.NamesForGeneratedClasses.packageInstanceName
-import compiler.gennames.{FileExtensions, NamesForGeneratedClasses}
+import compiler.gennames.ClassesNames.packageInstanceName
+import compiler.gennames.{FileExtensions, ClassesNames}
 import compiler.irs.Asts.*
 import compiler.pipeline.CompilationStep.CodeGeneration
 import compiler.pipeline.CompilerStep
@@ -40,7 +40,7 @@ final class Backend[V <: ClassVisitor](
                                         javaVersionCode: Int
                                       ) extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
 
-  private val runtimeClass = s"${NamesForGeneratedClasses.runtimeClassName}.class"
+  private val runtimeClass = s"${ClassesNames.runtimeClassName}.class"
 
   private var lastWrittenLine = -1
 
@@ -78,15 +78,15 @@ final class Backend[V <: ClassVisitor](
       generateTypes(structs, outputDir, generatedClassFiles)
 
       if (consts.nonEmpty) {
-        val constantsFilePath = outputDir.resolve(mode.withExtension(NamesForGeneratedClasses.constantsClassName))
+        val constantsFilePath = outputDir.resolve(mode.withExtension(ClassesNames.constantsClassName))
         generateConstantsFile(consts, constantsFilePath)
         generatedClassFiles.addOne(constantsFilePath)
       }
 
       if (mode.generateRuntime) {
-        val runtimeFilePath = outputDir.resolve(mode.withExtension(NamesForGeneratedClasses.runtimeClassName))
+        val runtimeFilePath = outputDir.resolve(mode.withExtension(ClassesNames.runtimeClassName))
         copyRuntimeClass(runtimeFilePath)
-        val fileSystemFilePath = outputDir.resolve(mode.withExtension(Device.FileSystem.typeName.stringId))
+        val fileSystemFilePath = outputDir.resolve(mode.withExtension(ClassesNames.fileSystemClassName))
         copyRuntimeClass(fileSystemFilePath)
         generatedClassFiles.addOne(runtimeFilePath)
       }
@@ -126,7 +126,7 @@ final class Backend[V <: ClassVisitor](
                                    (using AnalysisContext): Unit = {
     val ccv: V = mode.createVisitor(constantsFilePath)
     addSourceName(ccv, "<auto-gen-constants-file>")
-    ccv.visit(javaVersionCode, ACC_PUBLIC, NamesForGeneratedClasses.constantsClassName, null, objectTypeStr, null)
+    ccv.visit(javaVersionCode, ACC_PUBLIC, ClassesNames.constantsClassName, null, objectTypeStr, null)
     for const <- consts do {
       ccv.visitField(
         ACC_PUBLIC | ACC_STATIC,
@@ -398,7 +398,7 @@ final class Backend[V <: ClassVisitor](
           case None =>
             mv.visitFieldInsn(
               Opcodes.GETSTATIC,
-              NamesForGeneratedClasses.constantsClassName,
+              ClassesNames.constantsClassName,
               name.stringId,
               descriptorForType(varRef.getTypeShape)
             )
@@ -436,6 +436,11 @@ final class Backend[V <: ClassVisitor](
         val funDescr = descriptorForFunc(ctx.resolveFunc(receiverTypeName, funName).getFunSigOrThrow())
         mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, recvInternalName, funName.stringId, funDescr, false)
       }
+
+      case Indexing(indexed, arg) if indexed.getTypeShape == StringType =>
+        generateCode(indexed, ctx)
+        generateCode(arg, ctx)
+        mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, "java/lang/String", "charAt", "(I)C", false)
 
       case Indexing(indexed, arg) =>
         generateCode(indexed, ctx)

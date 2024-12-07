@@ -1,8 +1,17 @@
 
 package Test {
 
-    fn testFunc(str: String) -> arr Char {
-        return toCharArray(str)
+    fn testFunc(str: String) -> arr^ Char {
+        return toCharsArray(str)
+    }
+
+    fn toCharsArray(s: String) -> arr^ Char {
+        val r = newregion;
+        val array = arr@r Char[#s];
+        for var i = 0; i < #s; i += 1 {
+            array[i] = s[i];
+        };
+        return array;
     }
 
 }

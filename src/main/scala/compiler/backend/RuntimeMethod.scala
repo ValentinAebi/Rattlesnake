@@ -1,7 +1,8 @@
 package compiler.backend
 
 import compiler.analysisctx.AnalysisContext
-import compiler.gennames.NamesForGeneratedClasses.runtimeClassName
+import compiler.gennames.ClassesNames
+import compiler.gennames.ClassesNames.runtimeClassName
 import org.objectweb.asm.{MethodVisitor, Opcodes}
 
 enum RuntimeMethod(name: String, mthDescr: String) {
@@ -13,7 +14,7 @@ enum RuntimeMethod(name: String, mthDescr: String) {
   case AssertResourceAllowed extends RuntimeMethod("assertResourceAllowed", "(I)V")
   case AssertCanModifyRegionOf extends RuntimeMethod("assertCanModifyRegionOf", "(Ljava/lang/Object;)V")
   case AssertFilesystemAllowed extends RuntimeMethod("assertFilesystemAllowed", "()V")
-  case GetFileSystem extends RuntimeMethod("getFileSystem", "()Ljava/lang/FileSystem;")
+  case GetFileSystem extends RuntimeMethod("getFileSystem", s"()L${ClassesNames.fileSystemClassName};")
   
   def generateCall(mv: MethodVisitor)(using AnalysisContext): Unit = {
     mv.visitMethodInsn(Opcodes.INVOKESTATIC, runtimeClassName, name, mthDescr, false)

@@ -1,7 +1,7 @@
 import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 
-final class Rattlesnake$runtime {
+public final class Rattlesnake$runtime {
 
     // NOTE: This implementation assumes single-threaded execution.
     // A thread-safe runtime should include per-thread capability stacks.
@@ -68,10 +68,10 @@ final class Rattlesnake$runtime {
 
 
     ///////////////////// Devices /////////////////////
-    
-    private static FileSystem FILE_SYSTEM = null;
-    
-    public static FileSystem getFileSystem(){
+
+    private static final Rattlesnake$FileSystem FILE_SYSTEM = new Rattlesnake$FileSystem();
+
+    public static Rattlesnake$FileSystem getFileSystem(){
         return FILE_SYSTEM;
     }
 

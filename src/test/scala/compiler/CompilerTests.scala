@@ -1,6 +1,6 @@
 package compiler
 
-import compiler.gennames.{FileExtensions, NamesForGeneratedClasses}
+import compiler.gennames.{FileExtensions, ClassesNames}
 import compiler.reporting.Errors.{ErrorReporter, ExitCode}
 import compiler.io.SourceFile
 import compiler.pipeline.TasksPipelines
@@ -183,7 +183,7 @@ class CompilerTests {
   }
 
   @Test
-  def toCharArrayTest(): Unit = {
+  def toCharsArrayTest(): Unit = {
     val inputs = List("abcde", "Programming language", "Rattle-snake")
     val res = compileAndExecSeveralIter("strtochars", "Test", "testFunc", inputs.map(Array(_)))
     assertEquals(inputs.length, res.length)
@@ -406,7 +406,7 @@ class CompilerTests {
                                        ): List[Any] = {
     val classes = compileAndLoadClasses(srcFileName)
     val testedPkgClass = findClassWithName(classes, testedMethodPkgName)
-    val pkgInstance = testedPkgClass.getField(NamesForGeneratedClasses.packageInstanceName).get(null)
+    val pkgInstance = testedPkgClass.getField(ClassesNames.packageInstanceName).get(null)
     testedPkgClass.getDeclaredMethods.find(_.getName == testedMethodName) match {
       case None => throw AssertionError(s"specified test method '$testedMethodName' does not exist")
       case Some(method) => {
