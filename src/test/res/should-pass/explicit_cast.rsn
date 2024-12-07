@@ -1,6 +1,6 @@
 
 interface Super {
-    x: Int
+    var x: Int
 }
 
 struct Sub : Super {
@@ -10,26 +10,27 @@ struct Sub : Super {
 
 package Test {
 
-    fn create() -> Super {
-        return new Sub(10, "Hello");
+    fn create(reg: Region^) -> Super^{reg} {
+        return new@reg Sub(10, "Hello");
     }
 
     fn testFunc() -> String {
-        val a = me.create() as Sub;
+        val r = newregion;
+        val a = me.create(r) as Sub;
         var s = me.readY(a) + " ";  // s: "Hello "
-        val b: Super = a;
-        me.setX(b);
+        val b: Super^{r} = a;
+        me.setX(r, b);
         s += me.readY(b as Sub);    // s: "Hello Hello"
         s += " ";                   // s: "Hello Hello "
         s += intToString(a.x);   // s: "Hello Hello 42"
         return s;
     }
 
-    fn setX(s: Super){
+    fn setX(r: Region^, s: Super^{r}){
         (s as Sub).x = 42;
     }
 
-    fn readY(s: Sub) -> String {
+    fn readY(s: Sub^) -> String {
         return s.y;
     }
 
