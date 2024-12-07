@@ -17,7 +17,7 @@ object SubtypeRelation {
         logicalImplies(superIsModif, subIsModif) && isSuperInterface(subId, superId)
       case (ArrayType(subElemType, subIsModif), ArrayType(superElemType, superIsModif)) =>
         logicalImplies(superIsModif, subIsModif) &&
-          (subElemType == superElemType || (!superIsModif && superElemType.subtypeOf(superElemType)))
+          (subElemType == superElemType || (!superIsModif && subElemType.subtypeOf(superElemType)))
       case (UnionType(subTypes), superT) =>
         subTypes.forall(_.subtypeOf(superT))
       case (subT, UnionType(superTypes)) =>
