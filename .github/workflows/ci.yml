@@ -9,8 +9,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v2
-      - name: Setup Scala
-        uses: olafurpg/setup-scala@v11
+      - name: Setup JDK
+        uses: actions/setup-java@v3
+        with:
+          distribution: temurin
+          java-version: 17
       - name: Compile runtime class
         run: (cd runtime_src && make)
       - name: Build and Test
