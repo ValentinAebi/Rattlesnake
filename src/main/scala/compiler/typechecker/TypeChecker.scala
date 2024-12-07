@@ -522,10 +522,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case indexing@Indexing(indexed, arg) =>
         val indexedType = checkExpr(indexed)
-        checkUnboxedType(indexedType, indexing.getPosition)
         val argType = checkExpr(arg)
         checkSubtypingConstraint(IntType, argType, indexing.getPosition, "array index", tcCtx)
-        exprMustBeIndexable(indexed.getType, tcCtx, indexed.getPosition, mustUpdate = false, allowString = true)
+        val elemType = exprMustBeIndexable(indexed.getType, tcCtx, indexed.getPosition, mustUpdate = false, allowString = true)
+        checkUnboxedType(elemType, indexing.getPosition)
+        elemType
 
       case arrayInit@ArrayInit(region, elemTypeTree, size) =>
         checkAndRequireRegion(region, tcCtx)
