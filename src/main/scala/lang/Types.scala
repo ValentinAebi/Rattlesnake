@@ -16,8 +16,8 @@ object Types {
   final case class CapturingType(shape: TypeShape, captureDescriptor: CaptureDescriptor) extends Type {
     override def toString: String =
       if captureDescriptor.isEmpty then shape.toString
-      else if captureDescriptor.isRoot then s"$shape^"
-      else shape.toStringCapturing(captureDescriptor)
+      else if captureDescriptor.isRoot then shape.toStringCapturing("")
+      else shape.toStringCapturing(captureDescriptor.toString)
   }
 
   sealed trait TypeShape extends Type {
@@ -26,8 +26,7 @@ object Types {
     @targetName("capturing") infix def ^(cd: CaptureDescriptor): CapturingType = CapturingType(this, cd)
     @targetName("maybeCapturing") infix def ^(cdOpt: Option[CaptureDescriptor]): Type =
       cdOpt.map(CapturingType(this, _)).getOrElse(this)
-    def toStringCapturing(captureDescriptor: CaptureDescriptor): String =
-      s"$toString^$captureDescriptor"
+    private[Types] def toStringCapturing(capDescrStr: String): String = s"$toString^$capDescrStr"
   }
 
   sealed trait CastTargetTypeShape extends TypeShape
@@ -64,8 +63,8 @@ object Types {
       (if modifiable then (Keyword.Mut.str ++ " ") else "") ++ s"${Keyword.Arr.str} $elemType"
     }
 
-    override def toStringCapturing(cd: CaptureDescriptor): String =
-      (if modifiable then (Keyword.Mut.str ++ " ") else "") ++ s"${Keyword.Arr.str}^$cd $elemType"
+    private[Types] override def toStringCapturing(capDescrStr: String): String =
+      (if modifiable then (Keyword.Mut.str ++ " ") else "") ++ s"${Keyword.Arr.str}^$capDescrStr $elemType"
   }
 
   final case class UnionTypeShape(unitedTypes: Set[TypeShape]) extends TypeShape {
