@@ -62,16 +62,13 @@ public final class Rattlesnake$runtime {
         assertResourceAllowed(regionOf.get(o));
     }
 
-    public static void assertFilesystemAllowed(){
-        assertResourceAllowed(FILE_SYSTEM_ID);
-    }
-
 
     ///////////////////// Devices /////////////////////
 
-    private static final Rattlesnake$FileSystem FILE_SYSTEM = new Rattlesnake$FileSystem();
+    private static final FileSystem FILE_SYSTEM = new FileSystem();
 
-    public static Rattlesnake$FileSystem getFileSystem(){
+    public static FileSystem getFileSystem(){
+        assertResourceAllowed(FILE_SYSTEM_ID);
         return FILE_SYSTEM;
     }
 

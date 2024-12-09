@@ -726,7 +726,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
           checkFunCall(call, fallbackOwner, None)
         } getOrElse {
           args.foreach(checkExpr)
-          reportError(s"function not found: '$funName' in '$typeSig'", pos)
+          reportError(s"function not found: '$funName' in '${typeSig.id}'", pos)
         }
     }
   }

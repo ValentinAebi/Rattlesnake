@@ -1,5 +1,7 @@
 package compiler.gennames
 
+import lang.Device
+
 object ClassesNames {
 
   val constantsClassName: String = "$constants"
@@ -7,6 +9,6 @@ object ClassesNames {
   val packageInstanceName: String = "$INSTANCE"
   
   val runtimeClassName: String = "Rattlesnake$runtime"
-  val fileSystemClassName: String = "Rattlesnake$FileSystem"
+  val fileSystemClassName: String = Device.FileSystem.typeName.stringId
   
 }
