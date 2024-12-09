@@ -718,14 +718,11 @@ final class Backend[V <: ClassVisitor](
       case RestrictedStat(capabilities, body) =>
         generateCode(body, ctx)
 
-      case EnclosedStat(capabilities, body) =>
-        for (capability <- capabilities) {
-          generateCode(capability, ctx)
-          RuntimeMethod.AddAllowedResource.generateCall(mv)
-        }
-        RuntimeMethod.PushFrame.generateCall(mv)
+      case EnclosedStat(ExplicitCaptureSetTree(capturedExpressions), body) =>
+        // FIXME setup dynamic environment
+        // RuntimeMethod.PushFrame.generateCall(mv)
         generateCode(body, ctx)
-        RuntimeMethod.PopFrame.generateCall(mv)
+        // RuntimeMethod.PopFrame.generateCall(mv)
 
       case other => throw new AssertionError(s"unexpected in backend: ${other.getClass}")
     }

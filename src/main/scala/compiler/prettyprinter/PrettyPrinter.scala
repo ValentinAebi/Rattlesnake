@@ -378,18 +378,18 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           .addSpace()
         addAst(msg)
 
-      case RestrictedStat(capabilities, body) =>
+      case RestrictedStat(capSetTree, body) =>
         pps
           .add(Restricted.str)
           .addSpace()
-        addParenthList(capabilities)
+        addAst(capSetTree)
         addAst(body)
 
-      case EnclosedStat(capabilities, body) =>
+      case EnclosedStat(capSetTree, body) =>
         pps
           .add(Enclosed.str)
           .addSpace()
-        addParenthList(capabilities)
+        addAst(capSetTree)
         addAst(body)
 
       case CapturingTypeTree(ArrayTypeShapeTree(elemType, isModifiable), captureDescr) =>

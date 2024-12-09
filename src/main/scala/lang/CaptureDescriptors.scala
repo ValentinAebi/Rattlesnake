@@ -11,7 +11,7 @@ object CaptureDescriptors {
     def isEmpty: Boolean
 
     def union(that: CaptureDescriptor): CaptureDescriptor = (this, that) match {
-      case (CaptureSet(thisCs), CaptureSet(thatCs)) => CaptureSet(thisCs.union(thatCs))
+      case (thisCs: CaptureSet, thatCs: CaptureSet) => thisCs.union(thatCs)
       case _ => Brand
     }
 
@@ -27,6 +27,8 @@ object CaptureDescriptors {
 
   final case class CaptureSet(set: Set[Capturable]) extends CaptureDescriptor {
     override def isRoot: Boolean = set.contains(RootCapability)
+    
+    def union(that: CaptureSet): CaptureSet = CaptureSet(this.set ++ that.set)
 
     override def isEmpty: Boolean = set.isEmpty
 

@@ -44,33 +44,39 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
     case PackageDef(packageName, functions) =>
       val packageSig = analysisContext.resolveTypeAs[PackageSignature](packageName).get
-      val environment = Environment(
-        packageSig.importedPackages.toSet,
-        packageSig.importedDevices.toSet
-      )
+      val environment = packageSig.getNonSubstitutedCaptureDescr
       for func <- functions do {
-        checkFunction(func, analysisContext, packageName, packageSig.getNonSubstitutedCaptureDescr, environment)
+        checkFunction(func, analysisContext, packageName, packageSig.getNonSubstitutedCaptureDescr)
       }
 
     case ModuleDef(moduleName, imports, functions) =>
       val moduleSig = analysisContext.resolveTypeAs[ModuleSignature](moduleName).get
-      val tcCtx = TypeCheckingContext(analysisContext, moduleName, moduleSig.getNonSubstitutedCaptureDescr)
-      for imp <- imports do {
-        checkImport(imp, tcCtx)
-      }
-      val environment = Environment(
-        moduleSig.importedPackages.toSet,
-        moduleSig.importedDevices.toSet
+      val importsCtx = TypeCheckingContext(
+        analysisContext,
+        environment = CaptureSet.singletonOfRoot,
+        insideEnclosure = false,
+        moduleName,
+        meCaptureDescr = moduleSig.getNonSubstitutedCaptureDescr
       )
+      for imp <- imports do {
+        checkImport(imp, importsCtx)
+      }
+      val environment = moduleSig.getNonSubstitutedCaptureDescr
       for func <- functions do {
-        checkFunction(func, analysisContext, moduleName, moduleSig.getNonSubstitutedCaptureDescr, environment)
+        checkFunction(func, analysisContext, moduleName, moduleSig.getNonSubstitutedCaptureDescr)
       }
 
     case StructDef(structName, fields, _, _) =>
       val structSig = analysisContext.resolveTypeAs[StructSignature](structName).get
-      val tcCtx = TypeCheckingContext(analysisContext, structName, structSig.getNonSubstitutedCaptureDescr)
+      val tcCtx = TypeCheckingContext(
+        analysisContext,
+        environment = CaptureSet.singletonOfRoot,
+        insideEnclosure = false,
+        structName,
+        meCaptureDescr = structSig.getNonSubstitutedCaptureDescr
+      )
       for (param@Param(paramNameOpt, typeTree, isReassignable) <- fields) {
-        val tpe = checkType(typeTree, idsAreFields = true)(using tcCtx, analysisContext.unrestrictedEnvironment)
+        val tpe = checkType(typeTree, idsAreFields = true)(using tcCtx)
         paramNameOpt.foreach { paramName =>
           tcCtx.addLocal(paramName, tpe, param.getPosition, isReassignable, declHasTypeAnnot = true,
             duplicateVarCallback = { () =>
@@ -91,15 +97,20 @@ final class TypeChecker(errorReporter: ErrorReporter)
       val inferredType = checkLiteralExpr(value)
       tpeOpt.foreach { expType =>
         val placeholderMeId = NormalTypeId(constantsClassName)
-        val tcCtx = TypeCheckingContext(analysisContext, placeholderMeId, CaptureSet.empty)
-        val checkedType = checkType(expType, idsAreFields = false)(using tcCtx, Environment.empty)
+        val tcCtx = TypeCheckingContext(
+          analysisContext,
+          environment = CaptureSet.empty,
+          insideEnclosure = false,
+          placeholderMeId,
+          meCaptureDescr = CaptureSet.empty
+        )
+        val checkedType = checkType(expType, idsAreFields = false)(using tcCtx)
         checkSubtypingConstraint(
           checkedType,
           inferredType,
           constDef.getPosition,
-          "constant definition",
-          tcCtx
-        )(using tcCtx, Environment.empty)
+          "constant definition"
+        )(using tcCtx)
       }
   }
 
@@ -115,13 +126,18 @@ final class TypeChecker(errorReporter: ErrorReporter)
                              funDef: FunDef,
                              analysisContext: AnalysisContext,
                              meId: TypeIdentifier,
-                             meCaptureDescr: CaptureDescriptor,
-                             environment: Environment
+                             meCaptureDescr: CaptureDescriptor
                            ): Unit = {
     val FunDef(funName, params, optRetTypeTree, body) = funDef
-    val tcCtx = TypeCheckingContext(analysisContext, meId, meCaptureDescr)
+    val tcCtx = TypeCheckingContext(
+      analysisContext,
+      environment = CaptureSet.singletonOfRoot,
+      insideEnclosure = false,
+      meId,
+      meCaptureDescr
+    )
     for param <- params do {
-      val paramType = checkType(param.tpe, idsAreFields = false)(using tcCtx, environment)
+      val paramType = checkType(param.tpe, idsAreFields = false)(using tcCtx)
       param.paramNameOpt.foreach { paramName =>
         tcCtx.addLocal(paramName, paramType, param.getPosition, param.isReassignable, declHasTypeAnnot = true,
           duplicateVarCallback = { () =>
@@ -134,9 +150,9 @@ final class TypeChecker(errorReporter: ErrorReporter)
         reportError("unnamed reassignable parameter", param.getPosition, isWarning = true)
       }
     }
-    val optRetType = optRetTypeTree.map(checkType(_, idsAreFields = false)(using tcCtx, environment))
+    val optRetType = optRetTypeTree.map(checkType(_, idsAreFields = false)(using tcCtx))
     val expRetType = optRetType.getOrElse(VoidType)
-    checkStat(body)(using tcCtx, environment, expRetType)
+    checkStat(body)(using tcCtx, expRetType)
     val endStatus = checkReturns(body)
     if (!endStatus.alwaysStopped && !expRetType.subtypeOf(VoidType)(using tcCtx)) {
       reportError("missing return in non-Void function", funDef.getPosition)
@@ -149,7 +165,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
   private def checkImport(imp: Import, tcCtx: TypeCheckingContext): Unit = imp match {
     case modImp@ParamImport(paramName, paramType) =>
-      val tpe = checkType(paramType, idsAreFields = true)(using tcCtx, tcCtx.unrestrictedEnvironment)
+      val tpe = checkType(paramType, idsAreFields = true)(using tcCtx)
       tcCtx.addLocal(paramName, tpe, modImp.getPosition, isReassignable = false, declHasTypeAnnot = true,
         duplicateVarCallback = { () =>
           reportError(s"duplicated parameter: $paramName", modImp.getPosition)
@@ -165,7 +181,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
     case DeviceImport(device) => ()
   }
 
-  private def checkType(typeTree: TypeTree, idsAreFields: Boolean)(using tcCtx: TypeCheckingContext, env: Environment): Type = {
+  private def checkType(typeTree: TypeTree, idsAreFields: Boolean)(using tcCtx: TypeCheckingContext): Type = {
     val tpe = typeTree match {
       case CapturingTypeTree(typeShapeTree, captureDescrTree) =>
         val shape = checkTypeShape(typeShapeTree, idsAreFields)
@@ -181,7 +197,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def warnWhenPrimitiveHasInappropriateCaptureDescr(tpe: Type, posOpt: Option[Position])
-                                                           (using tcCtx: TypeCheckingContext, env: Environment): Unit = {
+                                                           (using tcCtx: TypeCheckingContext): Unit = {
     tpe.shape match {
       case RegionType if !CaptureDescriptors.singletonSetOfRoot.subcaptureOf(tpe.captureDescriptor) =>
         reportError(
@@ -200,7 +216,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def warnOnNonCapAndRedundantCaptures(captureDescrTree: CaptureDescrTree)
-                                              (using tcCtx: TypeCheckingContext, env: Environment): Unit = {
+                                              (using tcCtx: TypeCheckingContext): Unit = {
     captureDescrTree match {
       case ExplicitCaptureSetTree(capturedExpressions) =>
         var foundNotCap = false
@@ -230,7 +246,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def checkTypeShape(typeShapeTree: TypeShapeTree, idsAreFields: Boolean)
-                            (using tcCtx: TypeCheckingContext, env: Environment): TypeShape = typeShapeTree match {
+                            (using tcCtx: TypeCheckingContext): TypeShape = typeShapeTree match {
     case ArrayTypeShapeTree(elemTypeTree, isModifiable) =>
       val elemType = checkType(elemTypeTree, idsAreFields)
       typeShouldNotCaptureRoot(elemType, "array elements are not allowed to capture the root capability",
@@ -241,7 +257,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def checkCastTargetTypeShape(castTargetTypeShapeTree: CastTargetTypeShapeTree)
-                                      (using tcCtx: TypeCheckingContext, env: Environment): CastTargetTypeShape = {
+                                      (using tcCtx: TypeCheckingContext): CastTargetTypeShape = {
     castTargetTypeShapeTree match {
       case PrimitiveTypeShapeTree(primitiveType) =>
         primitiveType
@@ -254,7 +270,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def checkCaptureDescr(captureDescrTree: CaptureDescrTree, idsAreFields: Boolean)
-                               (using tcCtx: TypeCheckingContext, env: Environment): CaptureDescriptor = {
+                               (using tcCtx: TypeCheckingContext): CaptureDescriptor = {
     val captureDescr = captureDescrTree match {
       case ExplicitCaptureSetTree(capturedExpressions) =>
         CaptureSet(capturedExpressions.flatMap { expr =>
@@ -270,7 +286,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def convertToCapturable(expr: Expr, erOpt: Option[ErrorReporter], idsAreFields: Boolean)
-                                 (using tcCtx: TypeCheckingContext, envir: Environment): Option[ConcreteCapturable] = {
+                                 (using tcCtx: TypeCheckingContext): Option[ConcreteCapturable] = {
 
     def maybeReportError(msg: String): None.type = {
       erOpt.foreach(_.push(Err(TypeChecking, msg, expr.getPosition)))
@@ -313,7 +329,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def checkStat(statement: Statement)
-                       (using tcCtx: TypeCheckingContext, env: Environment, expRetType: Type): Unit = statement match {
+                       (using tcCtx: TypeCheckingContext, expRetType: Type): Unit = statement match {
 
     case expr: Expr => checkExpr(expr)
 
@@ -327,8 +343,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
     case localDef@LocalDef(localName, optTypeAnnotTree, rhs, isReassignable) =>
       val inferredType = checkExpr(rhs)
       val optAnnotType = optTypeAnnotTree.map { typeAnnot =>
-        val tpe = checkType(typeAnnot, idsAreFields = false)(using tcCtx, tcCtx.unrestrictedEnvironment)
-        checkSubtypingConstraint(tpe, inferredType, localDef.getPosition, "local definition", tcCtx)
+        val tpe = checkType(typeAnnot, idsAreFields = false)(using tcCtx)
+        checkSubtypingConstraint(tpe, inferredType, localDef.getPosition, "local definition")
         tpe
       }
       val requestExplicitType = optTypeAnnotTree.isEmpty && inferredType.isInstanceOf[UnionTypeShape]
@@ -351,17 +367,17 @@ final class TypeChecker(errorReporter: ErrorReporter)
         case varRef@VariableRef(name) =>
           tcCtx.varIsAssigned(name)
           val varType = mustBeReassignable(name, tcCtx, varAssig.getPosition)
-          checkSubtypingConstraint(varType, rhsType, varAssig.getPosition, "", tcCtx)
+          checkSubtypingConstraint(varType, rhsType, varAssig.getPosition, "")
           varRef.setType(varType)
         case indexing@Indexing(indexed, _) =>
           checkExpr(indexing)
           val lhsType = exprMustBeIndexable(indexed.getType, tcCtx, varAssig.getPosition,
             mustUpdate = true, allowString = false)
-          checkSubtypingConstraint(lhsType, rhsType, varAssig.getPosition, "", tcCtx)
+          checkSubtypingConstraint(lhsType, rhsType, varAssig.getPosition, "")
         case select@Select(structExpr, selected) =>
           val structType = checkExpr(structExpr)
           val fieldType = checkFieldAccess(structExpr, selected, varAssig.getPosition, mustUpdateField = true)
-          checkSubtypingConstraint(fieldType, rhsType, varAssig.getPosition, "", tcCtx)
+          checkSubtypingConstraint(fieldType, rhsType, varAssig.getPosition, "")
           select.setType(fieldType)
         case _ =>
           reportError("syntax error: only variables, struct fields and array elements can be assigned", varAssig.getPosition)
@@ -375,19 +391,19 @@ final class TypeChecker(errorReporter: ErrorReporter)
           tcCtx.varIsAssigned(name)
           val inPlaceModifiedType = mustBeReassignable(name, tcCtx, varModif.getPosition)
           val operatorRetType = mustExistOperator(inPlaceModifiedType, op, rhsType, varModif.getPosition)
-          checkSubtypingConstraint(inPlaceModifiedType, operatorRetType, varModif.getPosition, "", tcCtx)
+          checkSubtypingConstraint(inPlaceModifiedType, operatorRetType, varModif.getPosition, "")
           varRef.setType(inPlaceModifiedType)
         case indexing@Indexing(indexed, _) =>
           checkExpr(indexing)
           val inPlaceModifiedElemType = exprMustBeIndexable(indexed.getType, tcCtx, varModif.getPosition,
             mustUpdate = true, allowString = false)
           val operatorRetType = mustExistOperator(inPlaceModifiedElemType, op, rhsType, varModif.getPosition)
-          checkSubtypingConstraint(inPlaceModifiedElemType, operatorRetType, varModif.getPosition, "", tcCtx)
+          checkSubtypingConstraint(inPlaceModifiedElemType, operatorRetType, varModif.getPosition, "")
         case select@Select(structExpr, selected) =>
           val structType = checkExpr(structExpr)
           val inPlaceModifiedFieldType = checkFieldAccess(structExpr, selected, varModif.getPosition, mustUpdateField = true)
           val operatorRetType = mustExistOperator(inPlaceModifiedFieldType, op, rhsType, varModif.getPosition)
-          checkSubtypingConstraint(inPlaceModifiedFieldType, operatorRetType, varModif.getPosition, "", tcCtx)
+          checkSubtypingConstraint(inPlaceModifiedFieldType, operatorRetType, varModif.getPosition, "")
           select.setType(inPlaceModifiedFieldType)
         case _ =>
           reportError("syntax error: only variables, struct fields and array elements can be assigned", varModif.getPosition)
@@ -395,7 +411,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
     case ifThenElse@IfThenElse(cond, thenBr, elseBrOpt) =>
       val condType = checkExpr(cond)
-      checkSubtypingConstraint(BoolType, condType, ifThenElse.getPosition, "if condition", tcCtx)
+      checkSubtypingConstraint(BoolType, condType, ifThenElse.getPosition, "if condition")
       val smartCasts = detectSmartCasts(cond, tcCtx)
       ifThenElse.setSmartCasts(smartCasts)
       checkStat(thenBr)(using tcCtx.copyWithSmartCasts(smartCasts))
@@ -403,7 +419,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
     case whileLoop@WhileLoop(cond, body) =>
       val condType = checkExpr(cond)
-      checkSubtypingConstraint(BoolType, condType, whileLoop.getPosition, "while condition", tcCtx)
+      checkSubtypingConstraint(BoolType, condType, whileLoop.getPosition, "while condition")
       val smartCasts = detectSmartCasts(cond, tcCtx)
       checkStat(body)(using tcCtx.copyWithSmartCasts(smartCasts))
 
@@ -411,7 +427,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       val newCtx = tcCtx.copied
       initStats.foreach(checkStat(_)(using newCtx))
       val condType = checkExpr(cond)(using newCtx)
-      checkSubtypingConstraint(BoolType, condType, forLoop.getPosition, "for loop condition", tcCtx)
+      checkSubtypingConstraint(BoolType, condType, forLoop.getPosition, "for loop condition")
       val smartCasts = detectSmartCasts(cond, tcCtx)
       val smartCastsAwareCtx = newCtx.copyWithSmartCasts(smartCasts)
       stepStats.foreach(checkStat(_)(using smartCastsAwareCtx))
@@ -421,7 +437,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
     case retStat@ReturnStat(valueOpt) =>
       valueOpt.foreach { value =>
         val retType = checkExpr(value)
-        checkSubtypingConstraint(expRetType, retType, retStat.getPosition, "returned value", tcCtx)
+        checkSubtypingConstraint(expRetType, retType, retStat.getPosition, "returned value")
       }
       if (expRetType == NothingType) {
         reportError(s"unexpected return in function returning $NothingType", retStat.getPosition)
@@ -433,33 +449,29 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
     case panicStat@PanicStat(msg) =>
       val msgType = checkExpr(msg)
-      checkSubtypingConstraint(StringType, msgType, panicStat.getPosition, "panic", tcCtx)
+      checkSubtypingConstraint(StringType, msgType, panicStat.getPosition, "panic")
 
-    case RestrictedStat(capabilitiesExpressions, body) =>
-      // TODO also support regions? or even structs and arrays?
-      val allowedPackagesB = Set.newBuilder[TypeIdentifier]
-      val allowedDevicesB = Set.newBuilder[Device]
-      for (capabilityExpr <- capabilitiesExpressions) {
-        checkExpr(capabilityExpr)
-        convertToCapturable(capabilityExpr, Some(errorReporter), idsAreFields = false).foreach {
-          case CapPackage(pkgName) =>
-            allowedPackagesB.addOne(pkgName)
-          case CapDevice(device) =>
-            allowedDevicesB.addOne(device)
-          case capability =>
-            reportError("unexpected capability, only packages and devices are allowed here", capabilityExpr.getPosition)
+    case RestrictedStat(captureSetTree, body) =>
+      val captureDescr = checkCaptureDescr(captureSetTree, idsAreFields = false)
+      val innerCtx = tcCtx.copyWithEnvironment(captureDescr, insideEnclosure = tcCtx.insideEnclosure)
+      checkStat(body)(using innerCtx)
+
+    case EnclosedStat(captureSetTree, body) =>
+      val captureDescr = checkCaptureDescr(captureSetTree, idsAreFields = false)
+      for (capability <- captureSetTree.capturedExpressions) {
+        val isRegion = capability.getTypeShape == RegionType
+        val isPackage = capability.isInstanceOf[PackageRef]
+        val isDevice = capability.isInstanceOf[DeviceRef]
+        val isAllowed = isRegion || isDevice || isPackage
+        if (!isAllowed){
+          reportError(
+            s"only regions, devices, and packages may appear in the capture set of an enclosed block",
+            capability.getPosition
+          )
         }
       }
-      val environment = Environment(allowedPackagesB.result(), allowedDevicesB.result())
-      checkStat(body)(using tcCtx, environment)
-
-    case EnclosedStat(capabilities, body) =>
-      for (capability <- capabilities) {
-        val capabilityType = checkExpr(capability)
-        // TODO support devices, and maybe structs and arrays
-        checkSubtypingConstraint(RegionType ^ CaptureSet.singletonOfRoot, capabilityType, capability.getPosition, "enclosure permission", tcCtx)
-      }
-      checkStat(body)
+      val innerCtx = tcCtx.copyWithEnvironment(captureDescr, insideEnclosure = true)
+      checkStat(body)(using innerCtx)
   }
 
   private def checkLiteralExpr(literal: Literal): Type = literal match {
@@ -470,7 +482,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
     case _: StringLit => StringType
   }
 
-  private def checkExpr(expr: Expr)(using tcCtx: TypeCheckingContext, env: Environment): Type = {
+  private def checkExpr(expr: Expr)(using tcCtx: TypeCheckingContext): Type = {
     val tpe = expr match {
 
       case literal: Literal =>
@@ -488,12 +500,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
         tcCtx.meType
 
       case pkg@PackageRef(packageName) =>
-        if (!env.allowsPackage(packageName)) {
-          reportError(
-            s"illegal reference to $packageName (the current module or restricted block does not allow it)",
-            pkg.getPosition
-          )
-        }
         tcCtx.resolveType(packageName) match {
           case Some(packageSignature: PackageSignature) => packageSignature.getNonSubstitutedType
           case Some(_) => reportError(s"$packageName is not a package and is thus not allowed here", pkg.getPosition)
@@ -501,12 +507,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
         }
 
       case devRef@DeviceRef(device) =>
-        if (!env.allowsDevice(device)) {
-          reportError(
-            s"illegal reference to device $device (the current module or restricted block does not allow it)",
-            devRef.getPosition
-          )
-        }
         device.tpe
 
       case call@Call(None, funName, args) =>
@@ -523,18 +523,18 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case indexing@Indexing(indexed, arg) =>
         val indexedType = checkExpr(indexed)
         val argType = checkExpr(arg)
-        checkSubtypingConstraint(IntType, argType, indexing.getPosition, "array index", tcCtx)
+        checkSubtypingConstraint(IntType, argType, indexing.getPosition, "array index")
         val elemType = exprMustBeIndexable(indexed.getType, tcCtx, indexed.getPosition, mustUpdate = false, allowString = true)
         checkUnboxedType(elemType, indexing.getPosition)
         elemType
 
       case arrayInit@ArrayInit(region, elemTypeTree, size) =>
-        checkAndRequireRegion(region, tcCtx)
+        checkAndRequireRegion(region)
         if (elemTypeTree == VoidType || elemTypeTree == NothingType) {
           reportError(s"array cannot have element type $elemTypeTree", arrayInit.getPosition)
         }
         val sizeType = checkExpr(size)
-        checkSubtypingConstraint(IntType, sizeType, size.getPosition, "array size", tcCtx)
+        checkSubtypingConstraint(IntType, sizeType, size.getPosition, "array size")
         size match {
           case IntLit(value) if value < 0 =>
             reportError("array size should be nonnegative", size.getPosition)
@@ -544,11 +544,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
         ArrayTypeShape(elemType, modifiable = true) ^ computeCaptures(List(region))
 
       case filledArrayInit@FilledArrayInit(regionOpt, Nil) =>
-        regionOpt.foreach(checkAndRequireRegion(_, tcCtx))
+        regionOpt.foreach(checkAndRequireRegion)
         reportError("cannot infer type of empty array, use 'arr <type>[0]' instead", filledArrayInit.getPosition)
 
       case filledArrayInit@FilledArrayInit(regionOpt, arrayElems) =>
-        regionOpt.foreach(checkAndRequireRegion(_, tcCtx))
+        regionOpt.foreach(checkAndRequireRegion)
         val types = arrayElems.map(checkExpr)
         computeJoinOf(types.toSet, tcCtx) match {
           case Some(elemsJoin) =>
@@ -558,7 +558,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         }
 
       case instantiation@StructOrModuleInstantiation(regionOpt, tid, args) =>
-        regionOpt.foreach(checkAndRequireRegion(_, tcCtx))
+        regionOpt.foreach(checkAndRequireRegion)
         tcCtx.resolveType(tid) match {
           case Some(structSig: StructSignature) if structSig.isInterface =>
             reportError(
@@ -610,7 +610,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         // no check for unused mut because no binary operator requires mutability on its arguments
         val lhsType = checkExpr(lhs)
         val smartCasts = if operator == Operator.And then detectSmartCasts(lhs, tcCtx) else Map.empty
-        val rhsType = checkExpr(rhs)(using tcCtx.copyWithSmartCasts(smartCasts), env)
+        val rhsType = checkExpr(rhs)(using tcCtx.copyWithSmartCasts(smartCasts))
         binOp.setSmartCasts(smartCasts)
         if (operator == Equality || operator == Inequality) {
           val isSubOrSupertype = lhsType.subtypeOf(rhsType) || rhsType.subtypeOf(lhsType)
@@ -628,10 +628,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
       case ternary@Ternary(cond, thenBr, elseBr) =>
         val condType = checkExpr(cond)
-        checkSubtypingConstraint(BoolType, condType, ternary.getPosition, "ternary operator condition", tcCtx)
+        checkSubtypingConstraint(BoolType, condType, ternary.getPosition, "ternary operator condition")
         val smartCasts = detectSmartCasts(cond, tcCtx)
         ternary.setSmartCasts(smartCasts)
-        val thenType = checkExpr(thenBr)(using tcCtx.copyWithSmartCasts(smartCasts), env)
+        val thenType = checkExpr(thenBr)(using tcCtx.copyWithSmartCasts(smartCasts))
         val elseType = checkExpr(elseBr)
         val thenIsSupertype = elseType.subtypeOf(thenType)
         val thenIsSubtype = thenType.subtypeOf(elseType)
@@ -673,17 +673,19 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case _: Sequence => throw AssertionError("should not happen, as Sequences are produced by the desugaring phase")
     }
     expr.setType(tpe)
+    if (!computeCaptures(List(expr)).subcaptureOf(tcCtx.currentEnvironment)){
+      reportError(s"expression has type $tpe, which is forbidden in the current environment", expr.getPosition)
+    }
     tpe
   }
 
-  private def checkAndRequireRegion(region: Expr, ctx: TypeCheckingContext)(using TypeCheckingContext, Environment): Unit = {
+  private def checkAndRequireRegion(region: Expr)(using ctx: TypeCheckingContext): Unit = {
     val regType = checkExpr(region)
-    checkSubtypingConstraint(PrimitiveTypeShape.RegionType ^ CaptureSet.singletonOfRoot, regType,
-      region.getPosition, "region", ctx)
+    checkSubtypingConstraint(PrimitiveTypeShape.RegionType ^ CaptureSet.singletonOfRoot, regType, region.getPosition, "region")
   }
 
   private def unaryOperatorSignatureFor(operator: Operator, operand: TypeShape)
-                                       (using TypeCheckingContext, Environment): Option[UnaryOpSignature] = {
+                                       (using TypeCheckingContext): Option[UnaryOpSignature] = {
     unaryOperators.find {
       case UnaryOpSignature(op, operandType, _) =>
         operator == op && operand.subtypeOf(operandType)
@@ -691,7 +693,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def binaryOperatorSigFor(left: TypeShape, operator: Operator, right: TypeShape)
-                                  (using TypeCheckingContext, Environment): Option[BinaryOpSignature] = {
+                                  (using TypeCheckingContext): Option[BinaryOpSignature] = {
     binaryOperators.find {
       case BinaryOpSignature(leftOperandType, op, rightOperandType, _) =>
         left.subtypeOf(leftOperandType) && op == operator && right.subtypeOf(rightOperandType)
@@ -705,7 +707,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
                             call: Call,
                             owner: TypeIdentifier,
                             fallbackOwnerOpt: Option[TypeIdentifier]
-                          )(using tcCtx: TypeCheckingContext, envir: Environment): Type = {
+                          )(using tcCtx: TypeCheckingContext): Type = {
     val funName = call.function
     val args = call.args
     val pos = call.getPosition
@@ -763,7 +765,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def structCastResult(srcType: TypeShape, destType: TypeShape, ctx: TypeCheckingContext)
-                              (using TypeCheckingContext, Environment): Option[NamedTypeShape] = {
+                              (using TypeCheckingContext): Option[NamedTypeShape] = {
     (srcType, destType) match {
       case (srcType: NamedTypeShape, destType: NamedTypeShape)
         if destType.subtypeOf(srcType) || srcType.subtypeOf(destType)
@@ -778,10 +780,16 @@ final class TypeChecker(errorReporter: ErrorReporter)
                              receiverOpt: Option[Expr],
                              args: List[Expr],
                              callPos: Option[Position]
-                           )(using callerCtx: TypeCheckingContext, env: Environment): Type = {
+                           )(using callerCtx: TypeCheckingContext): Type = {
     val expTypesIter = funSig.args.iterator
     val argsIter = args.iterator
-    val calleeCtx = TypeCheckingContext(callerCtx.analysisContext, funOwnerSig.id, funOwnerSig.getNonSubstitutedCaptureDescr)
+    val calleeCtx = TypeCheckingContext(
+      callerCtx.analysisContext,
+      environment = CaptureSet.singletonOfRoot,
+      insideEnclosure = false,
+      funOwnerSig.id,
+      meCaptureDescr = funOwnerSig.getNonSubstitutedCaptureDescr
+    )
     val substitutor = PathsSubstitutor(calleeCtx, errorReporter)
     for {
       receiver <- receiverOpt
@@ -819,7 +827,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
     substitutor.subst(funSig.retType, callPos)
   }
 
-  private def computeCaptures(captured: List[Expr])(using TypeCheckingContext, Environment): CaptureDescriptor =
+  private def computeCaptures(captured: List[Expr])(using TypeCheckingContext): CaptureDescriptor =
     CaptureDescriptors.unionOf(captured.map(minimalCaptureSetFor))
 
   private def detectSmartCasts(expr: Expr, ctx: TypeCheckingContext): Map[FunOrVarId, CastTargetTypeShape] = {
@@ -893,6 +901,9 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case _: PanicStat =>
         EndStatus(true)
 
+      case RestrictedStat(_, body) =>
+        checkReturns(body)
+
       case EnclosedStat(_, body) =>
         checkReturns(body)
 
@@ -936,7 +947,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   }
 
   private def mustExistOperator(lhsType: Type, operator: Operator, rhsType: Type, position: Option[Position])
-                               (using TypeCheckingContext, Environment): Type = {
+                               (using TypeCheckingContext): Type = {
     binaryOperatorSigFor(lhsType.shape, operator, rhsType.shape) match {
       case Some(sig) => sig.retType
       case None =>
@@ -949,15 +960,17 @@ final class TypeChecker(errorReporter: ErrorReporter)
                                 fieldName: FunOrVarId,
                                 posOpt: Option[Position],
                                 mustUpdateField: Boolean
-                              )(using callerCtx: TypeCheckingContext, env: Environment): Type = {
+                              )(using callerCtx: TypeCheckingContext): Type = {
 
     val receiverCaptOpt = convertToCapturable(receiver, erOpt = None, idsAreFields = false)
 
     def performSubstIfApplicable(rawType: Type, structOrModuleSignature: ConstructibleSig): Type = {
       val calleeCtx = TypeCheckingContext(
         callerCtx.analysisContext,
+        environment = CaptureDescriptors.singletonSetOfRoot,
+        insideEnclosure = false,
         structOrModuleSignature.id,
-        structOrModuleSignature.getNonSubstitutedCaptureDescr
+        meCaptureDescr = structOrModuleSignature.getNonSubstitutedCaptureDescr
       )
       for ((paramName, fieldInfo) <- structOrModuleSignature.params) {
         calleeCtx.addLocal(paramName, fieldInfo.tpe, None, false, true, () => (), () => ())
@@ -1000,9 +1013,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
                                         expected: Type,
                                         actual: Type,
                                         posOpt: Option[Position],
-                                        msgPrefix: String,
-                                        ctx: TypeCheckingContext
-                                      )(using TypeCheckingContext, Environment): Unit = {
+                                        msgPrefix: String
+                                      )(using ctx: TypeCheckingContext): Unit = {
     if (expected != UndefinedTypeShape && actual != UndefinedTypeShape && !actual.subtypeOf(expected)) {
       val fullprefix = if msgPrefix == "" then "" else (msgPrefix ++ ": ")
       reportError(fullprefix ++ s"expected '$expected', found '$actual'", posOpt)
@@ -1045,7 +1057,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
   }
 
-  private def minimalCaptureSetFor(expr: Expr)(using TypeCheckingContext, Environment): CaptureDescriptor = {
+  private def minimalCaptureSetFor(expr: Expr)(using TypeCheckingContext): CaptureDescriptor = {
     convertToCapturable(expr, erOpt = None, idsAreFields = false) map { path =>
       CaptureSet(path)
     } getOrElse {

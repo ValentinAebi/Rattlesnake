@@ -4,10 +4,11 @@ import compiler.analysisctx.AnalysisContext
 import compiler.pipeline.CompilationStep.TypeChecking
 import compiler.reporting.Errors.{ErrorReporter, Warning}
 import compiler.reporting.{Errors, Position}
+import compiler.typechecker.SubcaptureRelation.subcaptureOf
 import compiler.typechecker.TypeCheckingContext.{LocalInfo, LocalUsesCollector}
 import identifiers.{FunOrVarId, TypeIdentifier}
 import lang.*
-import lang.Capturables.{ConcreteCapturable, Path}
+import lang.Capturables.{ConcreteCapturable, IdPath, Path}
 import lang.CaptureDescriptors.*
 import lang.Types.*
 import lang.Types.PrimitiveTypeShape.{NothingType, VoidType}
@@ -20,10 +21,14 @@ import scala.collection.mutable
 final case class TypeCheckingContext private(
                                               analysisContext: AnalysisContext,
                                               private val locals: mutable.Map[FunOrVarId, LocalInfo] = mutable.Map.empty,
+                                              private var environment: CaptureDescriptor,
+                                              insideEnclosure: Boolean,
                                               meId: TypeIdentifier,
                                               meCaptureDescr: CaptureDescriptor
                                             ) {
 
+  def currentEnvironment: CaptureDescriptor = environment
+  
   def meType: Type = NamedTypeShape(meId) ^ meCaptureDescr
 
   // Locals that have been created by this context (i.e. not obtained via copied)
@@ -47,6 +52,9 @@ final case class TypeCheckingContext private(
       case (id, info) => id -> info.copy(tpe = smartCasts.getOrElse(id, info.tpe))
     })
   }
+
+  def copyWithEnvironment(newEnvir: CaptureDescriptor, insideEnclosure: Boolean): TypeCheckingContext =
+    copy(environment = newEnvir, insideEnclosure = insideEnclosure)
 
   /**
    * Register a new local
@@ -73,6 +81,9 @@ final case class TypeCheckingContext private(
     } else {
       locals.put(name, LocalInfo(name, tpe, isReassignable, defPos, declHasTypeAnnot))
       ownedLocals.addOne(name)
+      if (!tpe.captureDescriptor.isEmpty) {
+        environment = environment.union(CaptureSet(IdPath(name)))
+      }
     }
   }
 
@@ -86,7 +97,7 @@ final case class TypeCheckingContext private(
         .map(tpe => LocalInfo(name, tpe, isReassignable = false, defPos = None, declHasTypeAnnot = false))
     )
   }
-  
+
   def lookup(path: Path): Type = path match {
     case Capturables.IdPath(id) =>
       getLocalOnly(id).filter(!_.isReassignable).map(_.tpe)
@@ -138,8 +149,15 @@ final case class TypeCheckingContext private(
 
 object TypeCheckingContext {
 
-  def apply(analysisContext: AnalysisContext, meId: TypeIdentifier, meCaptureDescr: CaptureDescriptor): TypeCheckingContext =
-    TypeCheckingContext(analysisContext, mutable.Map.empty, meId, meCaptureDescr)
+  def apply(
+             analysisContext: AnalysisContext,
+             environment: CaptureDescriptor,
+             insideEnclosure: Boolean,
+             meId: TypeIdentifier,
+             meCaptureDescr: CaptureDescriptor
+           ): TypeCheckingContext = {
+    TypeCheckingContext(analysisContext, mutable.Map.empty, environment, insideEnclosure, meId, meCaptureDescr)
+  }
 
   final case class LocalInfo private(
                                       name: FunOrVarId,

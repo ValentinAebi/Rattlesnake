@@ -189,34 +189,40 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     pkgRef OR deviceRef OR path
   } setName "capturableExpr"
 
-  private lazy val implicitRootCapOrBrand = recursive {
+  private lazy val hatAndImplicitRootCapOrBrand = recursive {
     op(Hat) ::: opt(op(QuestionMark)) map {
       case hat ^: None => ImplicitRootCaptureSetTree()
       case hat ^: Some(_) => BrandTree()
     }
-  } setName "implicitRootCapOrBrand"
+  } setName "hatAndImplicitRootCapOrBrand"
 
-  private lazy val captureSet = recursive {
+  private lazy val explicitCaptureSetTree = recursive {
+    openBrace ::: repeatWithSep(expr, comma) ::: closeBrace map {
+      case expressions => ExplicitCaptureSetTree(expressions)
+    }
+  } setName "explicitCaptureSetTree"
+
+  private lazy val hatAndExplicitCaptureSetTree = recursive {
     op(HatOpenBrace) ::: repeatWithSep(expr, comma) ::: closeBrace map {
       case _ ^: expressions => ExplicitCaptureSetTree(expressions)
     }
-  } setName "captureSet"
+  } setName "hatAndExplicitCaptureSetTree"
   
-  private lazy val captureDescr: P[CaptureDescrTree] = recursive {
-    implicitRootCapOrBrand OR captureSet
-  } setName "captureDescr"
+  private lazy val hatAndCaptureDescr: P[CaptureDescrTree] = recursive {
+    hatAndImplicitRootCapOrBrand OR hatAndExplicitCaptureSetTree
+  } setName "hatAndCaptureDescr"
   
   private lazy val primOrNamedShape = highName map { typeName =>
     val primTypeOpt = Types.primTypeFor(typeName).map(PrimitiveTypeShapeTree(_))
     primTypeOpt.getOrElse(NamedTypeShapeTree(typeName))
   } setName "primOrNamedShape"
 
-  private lazy val primOrNamedType = primOrNamedShape ::: opt(captureDescr) map {
+  private lazy val primOrNamedType = primOrNamedShape ::: opt(hatAndCaptureDescr) map {
     case shape ^: cdOpt => shape ^ cdOpt
   } setName "primOrNamedType"
 
   private lazy val arrayType = recursive {
-    opt(kw(Mut)) ::: kw(Arr).ignored ::: opt(captureDescr) ::: typeTree map {
+    opt(kw(Mut)) ::: kw(Arr).ignored ::: opt(hatAndCaptureDescr) ::: typeTree map {
       case mutOpt ^: cdOpt ^: tp => ArrayTypeShapeTree(tp, mutOpt.isDefined) ^ cdOpt
     }
   } setName "arrayType"
@@ -395,14 +401,14 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "panicStat"
   
   private lazy val restrictedStat = {
-    kw(Restricted).ignored ::: parenthArgsList ::: block map {
-      case args ^: body => RestrictedStat(args, body)
+    kw(Restricted).ignored ::: explicitCaptureSetTree ::: block map {
+      case cs ^: body => RestrictedStat(cs, body)
     }
   } setName "restrictedStat"
 
   private lazy val enclosedStat = {
-    kw(Enclosed).ignored ::: parenthArgsList ::: block map {
-      case args ^: body => EnclosedStat(args, body)
+    kw(Enclosed).ignored ::: explicitCaptureSetTree ::: block map {
+      case cs ^: body => EnclosedStat(cs, body)
     }
   } setName "enclosedStat"
 

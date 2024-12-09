@@ -280,11 +280,11 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
   }
   
   private def lower(restrictedStat: RestrictedStat): RestrictedStat = propagatePosition(restrictedStat.getPosition) {
-    RestrictedStat(restrictedStat.capabilities.map(lower), lower(restrictedStat.body))
+    RestrictedStat(lower(restrictedStat.captureSet), lower(restrictedStat.body))
   }
   
   private def lower(enclosedStat: EnclosedStat): EnclosedStat = propagatePosition(enclosedStat.getPosition) {
-    EnclosedStat(enclosedStat.capabilities.map(lower), lower(enclosedStat.body))
+    EnclosedStat(lower(enclosedStat.captureSet), lower(enclosedStat.body))
   }
   
   private def lower(tpe: TypeTree): TypeTree = tpe match {
@@ -299,8 +299,14 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
     case ArrayTypeShapeTree(elemType, isModifiable) =>
       ArrayTypeShapeTree(lower(elemType), isModifiable)
   }
+  
+  private def lower(captureSetTree: ExplicitCaptureSetTree): ExplicitCaptureSetTree = propagatePosition(captureSetTree.getPosition) {
+    val lowered = ExplicitCaptureSetTree(captureSetTree.capturedExpressions.map(lower))
+    lowered.setResolvedDescrOpt(captureSetTree.getResolvedDescrOpt)
+    lowered
+  }
 
-  private def lower(captureDescrTree: CaptureDescrTree): CaptureDescrTree = {
+  private def lower(captureDescrTree: CaptureDescrTree): CaptureDescrTree = propagatePosition(captureDescrTree.getPosition) {
     val loweredCapDescr = captureDescrTree match {
       case ExplicitCaptureSetTree(capturedExpressions) =>
         ExplicitCaptureSetTree(capturedExpressions.map(lower))

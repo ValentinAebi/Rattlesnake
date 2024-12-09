@@ -6,7 +6,7 @@ import compiler.pipeline.CompilationStep.ContextCreation
 import compiler.reporting.Errors.{Err, ErrorReporter}
 import compiler.reporting.Position
 import compiler.typechecker.SubtypeRelation.subtypeOf
-import compiler.typechecker.{Environment, TypeCheckingContext}
+import compiler.typechecker.TypeCheckingContext
 import identifiers.{FunOrVarId, IntrinsicsPackageId, TypeIdentifier}
 import lang.*
 import lang.Capturables.*
@@ -53,11 +53,6 @@ final case class AnalysisContext private(
         } getOrElse FunctionNotFound(ownerSig)
       } getOrElse ModuleNotFound
   }
-
-  def unrestrictedEnvironment: Environment = Environment(
-    packages.keySet,
-    Device.values.toSet
-  )
 
 }
 
@@ -301,6 +296,8 @@ object AnalysisContext {
               // and what me refers to
               val tcCtx = TypeCheckingContext(
                 analysisContext = builtCtx,
+                environment = CaptureSet.singletonOfRoot,
+                insideEnclosure = false,
                 meId = directSupertypeId,
                 meCaptureDescr = directSupertypeSig.getNonSubstitutedCaptureDescr
               )
