@@ -8,11 +8,15 @@ import java.util.HashMap;
 
 
 public final class FileSystem {
+
+    public static final FileSystem $INSTANCE = new FileSystem();
+
     private final AtomicInteger idGen = new AtomicInteger();
     private final Map<Integer, FileReader> readers = new HashMap<>();
     private final Map<Integer, FileWriter> writers = new HashMap<>();
 
     public int openR(String path) throws IOException {
+        Rattlesnake$runtime.assertFileSystemAllowed();
         var id = idGen.incrementAndGet();
         var reader = new FileReader(path);
         readers.put(id, reader);
@@ -20,6 +24,7 @@ public final class FileSystem {
     }
 
     public int openW(String path) throws IOException {
+        Rattlesnake$runtime.assertFileSystemAllowed();
         var id = idGen.incrementAndGet();
         var writer = new FileWriter(path);
         writers.put(id, writer);
@@ -27,6 +32,7 @@ public final class FileSystem {
     }
 
     public void write(int fileId, String s) throws IOException {
+        Rattlesnake$runtime.assertFileSystemAllowed();
         var writer = writers.get(fileId);
         if (writer == null) {
             throw new IllegalArgumentException("no file with the given id is currently open write mode");
@@ -35,6 +41,7 @@ public final class FileSystem {
     }
 
     public int read(int fileId) throws IOException {
+        Rattlesnake$runtime.assertFileSystemAllowed();
         var reader = readers.get(fileId);
         if (reader == null) {
             throw new IllegalArgumentException("no file with the given id is currently open write mode");
@@ -43,6 +50,7 @@ public final class FileSystem {
     }
 
     public void close(int fileId) throws IOException {
+        Rattlesnake$runtime.assertFileSystemAllowed();
         var reader = readers.remove(fileId);
         if (reader != null) {
             reader.close();
@@ -53,16 +61,18 @@ public final class FileSystem {
         }
     }
 
-    public boolean createDir(String path){
+    public boolean createDir(String path) {
+        Rattlesnake$runtime.assertFileSystemAllowed();
         var dir = new File(path);
         var alreadyExists = dir.exists();
-        if (!alreadyExists){
+        if (!alreadyExists) {
             dir.mkdirs();
         }
         return alreadyExists;
     }
 
-    public boolean delete(String path){
+    public boolean delete(String path) {
+        Rattlesnake$runtime.assertFileSystemAllowed();
         var file = new File(path);
         return file.delete();
     }

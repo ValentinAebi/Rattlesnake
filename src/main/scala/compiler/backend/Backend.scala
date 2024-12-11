@@ -4,14 +4,18 @@ import compiler.analysisctx.AnalysisContext
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
 import compiler.backend.TypesConverter.{convertToAsmTypeCode, internalNameOf, numSlotsFor, opcodeFor}
 import compiler.gennames.ClassesNames.packageInstanceName
-import compiler.gennames.{FileExtensions, ClassesNames}
+import compiler.gennames.{ClassesNames, FileExtensions}
 import compiler.irs.Asts.*
 import compiler.pipeline.CompilationStep.CodeGeneration
 import compiler.pipeline.CompilerStep
 import compiler.reporting.Errors.*
 import compiler.reporting.Position
+import compiler.typechecker.SubcaptureRelation.subcaptureOf
 import identifiers.*
 import lang.*
+import lang.Capturables.CapDevice
+import lang.CaptureDescriptors.*
+import lang.Device.FileSystem
 import lang.Operator.*
 import lang.Types.PrimitiveTypeShape.*
 import lang.Types.{ArrayTypeShape, NamedTypeShape, PrimitiveTypeShape, UnionTypeShape}
@@ -20,7 +24,7 @@ import org.objectweb.asm.*
 import org.objectweb.asm.Opcodes.*
 import org.objectweb.asm.util.TraceClassVisitor
 
-import java.io.{FileOutputStream, PrintWriter}
+import java.io.{File, FileInputStream, FileOutputStream, PrintWriter}
 import java.nio.file.{Files, Path}
 import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable
@@ -40,7 +44,7 @@ final class Backend[V <: ClassVisitor](
                                         javaVersionCode: Int
                                       ) extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
 
-  private val runtimeClass = s"${ClassesNames.runtimeClassName}.class"
+  private val runtimeDir = "runtime"
 
   private var lastWrittenLine = -1
 
@@ -84,28 +88,23 @@ final class Backend[V <: ClassVisitor](
       }
 
       if (mode.generateRuntime) {
-        val runtimeFilePath = outputDir.resolve(mode.withExtension(ClassesNames.runtimeClassName))
-        copyRuntimeClass(runtimeFilePath)
-        val fileSystemFilePath = outputDir.resolve(mode.withExtension(ClassesNames.fileSystemClassName))
-        copyRuntimeClass(fileSystemFilePath)
-        generatedClassFiles.addOne(runtimeFilePath)
+        val resDirPath = getClass.getClassLoader.getResource(runtimeDir).getPath
+        for (injectedFileName <- new File(resDirPath).list()) {
+          val inDir = s"$resDirPath/$injectedFileName"
+          val outDirPath = outputDir.resolve(injectedFileName)
+          Using(new FileInputStream(inDir)) { inStream =>
+            Using(new FileOutputStream(outDirPath.toFile)) { outStream =>
+              inStream.transferTo(outStream)
+            }.get
+          }.get
+          generatedClassFiles.addOne(outDirPath)
+        }
       }
 
       errorReporter.displayAndTerminateIfErrors()
       generatedClassFiles.toList
     }
 
-  }
-
-  private def copyRuntimeClass(path: Path): Unit = {
-    val stream = getClass.getClassLoader.getResourceAsStream(runtimeClass)
-    if (stream == null) {
-      throw new AssertionError("Compiler packaging error: runtime class not found.\n" +
-        s"Please make sure that the executable of the compiler contains $runtimeClass and " +
-        s"its utilities in a resource directory.\n" +
-        "Also see the Makefile in runtime_src.")
-    }
-    Using(new FileOutputStream(path.toFile))(stream.transferTo).get
   }
 
   /**
@@ -414,7 +413,7 @@ final class Backend[V <: ClassVisitor](
         mv.visitFieldInsn(Opcodes.GETSTATIC, internalName, packageInstanceName, descr)
 
       case DeviceRef(Device.FileSystem) =>
-        RuntimeMethod.GetFileSystem.generateCall(mv)
+        mv.visitFieldInsn(Opcodes.GETSTATIC, ClassesNames.fileSystemClassName, "$INSTANCE", "LFileSystem;")
 
       case Call(None, funName, args) => {
         val generateArgs: () => Unit = { () =>
@@ -451,7 +450,6 @@ final class Backend[V <: ClassVisitor](
 
       case arrayInit@ArrayInit(region, elemTypeTree, size) =>
         val elemType = elemTypeTree.getResolvedType
-        generateCode(region, ctx)
         generateCode(size, ctx)
         elemType.shape match {
           case _: (PrimitiveTypeShape.StringType.type | NamedTypeShape | ArrayTypeShape | UnionTypeShape) =>
@@ -461,27 +459,16 @@ final class Backend[V <: ClassVisitor](
             mv.visitIntInsn(Opcodes.NEWARRAY, elemTypeCode)
           case Types.UndefinedTypeShape => shouldNotHappen()
         }
-        mv.visitInsn(Opcodes.DUP_X1)
-        mv.visitInsn(Opcodes.SWAP)
-        RuntimeMethod.SaveNewObjectInRegion.generateCall(mv)
 
       case StructOrModuleInstantiation(regionOpt, tid, args) =>
         val constructorSig = ctx.resolveTypeAs[ConstructibleSig](tid).get.voidInitMethodSig
         val constructorDescr = descriptorForFunc(constructorSig)
-        regionOpt.foreach { region =>
-          generateCode(region, ctx)(using mv)
-        }
         mv.visitTypeInsn(Opcodes.NEW, tid.stringId)
         mv.visitInsn(Opcodes.DUP)
         for (arg <- args) {
           generateCode(arg, ctx)
         }
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, tid.stringId, ConstructorFunId.stringId, constructorDescr, false)
-        regionOpt.foreach { _ =>
-          mv.visitInsn(Opcodes.DUP_X1)
-          mv.visitInsn(Opcodes.SWAP)
-          RuntimeMethod.SaveNewObjectInRegion.generateCall(mv)
-        }
 
       case RegionCreation() =>
         RuntimeMethod.NewRegion.generateCall(mv)
@@ -719,10 +706,16 @@ final class Backend[V <: ClassVisitor](
         generateCode(body, ctx)
 
       case EnclosedStat(ExplicitCaptureSetTree(capturedExpressions), body) =>
-        // FIXME setup dynamic environment
-        // RuntimeMethod.PushFrame.generateCall(mv)
+        RuntimeMethod.StartPreparingEnvir.generateCall(mv)
+        capturedExpressions.foreach {
+          case DeviceRef(FileSystem) =>
+            RuntimeMethod.AllowFilesystem.generateCall(mv)
+          case _ => ()
+        }
+        RuntimeMethod.PushEnvir.generateCall(mv)
         generateCode(body, ctx)
-        // RuntimeMethod.PopFrame.generateCall(mv)
+        RuntimeMethod.PopEnvir.generateCall(mv)
+
 
       case other => throw new AssertionError(s"unexpected in backend: ${other.getClass}")
     }

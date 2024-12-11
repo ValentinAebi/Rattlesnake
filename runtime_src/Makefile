@@ -1,3 +1,3 @@
 
 compile:
-	javac -d ../runtime *.java
+	javac -d ../resources/runtime *.java
