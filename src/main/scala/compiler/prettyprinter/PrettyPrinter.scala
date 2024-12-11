@@ -361,16 +361,18 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
       case Cast(expr, tpe) =>
         addAst(expr)
         pps
+          .addSpace()
           .add(As.str)
           .addSpace()
-          .add(tpe.toString)
+        addAst(tpe)
 
       case TypeTest(expr, tpe) =>
         addAst(expr)
         pps
+          .addSpace()
           .add(Is.str)
           .addSpace()
-          .add(tpe.toString)
+        addAst(tpe)
 
       case PanicStat(msg) =>
         pps
@@ -473,13 +475,12 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         .startBlock()
         .newLine()
     } else {
-      pps.add("{ ")
+      pps.add("{")
     }
     while (iter.hasNext) {
       addAst(iter.next())
       if (iter.hasNext) {
-        pps
-          .add(sep)
+        pps.add(sep)
         if (onMultipleLines) {
           pps.newLine()
         }
@@ -489,7 +490,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
       pps.endBlock()
     }
     else {
-      pps.add(" }")
+      pps.add("}")
     }
   }
 
