@@ -13,7 +13,12 @@ package A {
 
 package B {
     fn b() -> Void {
+        val directory = "./out_fs/";
         val fileSystem: FileSystem^ = fs;
+        fs.createDir(directory);
+        val fid = fileSystem.openW(directory + "hello.log");
+        fileSystem.write(fid, "Hello world!");
+        fileSystem.close(fid);
     }
 }
 
@@ -56,11 +61,23 @@ package Main {
 
         val b: B^{fs} = B;
 
-        restricted(B, A){
-            restricted(A){
-                A.a();
-            };
+        restricted {A, B} {
             B.b();
+        };
+
+        enclosed {fs} {
+            val fid = fs.openR("out_fs/hello.log");
+            var str = "";
+            var stop = false;
+            while (!stop) {
+                val c = fs.read(fid);
+                stop = c == -1;
+                if (!stop){
+                    str += charToString(c as Char);
+                }
+            };
+            print(str + "\n");
+            fs.close(fid);
         };
 
         printChars("Hello");

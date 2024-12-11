@@ -377,10 +377,12 @@ final class Backend[V <: ClassVisitor](
       case Block(stats) => generateSequence(ctx, stats, optFinalExpr = None)
       case Sequence(stats, expr) => generateSequence(ctx, stats, Some(expr))
 
-      case localDef@LocalDef(varName, tpeOpt, rhs, _) =>
-        generateCode(rhs, ctx)
-        val opcode = opcodeFor(rhs.getTypeShape, Opcodes.ISTORE, Opcodes.ASTORE)
-        mv.visitVarInsn(opcode, ctx.currLocalIdx)
+      case localDef@LocalDef(varName, tpeOpt, rhsOpt, _) =>
+        rhsOpt.foreach { rhs =>
+          generateCode(rhs, ctx)
+          val opcode = opcodeFor(rhs.getTypeShape, Opcodes.ISTORE, Opcodes.ASTORE)
+          mv.visitVarInsn(opcode, ctx.currLocalIdx)
+        }
         ctx.addLocal(varName, localDef.getVarTypeOpt.get)
 
       case IntLit(value) => mv.visitLdcInsn(value)
@@ -649,6 +651,17 @@ final class Backend[V <: ClassVisitor](
 
       case ternary@Ternary(cond, thenBr, elseBr) =>
         generateIfThenElse(ternary, ctx)
+
+      case whileLoop@WhileLoop(BoolLit(true), body) =>
+        /*
+         * loopLabel:
+         *   <body>
+         *   goto loopLabel
+         */
+        val loopLabel = new Label()
+        mv.visitLabel(loopLabel)
+        generateCode(body, ctx)
+        mv.visitJumpInsn(Opcodes.GOTO, loopLabel)
 
       case whileLoop@WhileLoop(cond, body) =>
         /*

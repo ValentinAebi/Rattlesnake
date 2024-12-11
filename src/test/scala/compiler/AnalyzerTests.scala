@@ -7,6 +7,7 @@ import compiler.analysisctx.ContextCreator
 import compiler.gennames.FileExtensions
 import compiler.io.SourceFile
 import compiler.lowerer.Lowerer
+import compiler.pathschecker.PathsChecker
 import compiler.pipeline.{CompilationStep, MultiStep, TasksPipelines}
 import compiler.typechecker.TypeChecker
 import org.junit.Assert.fail
@@ -283,6 +284,7 @@ class AnalyzerTests {
       MultiStep(frontend(er))
         .andThen(new ContextCreator(er))
         .andThen(new TypeChecker(er))
+        .andThen(new PathsChecker(er))
         .andThen(new Lowerer())
     val testFile = SourceFile(s"$srcDir/$srcFileName.${FileExtensions.rattlesnake}")
     try {

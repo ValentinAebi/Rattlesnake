@@ -153,13 +153,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
     val optRetType = optRetTypeTree.map(checkType(_, idsAreFields = false)(using tcCtx))
     val expRetType = optRetType.getOrElse(VoidType)
     checkStat(body)(using tcCtx, expRetType)
-    val endStatus = checkReturns(body)
-    if (!endStatus.alwaysStopped && !expRetType.subtypeOf(VoidType)(using tcCtx)) {
-      reportError("missing return in non-Void function", funDef.getPosition)
-    }
-    if (expRetType == NothingType && !endStatus.alwaysStopped) {
-      reportError(s"cannot prove that function '$funName' with return type '$NothingType' cannot return", funDef.getPosition)
-    }
     tcCtx.writeLocalsRelatedWarnings(errorReporter)
   }
 
@@ -340,18 +333,27 @@ final class TypeChecker(errorReporter: ErrorReporter)
       }
       newCtx.writeLocalsRelatedWarnings(errorReporter)
 
-    case localDef@LocalDef(localName, optTypeAnnotTree, rhs, isReassignable) =>
-      val inferredType = checkExpr(rhs)
-      val optAnnotType = optTypeAnnotTree.map { typeAnnot =>
-        val tpe = checkType(typeAnnot, idsAreFields = false)(using tcCtx)
-        checkSubtypingConstraint(tpe, inferredType, localDef.getPosition, "local definition")
-        tpe
+    case localDef@LocalDef(localName, optTypeAnnotTree, rhsOpt, isReassignable) =>
+      if (!isReassignable && rhsOpt.isEmpty) {
+        reportError("val must be initialized", localDef.getPosition)
       }
-      val requestExplicitType = optTypeAnnotTree.isEmpty && inferredType.isInstanceOf[UnionTypeShape]
-      if (requestExplicitType) {
+      val inferredTypeOpt = rhsOpt.map(checkExpr)
+      val optAnnotType = optTypeAnnotTree.map { typeAnnotTree =>
+        val annotType = checkType(typeAnnotTree, idsAreFields = false)(using tcCtx)
+        inferredTypeOpt.foreach { inferredType =>
+          checkSubtypingConstraint(annotType, inferredType, localDef.getPosition, "local definition")
+        }
+        annotType
+      }
+      val isUnionWithoutAnnot = optTypeAnnotTree.isEmpty && inferredTypeOpt.exists(_.isInstanceOf[UnionTypeShape])
+      if (isUnionWithoutAnnot) {
         reportError(s"Please provide an explicit type for $localName", localDef.getPosition)
       }
-      val actualType = if requestExplicitType then UndefinedTypeShape else optAnnotType.getOrElse(inferredType)
+      val actualType =
+        if isUnionWithoutAnnot then UndefinedTypeShape
+        else optAnnotType.orElse(inferredTypeOpt).getOrElse {
+          reportError(s"Please provide a type for uninitialized variable $localName", localDef.getPosition)
+        }
       localDef.setVarType(actualType)
       tcCtx.addLocal(localName, actualType, localDef.getPosition, isReassignable,
         declHasTypeAnnot = optTypeAnnotTree.isDefined,
@@ -463,7 +465,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val isPackage = capability.isInstanceOf[PackageRef]
         val isDevice = capability.isInstanceOf[DeviceRef]
         val isAllowed = isRegion || isDevice || isPackage
-        if (!isAllowed){
+        if (!isAllowed) {
           reportError(
             s"only regions, devices, and packages may appear in the capture set of an enclosed block",
             capability.getPosition
@@ -673,7 +675,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case _: Sequence => throw AssertionError("should not happen, as Sequences are produced by the desugaring phase")
     }
     expr.setType(tpe)
-    if (!computeCaptures(List(expr)).subcaptureOf(tcCtx.currentEnvironment)){
+    if (!computeCaptures(List(expr)).subcaptureOf(tcCtx.currentEnvironment)) {
       reportError(s"expression has type $tpe, which is forbidden in the current environment", expr.getPosition)
     }
     tpe
@@ -848,72 +850,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
    *                      encountering an instruction that terminates the function (`return` or `panic`)
    */
   private case class EndStatus(alwaysStopped: Boolean)
-
-  /**
-   * Traverses the program, looking for instructions that end the function they are in (`return` and `panic`)
-   */
-  private def checkReturns(ast: Ast): EndStatus = {
-    ast match {
-
-      case Source(defs) =>
-        for df <- defs do {
-          checkReturns(df)
-        }
-        EndStatus(false)
-
-      case Block(stats) =>
-        var alreadyReportedDeadCode = false
-        var endStatus = EndStatus(false)
-        for stat <- stats do {
-          if (endStatus.alwaysStopped && !alreadyReportedDeadCode) {
-            reportError("dead code", stat.getPosition)
-            alreadyReportedDeadCode = true
-          }
-          val statEndStatus = checkReturns(stat)
-          endStatus = EndStatus(endStatus.alwaysStopped || statEndStatus.alwaysStopped)
-        }
-        endStatus
-
-      case ifThenElse@IfThenElse(_, thenBr, elseBrOpt) =>
-        val thenEndStatus = checkReturns(thenBr)
-        val elseEndStatus = elseBrOpt.map(checkReturns).getOrElse(EndStatus(alwaysStopped = false))
-        EndStatus(thenEndStatus.alwaysStopped && elseEndStatus.alwaysStopped)
-
-      case _: Ternary => EndStatus(false)
-
-      case whileLoop@WhileLoop(_, body) =>
-        val bodyEndStatus = checkReturns(body)
-        if (bodyEndStatus.alwaysStopped) {
-          reportError("while should be replaced by if", whileLoop.getPosition, isWarning = true)
-        }
-        bodyEndStatus
-
-      case forLoop@ForLoop(_, _, _, body) =>
-        val bodyEndStatus = checkReturns(body)
-        if (bodyEndStatus.alwaysStopped) {
-          reportError("for should be replaced by if", forLoop.getPosition, isWarning = true)
-        }
-        bodyEndStatus
-
-      case retStat: ReturnStat =>
-        EndStatus(true)
-
-      case _: PanicStat =>
-        EndStatus(true)
-
-      case RestrictedStat(_, body) =>
-        checkReturns(body)
-
-      case EnclosedStat(_, body) =>
-        checkReturns(body)
-
-      case _: (FunDef | StructDef | Param) =>
-        assert(false)
-
-      case _ => EndStatus(false)
-
-    }
-  }
 
   private def mustBeReassignable(name: FunOrVarId, ctx: TypeCheckingContext, posOpt: Option[Position]): Type = {
     ctx.getLocalOrConst(name) match

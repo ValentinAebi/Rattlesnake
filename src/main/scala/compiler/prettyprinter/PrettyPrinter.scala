@@ -140,7 +140,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           .addSpace()
           .add(device.keyword.str)
 
-      case localDef@LocalDef(valName, optTypeTree, rhs, isReassignable) =>
+      case localDef@LocalDef(valName, optTypeTree, rhsOpt, isReassignable) =>
         pps
           .add(localDef.keyword.str)
           .addSpace()
@@ -150,7 +150,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           addAst(typeTree)
         }
         pps.add(" = ")
-        addAst(rhs)
+        rhsOpt.foreach(addAst(_))
 
       case IntLit(value) =>
         pps.add(value.toString)

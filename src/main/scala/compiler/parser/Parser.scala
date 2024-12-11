@@ -357,13 +357,13 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
 
   private lazy val valDef = {
     kw(Val).ignored ::: lowName ::: opt(colon ::: typeTree) ::: assig ::: expr map {
-      case valName ^: optType ^: rhs => LocalDef(valName, optType, rhs, isReassignable = false)
+      case valName ^: optType ^: rhs => LocalDef(valName, optType, Some(rhs), isReassignable = false)
     }
   } setName "valDef"
 
   private lazy val varDef = {
-    kw(Var).ignored ::: lowName ::: opt(colon ::: typeTree) ::: assig ::: expr map {
-      case varName ^: optType ^: rhs => LocalDef(varName, optType, rhs, isReassignable = true)
+    kw(Var).ignored ::: lowName ::: opt(colon ::: typeTree) ::: opt(assig ::: expr) map {
+      case varName ^: optType ^: rhsOpt => LocalDef(varName, optType, rhsOpt, isReassignable = true)
     }
   } setName "varDef"
 

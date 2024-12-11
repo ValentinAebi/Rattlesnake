@@ -214,14 +214,12 @@ object Asts {
   /**
    * `val` or `var` definition
    *
-   * @param optType        type, if explicitely given
-   * @param rhs            expression producing the value that will be assigned to the local
    * @param isReassignable `true` if `var`, `false` if `val`
    */
   final case class LocalDef(
                              localName: FunOrVarId,
                              optTypeAnnot: Option[TypeTree],
-                             rhs: Expr,
+                             rhsOpt: Option[Expr],
                              isReassignable: Boolean
                            ) extends Statement {
 
@@ -233,7 +231,7 @@ object Asts {
 
     val keyword: Keyword = if isReassignable then Keyword.Var else Keyword.Val
 
-    override def children: List[Ast] = optTypeAnnot.toList :+ rhs
+    override def children: List[Ast] = optTypeAnnot.toList ++ rhsOpt
   }
 
   sealed abstract class Literal extends Expr {
@@ -382,7 +380,10 @@ object Asts {
     override def children: List[Ast] = List(lhs)
   }
 
-  sealed abstract class Assignment extends Statement
+  sealed abstract class Assignment extends Statement {
+    def rhs: Expr
+    def lhs: Expr
+  }
 
   /**
    * Assignment of a value to a variable (or struct field, or in an array): `lhs = rhs`

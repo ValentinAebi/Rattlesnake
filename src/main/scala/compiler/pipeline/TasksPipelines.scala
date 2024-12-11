@@ -8,6 +8,7 @@ import compiler.irs.Asts
 import compiler.lexer.Lexer
 import compiler.lowerer.Lowerer
 import compiler.parser.Parser
+import compiler.pathschecker.PathsChecker
 import compiler.prettyprinter.PrettyPrinter
 import compiler.typechecker.TypeChecker
 import org.objectweb.asm.ClassVisitor
@@ -64,6 +65,7 @@ object TasksPipelines {
     MultiStep(frontend(er))
       .andThen(new ContextCreator(er))
       .andThen(new TypeChecker(er))
+      .andThen(new PathsChecker(er))
       .andThen(Mapper(_ => okReporter("no error found")))
   }
 
@@ -83,6 +85,7 @@ object TasksPipelines {
       .andThen(Mapper(List(_)))
       .andThen(new ContextCreator(er))
       .andThen(new TypeChecker(er))
+      .andThen(new PathsChecker(er))
       .andThen(new Lowerer())
       .andThen(Mapper(_._1.head))
       .andThen(new PrettyPrinter(indentGranularity, displayAllParentheses))
@@ -96,6 +99,7 @@ object TasksPipelines {
     MultiStep(frontend(er))
       .andThen(new ContextCreator(er))
       .andThen(new TypeChecker(er))
+      .andThen(new PathsChecker(er))
       .andThen(new Lowerer())
       .andThen(new Backend(
         backendMode,

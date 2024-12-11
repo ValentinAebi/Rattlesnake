@@ -1,5 +1,5 @@
 package compiler.pipeline
 
 enum CompilationStep {
-  case Lexing, Parsing, ContextCreation, TypeChecking, CaptureChecking, CodeGeneration, SourceFileWriting
+  case Lexing, Parsing, ContextCreation, TypeChecking, PathsChecking, CodeGeneration, SourceFileWriting
 }

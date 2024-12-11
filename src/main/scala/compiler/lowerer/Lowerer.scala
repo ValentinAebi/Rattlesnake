@@ -98,7 +98,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
   }
 
   private def lower(localDef: LocalDef): LocalDef = propagatePosition(localDef.getPosition) {
-    val loweredLocal = LocalDef(localDef.localName, localDef.optTypeAnnot.map(lower), lower(localDef.rhs),
+    val loweredLocal = LocalDef(localDef.localName, localDef.optTypeAnnot.map(lower), localDef.rhsOpt.map(lower),
       localDef.isReassignable)
     loweredLocal.setVarTypeOpt(localDef.getVarTypeOpt)
     loweredLocal
@@ -168,7 +168,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
         val arrValRef = VariableRef(arrValId).setType(arrayType)
         val arrInit = ArrayInit(region, WrapperTypeTree(elemType), IntLit(arrayElems.size)).setType(filledArrayInit.getType)
         // TODO the type of the temporary variable should capture the region (for consistency)
-        val arrayValDefinition = LocalDef(arrValId, None, arrInit, isReassignable = false)
+        val arrayValDefinition = LocalDef(arrValId, None, Some(arrInit), isReassignable = false)
         arrayValDefinition.setVarType(arrayType)
         val arrElemAssigStats = arrayElems.map(lower).zipWithIndex.map {
           (elem, idx) => VarAssig(Indexing(arrValRef, IntLit(idx)).setType(UndefinedTypeShape), elem)
