@@ -170,7 +170,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
       case StringLit(value) =>
         pps
           .add("\"")
-          .add(value)
+          .add(value.replace("\n", "\\n"))
           .add("\"")
 
       case VariableRef(name) =>
