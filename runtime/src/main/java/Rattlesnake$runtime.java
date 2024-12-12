@@ -3,6 +3,9 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 public final class Rattlesnake$runtime {
 
+    private Rattlesnake$runtime() {
+    }
+
     // NOTE: This implementation assumes single-threaded execution.
     // A thread-safe runtime should include per-thread capability stacks.
 
@@ -33,14 +36,14 @@ public final class Rattlesnake$runtime {
     }
 
     public static void assertFileSystemAllowed() {
-        if (currentEnvir != null && !currentEnvir.fileSystem){
-            throw new IllegalCapabilityUse("file system");
+        if (currentEnvir != null && !currentEnvir.fileSystem) {
+            throw new Rattlesnake$IllegalCapabilityUseError("file system");
         }
     }
 
     private static int lastRegion = 0;
 
-    public static int newRegion(){
+    public static int newRegion() {
         return ++lastRegion;
     }
 
