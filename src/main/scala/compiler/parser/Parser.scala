@@ -14,6 +14,7 @@ import lang.Operator.*
 import lang.Types.{ArrayTypeShape, NamedTypeShape, TypeShape}
 import lang.*
 import lang.Capturables.*
+import lang.LanguageMode.{OcapDisabled, OcapEnabled}
 
 import scala.compiletime.uninitialized
 
@@ -91,8 +92,8 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   // ---------- Syntax description -----------------------------------------------------------------------
 
   private lazy val source: FinalTreeParser[Source] = {
-    repeat(topLevelDef ::: opt(op(Semicolon)).ignored) ::: endOfFile.ignored map {
-      defs => Source(defs)
+    opt(op(Sharp) ::: kw(NoCap) ::: semicolon) ::: repeat(topLevelDef ::: opt(op(Semicolon)).ignored) ::: endOfFile.ignored map {
+      case nocapOpt ^: defs => Source(defs, if nocapOpt.isDefined then OcapDisabled else OcapEnabled)
     }
   } setName "source"
 
@@ -330,9 +331,9 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "mutPossiblyFilledArrayInit"
 
   private lazy val arrayInit = recursive {
-    kw(Arr).ignored ::: at ::: expr ::: typeTree ::: openingBracket ::: expr ::: closingBracket map {
-      case region ^: elemType ^: size =>
-        ArrayInit(region, elemType, size)
+    kw(Arr).ignored ::: opt(at ::: expr) ::: typeTree ::: openingBracket ::: expr ::: closingBracket map {
+      case regionOpt ^: elemType ^: size =>
+        ArrayInit(regionOpt, elemType, size)
     }
   } setName "arrayInit"
 

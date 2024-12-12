@@ -1,6 +1,7 @@
 package lang
 
 import identifiers.*
+import lang.LanguageMode.OcapEnabled
 import lang.Types.PrimitiveTypeShape.*
 
 object Intrinsics {
@@ -12,11 +13,11 @@ object Intrinsics {
   val boolToString: NormalFunOrVarId = NormalFunOrVarId("boolToString")
 
   val intrinsics: Map[FunOrVarId, FunctionSignature] = Map(
-    FunctionSignature(print, List(None -> StringType), VoidType).keyed,
-    FunctionSignature(intToString, List(None -> IntType), StringType).keyed,
-    FunctionSignature(doubleToString, List(None -> DoubleType), StringType).keyed,
-    FunctionSignature(charToString, List(None -> CharType), StringType).keyed,
-    FunctionSignature(boolToString, List(None -> BoolType), StringType).keyed
+    FunctionSignature(print, List(None -> StringType), VoidType, OcapEnabled).keyed,
+    FunctionSignature(intToString, List(None -> IntType), StringType, OcapEnabled).keyed,
+    FunctionSignature(doubleToString, List(None -> DoubleType), StringType, OcapEnabled).keyed,
+    FunctionSignature(charToString, List(None -> CharType), StringType, OcapEnabled).keyed,
+    FunctionSignature(boolToString, List(None -> BoolType), StringType, OcapEnabled).keyed
   )
 
   extension(sig: FunctionSignature) private def keyed: (FunOrVarId, FunctionSignature) = {

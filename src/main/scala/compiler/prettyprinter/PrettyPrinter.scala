@@ -3,6 +3,7 @@ package compiler.prettyprinter
 import compiler.irs.Asts.*
 import compiler.pipeline.CompilerStep
 import lang.Keyword.*
+import lang.LanguageMode.OcapDisabled
 import lang.{Keyword, Operator}
 
 final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boolean = false) extends CompilerStep[Ast, String] {
@@ -16,8 +17,15 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
   private def addAst(ast: Ast)(implicit pps: PrettyPrintString): Unit = {
     ast match {
 
-      case Source(defs) =>
+      case Source(defs, languageMode) =>
         pps.newLine()
+        if (languageMode == OcapDisabled){
+          pps
+            .add("#")
+            .add(NoCap.str)
+            .add(";")
+            .newLine()
+        }
         for df <- defs do {
           pps.newLine()
           addAst(df)
@@ -199,11 +207,12 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         addAst(arg)
         pps.add("]")
 
-      case ArrayInit(region, elemTypeTree, size) =>
-        pps
-          .add(Arr.str)
-          .add("@")
-        addAst(region)
+      case ArrayInit(regionOpt, elemTypeTree, size) =>
+        pps.add(Arr.str)
+        regionOpt.foreach { region =>
+          pps.add("@")
+          addAst(region)
+        }
         pps.addSpace()
         addAst(elemTypeTree)
         pps.add("[")

@@ -1,0 +1,22 @@
+#nocap;
+
+struct UnsafeStruct {
+    xs: mut arr Int
+}
+
+package Unsafe {
+
+    fn create() -> UnsafeStruct {
+        val xs = arr Int[15];
+        return new UnsafeStruct(xs);
+    }
+
+    fn computeSum(u: UnsafeStruct) -> Int {
+        var s = 0;
+        for var i = 0; i < #(u.xs); i += 1 {
+            s += u.xs[i];
+        };
+        return s;
+    }
+
+}

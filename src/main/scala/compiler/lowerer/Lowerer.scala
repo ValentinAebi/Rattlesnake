@@ -41,7 +41,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
   }
 
   private def lower(src: Source): Source = propagatePosition(src.getPosition) {
-    Source(src.defs.map(lower)).setName(src.getName)
+    Source(src.defs.map(lower), src.languageMode).setName(src.getName)
   }
 
   private def lower(block: Block): Block = propagatePosition(block.getPosition) {
@@ -150,7 +150,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
       case deviceRef: DeviceRef => deviceRef
       case call: Call => lower(call)
       case indexing: Indexing => Indexing(lower(indexing.indexed), lower(indexing.arg))
-      case arrayInit: ArrayInit => ArrayInit(lower(arrayInit.region), arrayInit.elemType, lower(arrayInit.size))
+      case arrayInit: ArrayInit => ArrayInit(arrayInit.regionOpt.map(lower), arrayInit.elemType, lower(arrayInit.size))
       case instantiation: StructOrModuleInstantiation =>
         StructOrModuleInstantiation(instantiation.regionOpt.map(lower), instantiation.typeId, instantiation.args.map(lower))
       case regionCreation: RegionCreation => regionCreation
@@ -167,8 +167,8 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
         val elemType = arrayShape.elemType
         val arrValId = uniqueIdGenerator.next()
         val arrValRef = VariableRef(arrValId).setType(arrayType)
-        val arrInit = ArrayInit(region, WrapperTypeTree(elemType), IntLit(arrayElems.size)).setType(arrayType)
-        val arrayValDefinition = LocalDef(arrValId, None, Some(arrInit), isReassignable = false)
+        val arrInit = ArrayInit(Some(region), WrapperTypeTree(elemType), IntLit(arrayElems.size)).setType(arrayType)
+        val arrayValDefinition = LocalDef(arrValId, Some(WrapperTypeTree(arrayType)), Some(arrInit), isReassignable = false)
         arrayValDefinition.setVarType(arrayType)
         val arrElemAssigStats = arrayElems.map(lower).zipWithIndex.map {
           (elem, idx) => VarAssig(Indexing(arrValRef, IntLit(idx)).setType(UndefinedTypeShape), elem)

@@ -3,7 +3,8 @@ package compiler.typechecker
 import compiler.typechecker.TypeCheckingContext
 import compiler.typechecker.SubcaptureRelation.subcaptureOf
 import identifiers.TypeIdentifier
-import lang.StructSignature
+import lang.LanguageMode.OcapDisabled
+import lang.{LanguageMode, StructSignature}
 import lang.Types.*
 import lang.Types.PrimitiveTypeShape.*
 
@@ -11,10 +12,11 @@ import scala.collection.mutable
 
 object SubtypeRelation {
 
-  extension (l: Type) def subtypeOf(r: Type)(using TypeCheckingContext): Boolean =
-    l.shape.subtypeOf(r.shape) && l.captureDescriptor.subcaptureOf(r.captureDescriptor)
+  extension (l: Type) def subtypeOf(r: Type)(using tcCtx: TypeCheckingContext, langMode: LanguageMode): Boolean = {
+    l.shape.subtypeOf(r.shape) && (langMode == OcapDisabled || l.captureDescriptor.subcaptureOf(r.captureDescriptor))
+  }
 
-  extension (subT: TypeShape) def subtypeOf(superT: TypeShape)(using TypeCheckingContext): Boolean = {
+  extension (subT: TypeShape) def subtypeOf(superT: TypeShape)(using TypeCheckingContext, LanguageMode): Boolean = {
     (subT, superT) match {
       case _ if subT == superT => true
       case (NothingType | UndefinedTypeShape, _) => true

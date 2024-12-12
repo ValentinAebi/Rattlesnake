@@ -268,7 +268,7 @@ final class Backend[V <: ClassVisitor](
   private def generateGetter(structName: TypeIdentifier, fld: FunOrVarId, fldType: Types.Type,
                              fieldDescr: String, cv: ClassVisitor, genImplementation: Boolean)
                             (using AnalysisContext): Unit = {
-    val getterDescriptor = descriptorForFunc(FunctionSignature(fld, List.empty, fldType))
+    val getterDescriptor = descriptorForFunc(List.empty, fldType)
     var modifiers = ACC_PUBLIC
     if (!genImplementation) {
       modifiers |= ACC_ABSTRACT
@@ -288,7 +288,7 @@ final class Backend[V <: ClassVisitor](
   private def generateSetter(structName: TypeIdentifier, fld: FunOrVarId, fldType: Types.Type,
                              fieldDescr: String, cv: ClassVisitor, genImplementation: Boolean)
                             (using AnalysisContext): Unit = {
-    val setterDescriptor = descriptorForFunc(FunctionSignature(fld, List(None -> fldType), PrimitiveTypeShape.VoidType))
+    val setterDescriptor = descriptorForFunc(List(None -> fldType), PrimitiveTypeShape.VoidType)
     var modifiers = ACC_PUBLIC
     if (!genImplementation) {
       modifiers |= ACC_ABSTRACT
@@ -596,7 +596,7 @@ final class Backend[V <: ClassVisitor](
           analysisContext.structs.get(typeName).map(_.fields.apply(selected).tpe)
             .getOrElse(analysisContext.modules.apply(typeName).paramImports.apply(selected))
         if (ctx.structs.get(typeName).exists(_.isInterface)) {
-          val getterDescriptor = descriptorForFunc(FunctionSignature(selected, List.empty, fieldType))
+          val getterDescriptor = descriptorForFunc(List.empty, fieldType)
           mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, typeName.stringId, selected.stringId, getterDescriptor, true)
         } else {
           mv.visitFieldInsn(Opcodes.GETFIELD, typeName.stringId, selected.stringId, descriptorForType(fieldType.shape))
@@ -628,8 +628,7 @@ final class Backend[V <: ClassVisitor](
             val structSig = ctx.structs.apply(ownerTypeName)
             val fieldType = structSig.fields.apply(fieldName).tpe
             if (structSig.isInterface) {
-              val setterSig = FunctionSignature(fieldName, List(None -> fieldType), PrimitiveTypeShape.VoidType)
-              val setterDescriptor = descriptorForFunc(setterSig)
+              val setterDescriptor = descriptorForFunc(List(None -> fieldType), PrimitiveTypeShape.VoidType)
               mv.visitMethodInsn(Opcodes.INVOKEINTERFACE, ownerTypeName.stringId, fieldName.stringId, setterDescriptor, true)
             } else {
               mv.visitFieldInsn(

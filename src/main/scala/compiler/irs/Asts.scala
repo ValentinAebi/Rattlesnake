@@ -82,7 +82,7 @@ object Asts {
   /**
    * Code source (most of the time a file)
    */
-  final case class Source(defs: List[TopLevelDef]) extends Ast {
+  final case class Source(defs: List[TopLevelDef], languageMode: LanguageMode) extends Ast {
     private var name: String = "<missing name>"
 
     override def children: List[Ast] = defs
@@ -339,8 +339,8 @@ object Asts {
   /**
    * Initialization of an (empty) array
    */
-  final case class ArrayInit(region: Expr, elemType: TypeTree, size: Expr) extends Expr {
-    override def children: List[Ast] = List(region, elemType, size)
+  final case class ArrayInit(regionOpt: Option[Expr], elemType: TypeTree, size: Expr) extends Expr {
+    override def children: List[Ast] = regionOpt.toList ++ List(elemType, size)
   }
 
   /**
@@ -530,8 +530,7 @@ object Asts {
 
     override def children: List[Ast] = List(typeShapeTree, captureDescr)
   }
-
-  // TODO use this instead of types like PrimitiveTypeTree
+  
   final case class WrapperTypeTree(tpe: Type) extends TypeTree {
     override def getResolvedTypeOpt: Option[Type] = Some(tpe)
 

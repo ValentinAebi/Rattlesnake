@@ -116,8 +116,8 @@ final class PathsChecker(er: ErrorReporter) extends CompilerStep[(List[Source], 
       else preCallState
     case Indexing(indexed, arg) =>
       analyzeExpressions(inState, indexed, arg)
-    case ArrayInit(region, elemType, size) =>
-      analyzeExpressions(inState, region, size)
+    case ArrayInit(regionOpt, elemType, size) =>
+      analyzeExpressions(inState, regionOpt.toList :+ size)
     case FilledArrayInit(regionOpt, arrayElems) =>
       analyzeExpressions(inState, regionOpt ++ arrayElems)
     case StructOrModuleInstantiation(regionOpt, typeId, args) =>

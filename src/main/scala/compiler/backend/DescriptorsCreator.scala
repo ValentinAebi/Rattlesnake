@@ -1,8 +1,8 @@
 package compiler.backend
 
 import compiler.analysisctx.AnalysisContext
-import identifiers.{IntrinsicsPackageId, NormalTypeId, TypeIdentifier}
-import lang.Types.{PrimitiveTypeShape, TypeShape, Type}
+import identifiers.{FunOrVarId, IntrinsicsPackageId, NormalTypeId, TypeIdentifier}
+import lang.Types.{PrimitiveTypeShape, Type, TypeShape}
 import lang.*
 
 object DescriptorsCreator {
@@ -29,9 +29,11 @@ object DescriptorsCreator {
   /**
    * @return JVM descriptor for [[funSig]]
    */
-  def descriptorForFunc(funSig: FunctionSignature)(using AnalysisContext): String = {
-    val FunctionSignature(_, argTypes, retType) = funSig
+  def descriptorForFunc(argTypes: List[(Option[FunOrVarId], Type)], retType: Type)(using AnalysisContext): String = {
     argTypes.map((_, tpe) => descriptorForType(tpe.shape)).mkString("(", "", ")") ++ descriptorForType(retType.shape)
   }
+  
+  def descriptorForFunc(funSig: FunctionSignature)(using AnalysisContext): String =
+    descriptorForFunc(funSig.args, funSig.retType)
 
 }

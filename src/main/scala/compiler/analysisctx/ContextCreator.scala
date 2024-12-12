@@ -21,11 +21,11 @@ final class ContextCreator(errorReporter: ErrorReporter) extends CompilerStep[Li
       for df <- src.defs do {
         df match
           case moduleDef: ModuleDef =>
-            ctxBuilder.addModule(moduleDef)
+            ctxBuilder.addModule(moduleDef)(using src.languageMode)
           case packageDef: PackageDef =>
-            ctxBuilder.addPackage(packageDef)
+            ctxBuilder.addPackage(packageDef)(using src.languageMode)
           case structDef: StructDef =>
-            ctxBuilder.addStruct(structDef)
+            ctxBuilder.addStruct(structDef)(using src.languageMode)
           case constDef: ConstDef =>
             ctxBuilder.addConstant(constDef)
       }

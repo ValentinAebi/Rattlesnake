@@ -11,6 +11,7 @@ import identifiers.{FunOrVarId, IntrinsicsPackageId, TypeIdentifier}
 import lang.*
 import lang.Capturables.*
 import lang.CaptureDescriptors.*
+import lang.LanguageMode.*
 import lang.Types.*
 import lang.Types.PrimitiveTypeShape.{NothingType, VoidType}
 
@@ -81,20 +82,25 @@ object AnalysisContext {
         id = IntrinsicsPackageId,
         importedPackages = mutable.LinkedHashSet.empty,
         importedDevices = mutable.LinkedHashSet.empty,
-        functions = Intrinsics.intrinsics
+        functions = Intrinsics.intrinsics,
+        languageMode = OcapEnabled
       )
     ) ++ Device.values.map { device =>
       device.typeName -> PackageSignature(
         id = device.typeName,
         importedPackages = mutable.LinkedHashSet.empty,
         importedDevices = mutable.LinkedHashSet.empty,
-        functions = device.api.functions
+        functions = device.api.functions,
+        languageMode = OcapEnabled
       )
     }
     private val structs: mutable.Map[TypeIdentifier, (StructSignature, Option[Position])] = mutable.Map.empty
     private val constants: mutable.Map[FunOrVarId, Type] = mutable.Map.empty
 
-    def addModule(moduleDef: ModuleDef): Unit = {
+    def addModule(moduleDef: ModuleDef)(using langMode: LanguageMode): Unit = {
+      if (langMode == OcapDisabled) {
+        reportError("module in non-ocap file", moduleDef.getPosition)
+      }
       val moduleName = moduleDef.moduleName
       if (checkTypeNotAlreadyDefined(moduleName, moduleDef.getPosition)) {
         val (importedModules, importedPackages, importedDevices) = analyzeImports(moduleDef)
@@ -104,21 +110,21 @@ object AnalysisContext {
       }
     }
 
-    def addPackage(packageDef: PackageDef): Unit = {
+    def addPackage(packageDef: PackageDef)(using langMode: LanguageMode): Unit = {
       val packageName = packageDef.packageName
       if (checkTypeNotAlreadyDefined(packageName, packageDef.getPosition)) {
         val functions = extractFunctions(packageDef)
         val (implicitlyImportedPackages, implicitlyImportedDevices) = trackPackagesAndDevices(packageDef)
-        val sig = PackageSignature(packageName, implicitlyImportedPackages, implicitlyImportedDevices, functions)
+        val sig = PackageSignature(packageName, implicitlyImportedPackages, implicitlyImportedDevices, functions, langMode)
         packages.put(packageName, sig)
       }
     }
 
-    def addStruct(structDef: StructDef): Unit = {
+    def addStruct(structDef: StructDef)(using langMode: LanguageMode): Unit = {
       val name = structDef.structName
       if (checkTypeNotAlreadyDefined(name, structDef.getPosition)) {
         val fieldsMap = buildStructFieldsMap(structDef)
-        val sig = StructSignature(name, fieldsMap, structDef.directSupertypes, structDef.isInterface)
+        val sig = StructSignature(name, fieldsMap, structDef.directSupertypes, structDef.isInterface, langMode)
         structs.put(name, (sig, structDef.getPosition))
       }
     }
@@ -145,7 +151,7 @@ object AnalysisContext {
       builtCtx
     }
 
-    private def extractFunctions(modOrMkg: ModuleOrPackageDefTree): Map[FunOrVarId, FunctionSignature] = {
+    private def extractFunctions(modOrMkg: ModuleOrPackageDefTree)(using LanguageMode): Map[FunOrVarId, FunctionSignature] = {
       val functions = mutable.Map.empty[FunOrVarId, FunctionSignature]
       for funDef <- modOrMkg.functions do {
         val name = funDef.funName
@@ -160,13 +166,13 @@ object AnalysisContext {
       functions.toMap
     }
 
-    private def computeFunctionSig(funDef: FunDef): FunctionSignature = {
+    private def computeFunctionSig(funDef: FunDef)(using languageMode: LanguageMode): FunctionSignature = {
       val argsTypesB = List.newBuilder[(Option[FunOrVarId], Type)]
       for (Param(paramNameOpt, tpe, isReassignable) <- funDef.params) {
         argsTypesB.addOne(paramNameOpt, computeType(tpe, idsAreFields = false))
       }
       val retType = funDef.optRetType.map(computeType(_, idsAreFields = false)).getOrElse(VoidType)
-      FunctionSignature(funDef.funName, argsTypesB.result(), retType)
+      FunctionSignature(funDef.funName, argsTypesB.result(), retType, languageMode)
     }
 
     private def computeType(typeTree: TypeTree, idsAreFields: Boolean): Type = typeTree match {
@@ -226,7 +232,8 @@ object AnalysisContext {
       (packages, devices)
     }
 
-    private def buildStructFieldsMap(structDef: StructDef) = {
+    private def buildStructFieldsMap(structDef: StructDef)
+                                    (using langMode: LanguageMode): mutable.LinkedHashMap[FunOrVarId, FieldInfo] = {
       val fieldsMap = new mutable.LinkedHashMap[FunOrVarId, FieldInfo]()
       for param <- structDef.fields do {
         param.paramNameOpt match {
@@ -237,7 +244,7 @@ object AnalysisContext {
             if (checkIsNotVoidOrNothing(tpe, param.getPosition)) {
               if (!fieldsMap.contains(paramName)) {
                 // the absence of duplicate fields will be reported by the type-checker
-                fieldsMap.put(paramName, FieldInfo(tpe, param.isReassignable))
+                fieldsMap.put(paramName, FieldInfo(tpe, param.isReassignable, langMode))
               }
             }
         }
@@ -295,6 +302,7 @@ object AnalysisContext {
               // i.e. what elements each field is allowed to capture (fields of the super-/subtype)
               // and what me refers to
               val tcCtx = TypeCheckingContext(
+                OcapEnabled,
                 analysisContext = builtCtx,
                 environment = CaptureSet.singletonOfRoot,
                 insideEnclosure = false,
@@ -310,7 +318,10 @@ object AnalysisContext {
                     } else if (subFieldInfo.isReassignable && subFieldInfo.tpe != superFldInfo.tpe) {
                       reportError(s"reassignable field $fldName should have the same type in $structId as in its " +
                         s"supertype $directSupertypeId", posOpt)
-                    } else if (!subFieldInfo.isReassignable && !subFieldInfo.tpe.subtypeOf(superFldInfo.tpe)(using tcCtx)) {
+                    } else if (
+                      !subFieldInfo.isReassignable
+                        && !subFieldInfo.tpe.subtypeOf(superFldInfo.tpe)(using tcCtx, OcapEnabled)
+                    ) {
                       reportError(s"type ${subFieldInfo.tpe} of field $fldName does not conform to its type " +
                         s"${superFldInfo.tpe} in the interface $directSupertypeId", posOpt)
                     }

@@ -69,7 +69,7 @@ package Main {
             val fid = fs.openR("out_fs/hello.log");
             var str = "";
             var stop = false;
-            while (!stop) {
+            while !stop {
                 val c = fs.read(fid);
                 stop = c == -1;
                 if (!stop){

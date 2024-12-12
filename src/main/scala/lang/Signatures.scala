@@ -2,14 +2,26 @@ package lang
 
 import identifiers.*
 import lang.Capturables.*
-import lang.CaptureDescriptors.{CaptureDescriptor, CaptureSet}
-import lang.Types.PrimitiveTypeShape.VoidType
-import lang.Types.{NamedTypeShape, Type}
+import lang.CaptureDescriptors.{Brand, CaptureDescriptor, CaptureSet}
+import lang.LanguageMode.{OcapDisabled, OcapEnabled}
+import lang.Types.PrimitiveTypeShape.{RegionType, VoidType}
+import lang.Types.{NamedTypeShape, PrimitiveTypeShape, Type}
 
-import java.util
 import scala.collection.mutable
 
-final case class FunctionSignature(name: FunOrVarId, args: List[(Option[FunOrVarId], Type)], retType: Type)
+final case class FunctionSignature(
+                                    name: FunOrVarId,
+                                    args: List[(Option[FunOrVarId], Type)],
+                                    retType: Type,
+                                    languageMode: LanguageMode
+                                  ) {
+
+  def argsForMode(requestedMode: LanguageMode): List[(Option[FunOrVarId], Type)] =
+    args.map((idOpt, tpe) => (idOpt, convertType(languageMode, requestedMode, tpe)))
+
+  def retTypeForMode(requestedMode: LanguageMode): Type =
+    convertType(languageMode, requestedMode, convertType(languageMode, requestedMode, retType))
+}
 
 sealed trait TypeSignature {
   def id: TypeIdentifier
@@ -19,6 +31,8 @@ sealed trait TypeSignature {
   def getNonSubstitutedType: Type = NamedTypeShape(id) ^ getNonSubstitutedCaptureDescr
 
   def isInterface: Boolean
+
+  def languageMode: LanguageMode
 }
 
 sealed trait FunctionsProviderSig extends TypeSignature {
@@ -30,7 +44,7 @@ sealed trait ConstructibleSig extends TypeSignature {
   def params: mutable.LinkedHashMap[FunOrVarId, FieldInfo]
 
   def voidInitMethodSig: FunctionSignature =
-    FunctionSignature(ConstructorFunId, params.toList.map((id, info) => (Some(id), info.tpe)), VoidType)
+    FunctionSignature(ConstructorFunId, params.toList.map((id, info) => (Some(id), info.tpe)), VoidType, languageMode)
 }
 
 sealed trait UserConstructibleSig extends TypeSignature {
@@ -53,7 +67,7 @@ sealed trait ImporterSig extends TypeSignature {
   def importedDevices: mutable.LinkedHashSet[Device]
 
   def params: mutable.LinkedHashMap[FunOrVarId, FieldInfo] =
-    paramImports.map((id, tpe) => id -> FieldInfo(tpe, isReassignable = false))
+    paramImports.map((id, tpe) => id -> FieldInfo(tpe, isReassignable = false, languageMode))
 }
 
 final case class ModuleSignature(
@@ -71,6 +85,8 @@ final case class ModuleSignature(
       importedDevices.map(CapDevice(_))
     ).toSet)
 
+  override def languageMode: LanguageMode = OcapEnabled
+
   override def isInterface: Boolean = false
 }
 
@@ -78,7 +94,8 @@ final case class PackageSignature(
                                    id: TypeIdentifier,
                                    importedPackages: mutable.LinkedHashSet[TypeIdentifier],
                                    importedDevices: mutable.LinkedHashSet[Device],
-                                   functions: Map[FunOrVarId, FunctionSignature]
+                                   functions: Map[FunOrVarId, FunctionSignature],
+                                   languageMode: LanguageMode
                                  ) extends TypeSignature, ConstructibleSig, ImporterSig, FunctionsProviderSig {
 
   override def paramImports: mutable.LinkedHashMap[FunOrVarId, Type] = mutable.LinkedHashMap.empty
@@ -95,7 +112,8 @@ final case class StructSignature(
                                   id: TypeIdentifier,
                                   fields: mutable.LinkedHashMap[FunOrVarId, FieldInfo],
                                   directSupertypes: Seq[TypeIdentifier],
-                                  isInterface: Boolean
+                                  isInterface: Boolean,
+                                  languageMode: LanguageMode
                                 )
   extends TypeSignature, ConstructibleSig, UserConstructibleSig, SelectableSig {
 
@@ -108,4 +126,16 @@ final case class StructSignature(
   )
 }
 
-final case class FieldInfo(tpe: Type, isReassignable: Boolean)
+final case class FieldInfo(tpe: Type, isReassignable: Boolean, languageMode: LanguageMode) {
+  def tpeForMode(requestedMode: LanguageMode): Type = convertType(languageMode, requestedMode, tpe)
+}
+
+private def convertType(fromMode: LanguageMode, toMode: LanguageMode, tpe: Type): Type = (fromMode, toMode) match {
+  case (OcapEnabled, OcapDisabled) => tpe.shape
+  case (OcapDisabled, OcapEnabled) => tpe.shape match {
+    case RegionType => RegionType ^ Brand
+    case prim : PrimitiveTypeShape => prim
+    case shape => shape ^ Brand
+  }
+  case _ => tpe
+}
