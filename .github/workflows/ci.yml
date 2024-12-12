@@ -15,6 +15,6 @@ jobs:
           distribution: temurin
           java-version: 17
       - name: Compile runtime class
-        run: (cd runtime_src && make)
+        run: (cd Runtime && mvn compile)
       - name: Build and Test
         run: sbt -v +test

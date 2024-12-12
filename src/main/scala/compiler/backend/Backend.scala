@@ -44,7 +44,7 @@ final class Backend[V <: ClassVisitor](
                                         javaVersionCode: Int
                                       ) extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
 
-  private val runtimeDir = "runtime"
+  private val runtimeClassesDir = "classes"
 
   private var lastWrittenLine = -1
 
@@ -88,16 +88,21 @@ final class Backend[V <: ClassVisitor](
       }
 
       if (mode.generateRuntime) {
-        val resDirPath = getClass.getClassLoader.getResource(runtimeDir).getPath
-        for (injectedFileName <- new File(resDirPath).list()) {
-          val inDir = s"$resDirPath/$injectedFileName"
-          val outDirPath = outputDir.resolve(injectedFileName)
-          Using(new FileInputStream(inDir)) { inStream =>
-            Using(new FileOutputStream(outDirPath.toFile)) { outStream =>
-              inStream.transferTo(outStream)
+        try {
+          val resDirPath = getClass.getClassLoader.getResource(runtimeClassesDir).getPath
+          for (injectedFileName <- new File(resDirPath).list()) {
+            val inDir = s"$resDirPath/$injectedFileName"
+            val outDirPath = outputDir.resolve(injectedFileName)
+            Using(new FileInputStream(inDir)) { inStream =>
+              Using(new FileOutputStream(outDirPath.toFile)) { outStream =>
+                inStream.transferTo(outStream)
+              }.get
             }.get
-          }.get
-          generatedClassFiles.addOne(outDirPath)
+            generatedClassFiles.addOne(outDirPath)
+          }
+        } catch {
+          case thr: Throwable => throw Error("An error occured while copying the runtime environment classes into the " +
+            "generated program. This might be because you did not compile the runtime before executing the compiler.", thr)
         }
       }
 
