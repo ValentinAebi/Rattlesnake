@@ -13,9 +13,19 @@ final case class State(alwaysTerminated: Boolean, locals: Map[FunOrVarId, Initia
     locals.get(varRef.name).foreach {
       case InitializationStatus.Initialized => ()
       case InitializationStatus.Uninitialized =>
-        er.push(Err(PathsChecking, s"variable '${varRef.name}' has not been initialized", varRef.getPosition))
+        er.push(Err(PathsChecking, s"'${varRef.name}' has not been initialized", varRef.getPosition))
       case InitializationStatus.PossiblyUninitialized =>
-        er.push(Err(PathsChecking, s"cannot prove that variable '${varRef.name}' has been initialized", varRef.getPosition))
+        er.push(Err(PathsChecking, s"cannot prove that '${varRef.name}' has been initialized", varRef.getPosition))
+    }
+  }
+
+  def checkIsNotInitialized(varRef: VariableRef, er: ErrorReporter): Unit = {
+    locals.get(varRef.name).foreach {
+      case InitializationStatus.Initialized =>
+        er.push(Err(PathsChecking, s"${varRef.name} cannot be reassigned", varRef.getPosition))
+      case InitializationStatus.Uninitialized => ()
+      case InitializationStatus.PossiblyUninitialized =>
+        er.push(Err(PathsChecking, s"cannot prove that ${varRef.name} has not already been initialized", varRef.getPosition))
     }
   }
 

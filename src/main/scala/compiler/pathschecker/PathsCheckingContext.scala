@@ -4,14 +4,19 @@ import identifiers.FunOrVarId
 
 import scala.collection.mutable
 
-final case class PathsCheckingContext private(localsAndConsts: mutable.Set[FunOrVarId]) {
+/**
+ * @param localsAndConsts localId -> isReassignable
+ */
+final class PathsCheckingContext private(localsAndConsts: mutable.Map[FunOrVarId, Boolean]) {
   
   def copyForNarrowedScope(): PathsCheckingContext =
-    copy(mutable.Set.from(localsAndConsts))
+    PathsCheckingContext(mutable.Map.from(localsAndConsts))
   
-  def saveLocal(id: FunOrVarId): Unit = {
-    localsAndConsts.addOne(id)
+  def saveLocal(id: FunOrVarId, isReassignable: Boolean): Unit = {
+    localsAndConsts.put(id, isReassignable)
   }
+  
+  def isReassignable(id: FunOrVarId): Boolean = localsAndConsts.apply(id)
   
   def unknownVarsRemoved(state: State): State = State(
     state.alwaysTerminated,
@@ -21,5 +26,5 @@ final case class PathsCheckingContext private(localsAndConsts: mutable.Set[FunOr
 }
 
 object PathsCheckingContext {
-  def empty: PathsCheckingContext = PathsCheckingContext(mutable.Set.empty)
+  def empty: PathsCheckingContext = PathsCheckingContext(mutable.Map.empty)
 }

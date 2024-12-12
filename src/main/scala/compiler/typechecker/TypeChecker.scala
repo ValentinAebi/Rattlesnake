@@ -334,9 +334,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
       newCtx.writeLocalsRelatedWarnings(errorReporter)
 
     case localDef@LocalDef(localName, optTypeAnnotTree, rhsOpt, isReassignable) =>
-      if (!isReassignable && rhsOpt.isEmpty) {
-        reportError("val must be initialized", localDef.getPosition)
-      }
       val inferredTypeOpt = rhsOpt.map(checkExpr)
       val optAnnotType = optTypeAnnotTree.map { typeAnnotTree =>
         val annotType = checkType(typeAnnotTree, idsAreFields = false)(using tcCtx)
@@ -352,7 +349,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       val actualType =
         if isUnionWithoutAnnot then UndefinedTypeShape
         else optAnnotType.orElse(inferredTypeOpt).getOrElse {
-          reportError(s"Please provide a type for uninitialized variable $localName", localDef.getPosition)
+          reportError(s"Please provide a type for uninitialized local $localName", localDef.getPosition)
         }
       localDef.setVarType(actualType)
       tcCtx.addLocal(localName, actualType, localDef.getPosition, isReassignable,
@@ -368,7 +365,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       lhs match {
         case varRef@VariableRef(name) =>
           tcCtx.varIsAssigned(name)
-          val varType = mustBeReassignable(name, tcCtx, varAssig.getPosition)
+          val varType = typeOfLocalOrConst(name, tcCtx, varAssig.getPosition)
           checkSubtypingConstraint(varType, rhsType, varAssig.getPosition, "")
           varRef.setType(varType)
         case indexing@Indexing(indexed, _) =>
@@ -391,7 +388,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       lhs match {
         case varRef@VariableRef(name) =>
           tcCtx.varIsAssigned(name)
-          val inPlaceModifiedType = mustBeReassignable(name, tcCtx, varModif.getPosition)
+          val inPlaceModifiedType = typeOfLocalOrConst(name, tcCtx, varModif.getPosition)
           val operatorRetType = mustExistOperator(inPlaceModifiedType, op, rhsType, varModif.getPosition)
           checkSubtypingConstraint(inPlaceModifiedType, operatorRetType, varModif.getPosition, "")
           varRef.setType(inPlaceModifiedType)
@@ -851,15 +848,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
    */
   private case class EndStatus(alwaysStopped: Boolean)
 
-  private def mustBeReassignable(name: FunOrVarId, ctx: TypeCheckingContext, posOpt: Option[Position]): Type = {
+  private def typeOfLocalOrConst(name: FunOrVarId, ctx: TypeCheckingContext, posOpt: Option[Position]): Type = {
     ctx.getLocalOrConst(name) match
       case None =>
         reportError(s"unknown: $name", posOpt)
-      case Some(LocalInfo(_, tpe, isReassignable, _, _, _)) =>
-        if (!isReassignable) {
-          reportError(s"$name is not reassignable", posOpt)
-        }
-        tpe
+      case Some(info) => info.tpe
   }
 
   private def exprMustBeIndexable(

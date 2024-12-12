@@ -53,14 +53,16 @@ final class PathsChecker(er: ErrorReporter) extends CompilerStep[(List[Source], 
       ctx.unknownVarsRemoved(state)
     case LocalDef(localName, optTypeAnnot, rhsOpt, isReassignable) =>
       val s = rhsOpt.map(analyzeExpr(inState, _)).getOrElse(inState)
-      ctx.saveLocal(localName)
+      ctx.saveLocal(localName, isReassignable)
       s.newLocalSaved(localName, rhsOpt.isDefined)
     case VarAssig(lhs, rhs) =>
       val s1 = stateAfterEvaluatingAssignmentTarget(inState, lhs)
       val s2 = analyzeExpr(s1, rhs)
+      checkAssignmentTargetCanStillBeAssigned(lhs, s2)
       markedAssignedIfVariable(lhs, s2)
     case VarModif(lhs, rhs, op) =>
       val s = analyzeExpressions(inState, lhs, rhs)
+      checkAssignmentTargetCanStillBeAssigned(lhs, s)
       markedAssignedIfVariable(lhs, s)
     case IfThenElse(cond, thenBr, elseBrOpt) =>
       val stateAfterCond = analyzeExpr(inState, cond)
@@ -163,6 +165,12 @@ final class PathsChecker(er: ErrorReporter) extends CompilerStep[(List[Source], 
       case VariableRef(name) => state.assignmentSaved(name)
       case _ => state
     }
+  }
+
+  private def checkAssignmentTargetCanStillBeAssigned(target: Expr, state: State)(using ctx: PathsCheckingContext): Unit = target match {
+    case varRef: VariableRef if !ctx.isReassignable(varRef.name) =>
+      state.checkIsNotInitialized(varRef, er)
+    case _ => ()
   }
 
   private def isTrueLiteral(expr: Expr): Boolean = {
