@@ -27,7 +27,14 @@ final class PathsChecker(er: ErrorReporter) extends CompilerStep[(List[Source], 
   }
 
   private def checkFunction(function: FunDef): Unit = {
-    val endState = analyzeStat(State.initial, function.body)(using PathsCheckingContext.empty)
+    val ctx = PathsCheckingContext.empty
+    val stateWithParams = function.params.foldLeft(State.initial){ (accState, param) =>
+      param.paramNameOpt.map { paramName =>
+        ctx.saveLocal(paramName, param.isReassignable)
+        accState.assignmentSaved(paramName)
+      }.getOrElse(accState)
+    }
+    val endState = analyzeStat(stateWithParams, function.body)(using ctx)
     val retType = function.getSignatureOpt.get.retType
     if (!endState.alwaysTerminated && retType != VoidType) {
       er.push(Err(PathsChecking, "missing return in non-Void function", function.getPosition))
