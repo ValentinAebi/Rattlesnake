@@ -2,7 +2,7 @@
 package Main {
 
     fn main(arr String){
-        val s: UnsafeStruct = Unsafe.create();
+        val s: UnsafeStruct^ = Unsafe.create();
         for var i = 0; i < #(s.xs); i += 1 {
             s.xs[i] = 2*i + 1;
         };

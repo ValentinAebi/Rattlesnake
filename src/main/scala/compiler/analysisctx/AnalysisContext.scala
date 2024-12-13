@@ -6,7 +6,7 @@ import compiler.pipeline.CompilationStep.ContextCreation
 import compiler.reporting.Errors.{Err, ErrorReporter}
 import compiler.reporting.Position
 import compiler.typechecker.SubtypeRelation.subtypeOf
-import compiler.typechecker.TypeCheckingContext
+import compiler.typechecker.{RootEnvir, TypeCheckingContext}
 import identifiers.{FunOrVarId, IntrinsicsPackageId, TypeIdentifier}
 import lang.*
 import lang.Capturables.*
@@ -303,9 +303,8 @@ object AnalysisContext {
               // and what me refers to
               val tcCtx = TypeCheckingContext(
                 analysisContext = builtCtx,
-                environment = CaptureSet.singletonOfRoot,
-                insideEnclosure = false,
-                meId = directSupertypeId,
+                environment = RootEnvir,
+                meTypeId = directSupertypeId,
                 meCaptureDescr = directSupertypeSig.getNonSubstitutedCaptureDescr
               )
               for ((fldName, superFldInfo) <- directSupertypeSig.fields) {

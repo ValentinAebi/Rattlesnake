@@ -19,18 +19,15 @@ import scala.collection.mutable
  */
 final case class TypeCheckingContext private(
                                               analysisContext: AnalysisContext,
+                                              environment: Environment,
                                               private val locals: mutable.Map[FunOrVarId, LocalInfo] = mutable.Map.empty,
-                                              private var environment: CaptureDescriptor,
-                                              insideEnclosure: Boolean,
-                                              meId: TypeIdentifier,
+                                              meTypeId: TypeIdentifier,
                                               meCaptureDescr: CaptureDescriptor
                                             ) {
 
-  def currentEnvironment: CaptureDescriptor = environment
+  def meType: Type = NamedTypeShape(meTypeId) ^ meCaptureDescr
 
-  def meType: Type = NamedTypeShape(meId) ^ meCaptureDescr
-
-  // Locals that have been created by this context (i.e. not obtained via copied)
+  // Locals that have been created by this context (i.e. not obtained via a copy)
   private val ownedLocals: mutable.Set[FunOrVarId] = mutable.Set.empty
 
   /**
@@ -52,8 +49,8 @@ final case class TypeCheckingContext private(
     })
   }
 
-  def copyWithEnvironment(newEnvir: CaptureDescriptor, insideEnclosure: Boolean): TypeCheckingContext =
-    copy(environment = newEnvir, insideEnclosure = insideEnclosure)
+  def copyWithEnvironment(envirMaker: Environment => Environment): TypeCheckingContext =
+    copy(environment = envirMaker(environment))
 
   /**
    * Register a new local
@@ -78,11 +75,8 @@ final case class TypeCheckingContext private(
     } else if (locals.contains(name)) {
       duplicateVarCallback()
     } else {
-      locals.put(name, LocalInfo(name, tpe, isReassignable, defPos, declHasTypeAnnot))
+      locals.put(name, LocalInfo(name, tpe, isReassignable, defPos, declHasTypeAnnot, environment))
       ownedLocals.addOne(name)
-      if (!tpe.captureDescriptor.isEmpty) {
-        environment = environment.union(CaptureSet(IdPath(name)))
-      }
     }
   }
 
@@ -93,7 +87,7 @@ final case class TypeCheckingContext private(
       analysisContext.constants
         .get(name)
         // defPos and declHasTypeAnnot are never used for constants, as long as constants can only be of primitive types
-        .map(tpe => LocalInfo(name, tpe, isReassignable = false, defPos = None, declHasTypeAnnot = false))
+        .map(tpe => LocalInfo(name, tpe, isReassignable = false, defPos = None, declHasTypeAnnot = false, RootEnvir))
     )
   }
 
@@ -133,7 +127,7 @@ final case class TypeCheckingContext private(
   }
 
   def writeLocalsRelatedWarnings(errorReporter: ErrorReporter): Unit = {
-    for (_, LocalInfo(name, tpe, isReassignable, defPos, declHasTypeAnnot, usesCollector)) <- locals if ownedLocals.contains(name) do {
+    for (_, LocalInfo(name, tpe, isReassignable, defPos, declHasTypeAnnot, declaringEnvir, usesCollector)) <- locals if ownedLocals.contains(name) do {
       if (!usesCollector.queried) {
         errorReporter.push(Warning(TypeChecking, s"unused local: '$name' is never queried", defPos))
       } else if (isReassignable && !usesCollector.reassigned) {
@@ -150,12 +144,11 @@ object TypeCheckingContext {
 
   def apply(
              analysisContext: AnalysisContext,
-             environment: CaptureDescriptor,
-             insideEnclosure: Boolean,
-             meId: TypeIdentifier,
+             environment: Environment,
+             meTypeId: TypeIdentifier,
              meCaptureDescr: CaptureDescriptor
            ): TypeCheckingContext = {
-    TypeCheckingContext(analysisContext, mutable.Map.empty, environment, insideEnclosure, meId, meCaptureDescr)
+    TypeCheckingContext(analysisContext, environment, mutable.Map.empty, meTypeId, meCaptureDescr)
   }
 
   final case class LocalInfo private(
@@ -164,6 +157,7 @@ object TypeCheckingContext {
                                       isReassignable: Boolean,
                                       defPos: Option[Position],
                                       declHasTypeAnnot: Boolean,
+                                      declaringEnvir: Environment,
                                       usesCollector: LocalUsesCollector
                                     ) {
     def copy(
@@ -172,19 +166,23 @@ object TypeCheckingContext {
               isReassignable: Boolean = isReassignable,
               defPos: Option[Position] = defPos,
               declHasTypeAnnot: Boolean = declHasTypeAnnot,
+              declaringEnvir: Environment = declaringEnvir,
               usesCollector: LocalUsesCollector = usesCollector
             ): LocalInfo = {
-      LocalInfo(name, tpe, isReassignable, defPos, declHasTypeAnnot, usesCollector)
+      LocalInfo(name, tpe, isReassignable, defPos, declHasTypeAnnot, declaringEnvir, usesCollector)
     }
   }
 
   object LocalInfo {
-    def apply(name: FunOrVarId,
-              tpe: Type,
-              isReassignable: Boolean,
-              defPos: Option[Position],
-              declHasTypeAnnot: Boolean): LocalInfo = {
-      LocalInfo(name, tpe, isReassignable, defPos, declHasTypeAnnot, new LocalUsesCollector())
+    def apply(
+               name: FunOrVarId,
+               tpe: Type,
+               isReassignable: Boolean,
+               defPos: Option[Position],
+               declHasTypeAnnot: Boolean,
+               declaringEnvir: Environment,
+             ): LocalInfo = {
+      LocalInfo(name, tpe, isReassignable, defPos, declHasTypeAnnot, declaringEnvir, new LocalUsesCollector())
     }
   }
 

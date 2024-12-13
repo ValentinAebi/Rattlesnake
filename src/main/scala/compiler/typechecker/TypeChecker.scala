@@ -14,7 +14,7 @@ import compiler.typechecker.TypeCheckingContext.LocalInfo
 import identifiers.{FunOrVarId, IntrinsicsPackageId, NormalTypeId, TypeIdentifier}
 import lang.*
 import lang.Capturables.*
-import lang.CaptureDescriptors.{Mark, CaptureDescriptor, CaptureSet}
+import lang.CaptureDescriptors.{CaptureDescriptor, CaptureSet, Mark}
 import lang.LanguageMode.*
 import lang.Operator.{Equality, Inequality, Sharp}
 import lang.Operators.{BinaryOpSignature, UnaryOpSignature, binaryOperators, unaryOperators}
@@ -55,8 +55,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       val moduleSig = analysisContext.resolveTypeAs[ModuleSignature](moduleName).get
       val importsCtx = TypeCheckingContext(
         analysisContext,
-        environment = CaptureSet.singletonOfRoot,
-        insideEnclosure = false,
+        RootEnvir,
         moduleName,
         meCaptureDescr = moduleSig.getNonSubstitutedCaptureDescr
       )
@@ -72,8 +71,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       val structSig = analysisContext.resolveTypeAs[StructSignature](structName).get
       val tcCtx = TypeCheckingContext(
         analysisContext,
-        environment = CaptureSet.singletonOfRoot,
-        insideEnclosure = false,
+        RootEnvir,
         structName,
         meCaptureDescr = structSig.getNonSubstitutedCaptureDescr
       )
@@ -101,8 +99,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val placeholderMeId = NormalTypeId(constantsClassName)
         val tcCtx = TypeCheckingContext(
           analysisContext,
-          environment = CaptureSet.empty,
-          insideEnclosure = false,
+          RootEnvir,
           placeholderMeId,
           meCaptureDescr = CaptureSet.empty
         )
@@ -134,8 +131,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
     val FunDef(funName, params, optRetTypeTree, body) = funDef
     val tcCtx = TypeCheckingContext(
       analysisContext,
-      environment = CaptureSet.singletonOfRoot,
-      insideEnclosure = false,
+      RootEnvir,
       meId,
       meCaptureDescr
     )
@@ -277,17 +273,22 @@ final class TypeChecker(errorReporter: ErrorReporter)
   private def checkCaptureDescr(captureDescrTree: CaptureDescrTree, idsAreFields: Boolean)
                                (using tcCtx: TypeCheckingContext, langMode: LanguageMode): CaptureDescriptor = {
     val captureDescr = captureDescrTree match {
-      case ExplicitCaptureSetTree(capturedExpressions) =>
-        CaptureSet(capturedExpressions.flatMap { expr =>
-          val exprType = checkExpr(expr)
-          if exprType.captureDescriptor.isEmpty then None
-          else convertToCapturable(expr, Some(errorReporter), idsAreFields)(using tcCtx)
-        }.toSet)
+      case explicitCaptureSetTree: ExplicitCaptureSetTree =>
+        checkCaptureSet(explicitCaptureSetTree, idsAreFields)
       case ImplicitRootCaptureSetTree() => CaptureSet.singletonOfRoot
       case MarkTree() => Mark
     }
     captureDescrTree.setResolvedDescr(captureDescr)
     captureDescr
+  }
+
+  private def checkCaptureSet(explicitCaptureSetTree: ExplicitCaptureSetTree, idsAreFields: Boolean)
+                             (using tcCtx: TypeCheckingContext, langMode: LanguageMode): CaptureSet = {
+    CaptureSet(explicitCaptureSetTree.capturedExpressions.flatMap { expr =>
+      val exprType = checkExpr(expr)
+      if exprType.captureDescriptor.isEmpty then None
+      else convertToCapturable(expr, Some(errorReporter), idsAreFields)(using tcCtx)
+    }.toSet)
   }
 
   private def convertToCapturable(expr: Expr, erOpt: Option[ErrorReporter], idsAreFields: Boolean)
@@ -393,6 +394,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         case _ =>
           reportError("syntax error: only variables, struct fields and array elements can be assigned", varAssig.getPosition)
       }
+      checkIsAllowedAssignmentTarget(lhs)
 
     case varModif@VarModif(lhs, rhs, op) =>
       // no check for unused mut because no operator combinable with = can operate on mutable types
@@ -419,6 +421,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         case _ =>
           reportError("syntax error: only variables, struct fields and array elements can be assigned", varModif.getPosition)
       }
+      checkIsAllowedAssignmentTarget(lhs)
 
     case ifThenElse@IfThenElse(cond, thenBr, elseBrOpt) =>
       val condType = checkExpr(cond)
@@ -463,16 +466,17 @@ final class TypeChecker(errorReporter: ErrorReporter)
       checkSubtypingConstraint(StringType, msgType, panicStat.getPosition, "panic")
 
     case restr@RestrictedStat(captureSetTree, body) =>
-      // FIXME compute captured variables and check them
       featureIsNotAllowedIfOcapDisabled("restricted", restr.getPosition)
-      val captureDescr = checkCaptureDescr(captureSetTree, idsAreFields = false)
-      val innerCtx = tcCtx.copyWithEnvironment(captureDescr, insideEnclosure = tcCtx.insideEnclosure)
+      if (tcCtx.environment.insideEnclosure) {
+        reportError("restricted blocks are not allowed inside enclosures", restr.getPosition)
+      }
+      val captureSet = checkCaptureSet(captureSetTree, idsAreFields = false)
+      val innerCtx = tcCtx.copyWithEnvironment(RestrictedEnvir(captureSet, _))
       checkStat(body)(using innerCtx)
 
     case encl@EnclosedStat(captureSetTree, body) =>
-      // FIXME compute captured variables and check them
       featureIsNotAllowedIfOcapDisabled("enclosures", encl.getPosition)
-      val captureDescr = checkCaptureDescr(captureSetTree, idsAreFields = false)
+      val captureSet = checkCaptureSet(captureSetTree, idsAreFields = false)
       for (capability <- captureSetTree.capturedExpressions) {
         val isRegion = capability.getTypeShape == RegionType
         val isPackage = capability.isInstanceOf[PackageRef]
@@ -485,7 +489,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
           )
         }
       }
-      val innerCtx = tcCtx.copyWithEnvironment(captureDescr, insideEnclosure = true)
+      val innerCtx = tcCtx.copyWithEnvironment(EnclosedEnvir(captureSet, _))
       checkStat(body)(using innerCtx)
   }
 
@@ -525,7 +529,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
         device.tpe
 
       case call@Call(None, funName, args) =>
-        checkFunCall(call, IntrinsicsPackageId, fallbackOwnerOpt = Some(tcCtx.meId))
+        checkFunCall(call, IntrinsicsPackageId, fallbackOwnerOpt = Some(tcCtx.meTypeId))
 
       case call@Call(Some(receiver), funName, args) =>
         checkExpr(receiver).shape match {
@@ -689,7 +693,37 @@ final class TypeChecker(errorReporter: ErrorReporter)
       case _: Sequence => throw AssertionError("should not happen, as Sequences are produced by the desugaring phase")
     })
     expr.setType(tpe)
+    checkIsAllowedInCurrentEnvir(expr)
     tpe
+  }
+
+  private def checkIsAllowedInCurrentEnvir(expr: Expr)(using tcCtx: TypeCheckingContext): Unit = {
+
+    def performCheck(capt: Capturable): Unit = {
+      if (!tcCtx.environment.allowsCapturable(capt)){
+        reportError(s"$capt is not allowed in the current environment", expr.getPosition)
+      }
+    }
+
+    expr match {
+      case VariableRef(name) => performCheck(IdPath(name))
+      case MeRef() => performCheck(MePath)
+      case PackageRef(pkgName) => performCheck(CapPackage(pkgName))
+      case DeviceRef(device) => performCheck(CapDevice(device))
+      case _ => ()
+    }
+  }
+
+  private def checkIsAllowedAssignmentTarget(expr: Expr)(using tcCtx: TypeCheckingContext): Unit = {
+    val cd = expr.getType.captureDescriptor
+    if (tcCtx.environment.insideEnclosure && cd != Mark && cd != CaptureSet.empty) {
+      expr match {
+        // allow assignments to variables that have been declared in the current environment
+        case VariableRef(name) if tcCtx.getLocalOnly(name).exists(_.declaringEnvir == tcCtx.environment) => ()
+        case _ =>
+          reportError("illegal assignment: cannot prove that no value of a marked type is being leaked", expr.getPosition)
+      }
+    }
   }
 
   private def requireRegionIffOcapEnabled(regionOpt: Option[Expr], posOpt: Option[Position])
@@ -770,7 +804,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
   private def checkUnboxedCaptureDescr(captureDescriptor: CaptureDescriptor, posOpt: Option[Position])
                                       (using tcCtx: TypeCheckingContext): Unit = {
     captureDescriptor match
-      case CaptureDescriptors.Mark => ()
+      case CaptureDescriptors.Mark =>
+        if (!tcCtx.environment.insideEnclosure) {
+          reportError(s"type cannot be unboxed, as it captures '$Mark'", posOpt)
+        }
       case CaptureSet(set) =>
         set.foreach {
           case path: Path =>
@@ -808,8 +845,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
     val argsIter = args.iterator
     val calleeCtx = TypeCheckingContext(
       callerCtx.analysisContext,
-      environment = CaptureSet.singletonOfRoot,
-      insideEnclosure = false,
+      RootEnvir,
       funOwnerSig.id,
       meCaptureDescr = funOwnerSig.getNonSubstitutedCaptureDescr
     )
@@ -920,8 +956,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
     def performSubstIfApplicable(rawType: Type, structOrModuleSignature: ConstructibleSig): Type = {
       val calleeCtx = TypeCheckingContext(
         callerCtx.analysisContext,
-        environment = CaptureDescriptors.singletonSetOfRoot,
-        insideEnclosure = false,
+        RootEnvir,
         structOrModuleSignature.id,
         meCaptureDescr = structOrModuleSignature.getNonSubstitutedCaptureDescr
       )
