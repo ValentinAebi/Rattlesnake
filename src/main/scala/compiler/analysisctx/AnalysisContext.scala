@@ -302,7 +302,6 @@ object AnalysisContext {
               // i.e. what elements each field is allowed to capture (fields of the super-/subtype)
               // and what me refers to
               val tcCtx = TypeCheckingContext(
-                OcapEnabled,
                 analysisContext = builtCtx,
                 environment = CaptureSet.singletonOfRoot,
                 insideEnclosure = false,

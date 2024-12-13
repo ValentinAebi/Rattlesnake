@@ -54,7 +54,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
     case ModuleDef(moduleName, imports, functions) =>
       val moduleSig = analysisContext.resolveTypeAs[ModuleSignature](moduleName).get
       val importsCtx = TypeCheckingContext(
-        OcapEnabled,
         analysisContext,
         environment = CaptureSet.singletonOfRoot,
         insideEnclosure = false,
@@ -72,7 +71,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
     case StructDef(structName, fields, _, _) =>
       val structSig = analysisContext.resolveTypeAs[StructSignature](structName).get
       val tcCtx = TypeCheckingContext(
-        langMode,
         analysisContext,
         environment = CaptureSet.singletonOfRoot,
         insideEnclosure = false,
@@ -102,8 +100,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
       tpeOpt.foreach { expType =>
         val placeholderMeId = NormalTypeId(constantsClassName)
         val tcCtx = TypeCheckingContext(
-          // types assignable to a constant cannot capture anything
-          OcapDisabled,
           analysisContext,
           environment = CaptureSet.empty,
           insideEnclosure = false,
@@ -137,7 +133,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
                            ): Unit = {
     val FunDef(funName, params, optRetTypeTree, body) = funDef
     val tcCtx = TypeCheckingContext(
-      langMode,
       analysisContext,
       environment = CaptureSet.singletonOfRoot,
       insideEnclosure = false,
@@ -812,7 +807,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
     val expTypesIter = funSig.argsForMode(callerLangMode).iterator
     val argsIter = args.iterator
     val calleeCtx = TypeCheckingContext(
-      funSig.languageMode,
       callerCtx.analysisContext,
       environment = CaptureSet.singletonOfRoot,
       insideEnclosure = false,
@@ -925,7 +919,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
 
     def performSubstIfApplicable(rawType: Type, structOrModuleSignature: ConstructibleSig): Type = {
       val calleeCtx = TypeCheckingContext(
-        structOrModuleSignature.languageMode,
         callerCtx.analysisContext,
         environment = CaptureDescriptors.singletonSetOfRoot,
         insideEnclosure = false,
