@@ -12,22 +12,22 @@ object CaptureDescriptors {
 
     def union(that: CaptureDescriptor): CaptureDescriptor = (this, that) match {
       case (thisCs: CaptureSet, thatCs: CaptureSet) => thisCs.union(thatCs)
-      case _ => Brand
+      case _ => Mark
     }
 
   }
 
-  case object Brand extends CaptureDescriptor {
+  case object Mark extends CaptureDescriptor {
     override def isRoot: Boolean = false
 
     override def isEmpty: Boolean = false
 
-    override def toString: String = "?"
+    override def toString: String = Operator.Sharp.str
   }
 
   final case class CaptureSet(set: Set[Capturable]) extends CaptureDescriptor {
     override def isRoot: Boolean = set.contains(RootCapability)
-    
+
     def union(that: CaptureSet): CaptureSet = CaptureSet(this.set ++ that.set)
 
     override def isEmpty: Boolean = set.isEmpty

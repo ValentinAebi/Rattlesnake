@@ -26,7 +26,7 @@ object SubcaptureRelation {
 
     def isSubcapture(l: CaptureDescriptor, r: CaptureDescriptor): Boolean = {
       (l, r) match {
-        case (Brand, Brand) => true
+        case (Mark, Mark) => true
         case (lcs: CaptureSet, rcs: CaptureSet) =>
           isSubcapture(lcs, rcs)
         case _ => false

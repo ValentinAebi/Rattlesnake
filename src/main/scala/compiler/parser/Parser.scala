@@ -191,9 +191,9 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "capturableExpr"
 
   private lazy val hatAndImplicitRootCapOrBrand = recursive {
-    op(Hat) ::: opt(op(QuestionMark)) map {
+    op(Hat) ::: opt(op(Sharp)) map {
       case hat ^: None => ImplicitRootCaptureSetTree()
-      case hat ^: Some(_) => BrandTree()
+      case hat ^: Some(_) => MarkTree()
     }
   } setName "hatAndImplicitRootCapOrBrand"
 

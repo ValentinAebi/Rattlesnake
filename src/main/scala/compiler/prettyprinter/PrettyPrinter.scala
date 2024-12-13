@@ -428,7 +428,7 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
 
       case ImplicitRootCaptureSetTree() => ()
 
-      case BrandTree() =>
+      case MarkTree() =>
         pps.add("#")
 
     }

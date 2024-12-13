@@ -44,7 +44,7 @@ final class PathsSubstitutor(tcCtx: TypeCheckingContext, er: ErrorReporter) {
   }
 
   def subst(captureDescriptor: CaptureDescriptor, posOpt: Option[Position]): CaptureDescriptor = captureDescriptor match {
-    case Brand => Brand
+    case Mark => Mark
     case CaptureSet(set) => set.foldLeft(CaptureDescriptors.emptyCaptureSet) {
       (cd, capturable) => cd.union(subst(capturable, posOpt))
     }

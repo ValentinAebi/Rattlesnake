@@ -14,7 +14,7 @@ import compiler.typechecker.TypeCheckingContext.LocalInfo
 import identifiers.{FunOrVarId, IntrinsicsPackageId, NormalTypeId, TypeIdentifier}
 import lang.*
 import lang.Capturables.*
-import lang.CaptureDescriptors.{Brand, CaptureDescriptor, CaptureSet}
+import lang.CaptureDescriptors.{Mark, CaptureDescriptor, CaptureSet}
 import lang.LanguageMode.*
 import lang.Operator.{Equality, Inequality, Sharp}
 import lang.Operators.{BinaryOpSignature, UnaryOpSignature, binaryOperators, unaryOperators}
@@ -284,7 +284,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
           else convertToCapturable(expr, Some(errorReporter), idsAreFields)(using tcCtx)
         }.toSet)
       case ImplicitRootCaptureSetTree() => CaptureSet.singletonOfRoot
-      case BrandTree() => Brand
+      case MarkTree() => Mark
     }
     captureDescrTree.setResolvedDescr(captureDescr)
     captureDescr
@@ -770,7 +770,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   private def checkUnboxedCaptureDescr(captureDescriptor: CaptureDescriptor, posOpt: Option[Position])
                                       (using tcCtx: TypeCheckingContext): Unit = {
     captureDescriptor match
-      case CaptureDescriptors.Brand => ()
+      case CaptureDescriptors.Mark => ()
       case CaptureSet(set) =>
         set.foreach {
           case path: Path =>

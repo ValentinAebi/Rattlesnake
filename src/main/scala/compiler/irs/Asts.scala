@@ -591,7 +591,7 @@ object Asts {
     override def children: List[Ast] = Nil
   }
 
-  final case class BrandTree() extends CaptureDescrTree {
+  final case class MarkTree() extends CaptureDescrTree {
     override def children: List[Ast] = Nil
   }
 

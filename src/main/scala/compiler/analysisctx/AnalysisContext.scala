@@ -200,8 +200,8 @@ object AnalysisContext {
         CaptureSet(capturedExpressions.flatMap(mkCapturableOrFailSilently(_, idsAreFields)).toSet)
       case ImplicitRootCaptureSetTree() =>
         CaptureSet.singletonOfRoot
-      case BrandTree() =>
-        Brand
+      case MarkTree() =>
+        Mark
     }
 
     private def analyzeImports(moduleDef: ModuleDef) = {
