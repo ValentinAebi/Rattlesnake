@@ -10,11 +10,8 @@ import compiler.pipeline.CompilationStep.CodeGeneration
 import compiler.pipeline.CompilerStep
 import compiler.reporting.Errors.*
 import compiler.reporting.Position
-import compiler.typechecker.SubcaptureRelation.subcaptureOf
 import identifiers.*
 import lang.*
-import lang.Capturables.CapDevice
-import lang.CaptureDescriptors.*
 import lang.Device.FileSystem
 import lang.Operator.*
 import lang.Types.PrimitiveTypeShape.*
@@ -44,7 +41,14 @@ final class Backend[V <: ClassVisitor](
                                         javaVersionCode: Int
                                       ) extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
 
-  private val runtimeClassesDir = "classes"
+  private val runtimeClassesDir =
+    new File("")
+      .getCanonicalFile
+      .getParentFile
+      .toPath
+      .resolve("Rattlesnake-runtime")
+      .resolve("target")
+      .resolve("classes")
 
   private var lastWrittenLine = -1
 
@@ -89,11 +93,10 @@ final class Backend[V <: ClassVisitor](
 
       if (mode.generateRuntime) {
         try {
-          val resDirPath = getClass.getClassLoader.getResource(runtimeClassesDir).getPath
-          for (injectedFileName <- new File(resDirPath).list()) {
-            val inDir = s"$resDirPath/$injectedFileName"
+          for (injectedFileName <- runtimeClassesDir.toFile.list()) {
+            val inDir = runtimeClassesDir.resolve(injectedFileName)
             val outDirPath = outputDir.resolve(injectedFileName)
-            Using(new FileInputStream(inDir)) { inStream =>
+            Using(new FileInputStream(inDir.toFile)) { inStream =>
               Using(new FileOutputStream(outDirPath.toFile)) { outStream =>
                 inStream.transferTo(outStream)
               }.get
