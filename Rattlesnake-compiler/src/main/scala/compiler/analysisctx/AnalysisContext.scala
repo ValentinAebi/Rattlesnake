@@ -305,7 +305,9 @@ object AnalysisContext {
                 analysisContext = builtCtx,
                 environment = RootEnvir,
                 meTypeId = directSupertypeId,
-                meCaptureDescr = directSupertypeSig.getNonSubstitutedCaptureDescr
+                meCaptureDescr = directSupertypeSig.getNonSubstitutedCaptureDescr,
+                allowedPackages = builtCtx.packages.keySet,
+                allowedDevices = Device.values.toSet
               )
               for ((fldName, superFldInfo) <- directSupertypeSig.fields) {
                 structSig.fields.get(fldName) match {

@@ -48,7 +48,8 @@ final class TypeChecker(errorReporter: ErrorReporter)
       val packageSig = analysisContext.resolveTypeAs[PackageSignature](packageName).get
       val environment = packageSig.getNonSubstitutedCaptureDescr
       for func <- functions do {
-        checkFunction(func, analysisContext, packageName, packageSig.getNonSubstitutedCaptureDescr, langMode)
+        checkFunction(func, analysisContext, packageName, packageSig.getNonSubstitutedCaptureDescr, langMode,
+          packageSig.importedPackages.toSet, packageSig.importedDevices.toSet)
       }
 
     case ModuleDef(moduleName, imports, functions) =>
@@ -56,15 +57,18 @@ final class TypeChecker(errorReporter: ErrorReporter)
       val importsCtx = TypeCheckingContext(
         analysisContext,
         RootEnvir,
-        moduleName,
-        meCaptureDescr = moduleSig.getNonSubstitutedCaptureDescr
+        meTypeId = moduleName,
+        meCaptureDescr = moduleSig.getNonSubstitutedCaptureDescr,
+        moduleSig.importedPackages.toSet,
+        moduleSig.importedDevices.toSet
       )
       for imp <- imports do {
         checkImport(imp, importsCtx, OcapEnabled)
       }
       val environment = moduleSig.getNonSubstitutedCaptureDescr
       for func <- functions do {
-        checkFunction(func, analysisContext, moduleName, moduleSig.getNonSubstitutedCaptureDescr, OcapEnabled)
+        checkFunction(func, analysisContext, moduleName, moduleSig.getNonSubstitutedCaptureDescr, OcapEnabled,
+          moduleSig.importedPackages.toSet, moduleSig.importedDevices.toSet)
       }
 
     case StructDef(structName, fields, _, _) =>
@@ -72,8 +76,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
       val tcCtx = TypeCheckingContext(
         analysisContext,
         RootEnvir,
-        structName,
-        meCaptureDescr = structSig.getNonSubstitutedCaptureDescr
+        meTypeId = structName,
+        meCaptureDescr = structSig.getNonSubstitutedCaptureDescr,
+        analysisContext.packages.keySet,
+        Device.values.toSet
       )
       for (param@Param(paramNameOpt, typeTree, isReassignable) <- fields) {
         val tpe = checkType(typeTree, idsAreFields = true)(using tcCtx, langMode)
@@ -100,8 +106,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
         val tcCtx = TypeCheckingContext(
           analysisContext,
           RootEnvir,
-          placeholderMeId,
-          meCaptureDescr = CaptureSet.empty
+          meTypeId = placeholderMeId,
+          meCaptureDescr = CaptureSet.empty,
+          allowedPackages = Set.empty,
+          allowedDevices = Set.empty
         )
         val checkedType = checkType(expType, idsAreFields = false)(using tcCtx, OcapDisabled)
         checkSubtypingConstraint(
@@ -126,15 +134,13 @@ final class TypeChecker(errorReporter: ErrorReporter)
                              analysisContext: AnalysisContext,
                              meId: TypeIdentifier,
                              meCaptureDescr: CaptureDescriptor,
-                             langMode: LanguageMode
+                             langMode: LanguageMode,
+                             allowedPackages: Set[TypeIdentifier],
+                             allowedDevices: Set[Device]
                            ): Unit = {
     val FunDef(funName, params, optRetTypeTree, body) = funDef
-    val tcCtx = TypeCheckingContext(
-      analysisContext,
-      RootEnvir,
-      meId,
-      meCaptureDescr
-    )
+    val tcCtx = TypeCheckingContext(analysisContext, RootEnvir, meId, meCaptureDescr,
+      allowedPackages, allowedDevices)
     for param <- params do {
       val paramType = checkType(param.tpe, idsAreFields = false)(using tcCtx, langMode)
       param.paramNameOpt.foreach { paramName =>
@@ -465,6 +471,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       val msgType = checkExpr(msg)
       checkSubtypingConstraint(StringType, msgType, panicStat.getPosition, "panic")
 
+    // TODO writes tests that try to escape a value from an enclosure
     case restr@RestrictedStat(captureSetTree, body) =>
       featureIsNotAllowedIfOcapDisabled("restricted", restr.getPosition)
       if (tcCtx.environment.insideEnclosure) {
@@ -489,7 +496,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
           )
         }
       }
-      val innerCtx = tcCtx.copyWithEnvironment(EnclosedEnvir(captureSet, _))
+      val innerCtx = tcCtx.copyWithEnvironment(EnclosedEnvir(_))
       checkStat(body)(using innerCtx)
   }
 
@@ -519,6 +526,9 @@ final class TypeChecker(errorReporter: ErrorReporter)
         tcCtx.meType
 
       case pkg@PackageRef(packageName) =>
+        if (!tcCtx.allowedPackages.contains(packageName)) {
+          reportError(s"package $packageName has not been imported", pkg.getPosition)
+        }
         tcCtx.resolveType(packageName) match {
           case Some(packageSignature: PackageSignature) => packageSignature.getNonSubstitutedType
           case Some(_) => reportError(s"$packageName is not a package and is thus not allowed here", pkg.getPosition)
@@ -526,6 +536,9 @@ final class TypeChecker(errorReporter: ErrorReporter)
         }
 
       case devRef@DeviceRef(device) =>
+        if (!tcCtx.allowedDevices.contains(device)) {
+          reportError(s"device $device has not been imported", devRef.getPosition)
+        }
         device.tpe
 
       case call@Call(None, funName, args) =>
@@ -548,7 +561,6 @@ final class TypeChecker(errorReporter: ErrorReporter)
         elemType
 
       case arrayInit@ArrayInit(regionOpt, elemTypeTree, size) =>
-        requireRegionIffOcapEnabled(regionOpt, arrayInit.getPosition)
         if (elemTypeTree == VoidType || elemTypeTree == NothingType) {
           reportError(s"array cannot have element type $elemTypeTree", arrayInit.getPosition)
         }
@@ -560,14 +572,14 @@ final class TypeChecker(errorReporter: ErrorReporter)
           case _ => ()
         }
         val elemType = checkType(elemTypeTree, idsAreFields = false)
+        requireRegionIffOcapEnabled(regionOpt, arrayInit.getPosition, isMutableObj = true)
         ArrayTypeShape(elemType, modifiable = true) ^ computeCaptures(regionOpt.toList)
 
       case filledArrayInit@FilledArrayInit(regionOpt, Nil) =>
-        requireRegionIffOcapEnabled(regionOpt, filledArrayInit.getPosition)
         reportError("cannot infer type of empty array, use 'arr <type>[0]' instead", filledArrayInit.getPosition)
 
       case filledArrayInit@FilledArrayInit(regionOpt, arrayElems) =>
-        requireRegionIffOcapEnabled(regionOpt, filledArrayInit.getPosition)
+        requireRegionIffOcapEnabled(regionOpt, filledArrayInit.getPosition, isMutableObj = regionOpt.isDefined)
         val types = arrayElems.map(checkExpr)
         computeJoinOf(types.toSet, tcCtx) match {
           case Some(elemsJoin) =>
@@ -700,7 +712,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
   private def checkIsAllowedInCurrentEnvir(expr: Expr)(using tcCtx: TypeCheckingContext): Unit = {
 
     def performCheck(capt: Capturable): Unit = {
-      if (!tcCtx.environment.allowsCapturable(capt)){
+      if (!tcCtx.environment.allowsCapturable(capt)) {
         reportError(s"$capt is not allowed in the current environment", expr.getPosition)
       }
     }
@@ -726,13 +738,14 @@ final class TypeChecker(errorReporter: ErrorReporter)
     }
   }
 
-  private def requireRegionIffOcapEnabled(regionOpt: Option[Expr], posOpt: Option[Position])
+  private def requireRegionIffOcapEnabled(regionOpt: Option[Expr], posOpt: Option[Position], isMutableObj: Boolean)
                                          (using ctx: TypeCheckingContext, langMode: LanguageMode): Unit = {
     regionOpt.foreach(checkExpr)
     (regionOpt, langMode) match {
       case (None, OcapDisabled) => ()
-      case (None, OcapEnabled) =>
+      case (None, OcapEnabled) if isMutableObj =>
         reportError("expected a region", posOpt)
+      case (None, OcapEnabled) => ()
       case (Some(_), OcapDisabled) =>
         reportError("unexpected region, as ocap is disabled for this file", posOpt)
       case (Some(region), OcapEnabled) =>
@@ -846,8 +859,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
     val calleeCtx = TypeCheckingContext(
       callerCtx.analysisContext,
       RootEnvir,
-      funOwnerSig.id,
-      meCaptureDescr = funOwnerSig.getNonSubstitutedCaptureDescr
+      meTypeId = funOwnerSig.id,
+      meCaptureDescr = funOwnerSig.getNonSubstitutedCaptureDescr,
+      callerCtx.analysisContext.packages.keySet,
+      Device.values.toSet
     )
     val substitutor = PathsSubstitutor(calleeCtx, errorReporter)
     for {
@@ -957,8 +972,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
       val calleeCtx = TypeCheckingContext(
         callerCtx.analysisContext,
         RootEnvir,
-        structOrModuleSignature.id,
-        meCaptureDescr = structOrModuleSignature.getNonSubstitutedCaptureDescr
+        meTypeId = structOrModuleSignature.id,
+        meCaptureDescr = structOrModuleSignature.getNonSubstitutedCaptureDescr,
+        callerCtx.analysisContext.packages.keySet,
+        Device.values.toSet
       )
       for ((paramName, fieldInfo) <- structOrModuleSignature.params) {
         calleeCtx.addLocal(paramName, fieldInfo.tpe, None, false, true, () => (), () => ())

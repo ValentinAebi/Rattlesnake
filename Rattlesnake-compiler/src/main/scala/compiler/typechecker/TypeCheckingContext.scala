@@ -22,7 +22,9 @@ final case class TypeCheckingContext private(
                                               environment: Environment,
                                               private val locals: mutable.Map[FunOrVarId, LocalInfo] = mutable.Map.empty,
                                               meTypeId: TypeIdentifier,
-                                              meCaptureDescr: CaptureDescriptor
+                                              meCaptureDescr: CaptureDescriptor,
+                                              allowedPackages: Set[TypeIdentifier],
+                                              allowedDevices: Set[Device]
                                             ) {
 
   def meType: Type = NamedTypeShape(meTypeId) ^ meCaptureDescr
@@ -146,9 +148,12 @@ object TypeCheckingContext {
              analysisContext: AnalysisContext,
              environment: Environment,
              meTypeId: TypeIdentifier,
-             meCaptureDescr: CaptureDescriptor
+             meCaptureDescr: CaptureDescriptor,
+             allowedPackages: Set[TypeIdentifier],
+             allowedDevices: Set[Device]
            ): TypeCheckingContext = {
-    TypeCheckingContext(analysisContext, environment, mutable.Map.empty, meTypeId, meCaptureDescr)
+    TypeCheckingContext(analysisContext, environment, mutable.Map.empty, meTypeId,
+      meCaptureDescr, allowedPackages, allowedDevices)
   }
 
   final case class LocalInfo private(
