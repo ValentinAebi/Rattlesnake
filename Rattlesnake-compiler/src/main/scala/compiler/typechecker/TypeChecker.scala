@@ -2,7 +2,7 @@ package compiler.typechecker
 
 import compiler.analysisctx.AnalysisContext
 import compiler.analysisctx.AnalysisContext.{FunctionFound, FunctionNotFound, ModuleNotFound}
-import compiler.gennames.ClassesNames.constantsClassName
+import compiler.gennames.ClassesAndDirectoriesNames.constantsClassName
 import compiler.irs.Asts.*
 import compiler.pipeline.CompilationStep.TypeChecking
 import compiler.pipeline.CompilerStep

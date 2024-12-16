@@ -3,8 +3,8 @@ package compiler.backend
 import compiler.analysisctx.AnalysisContext
 import compiler.backend.DescriptorsCreator.{descriptorForFunc, descriptorForType}
 import compiler.backend.TypesConverter.{convertToAsmTypeCode, internalNameOf, numSlotsFor, opcodeFor}
-import compiler.gennames.ClassesNames.packageInstanceName
-import compiler.gennames.{ClassesNames, FileExtensions}
+import compiler.gennames.ClassesAndDirectoriesNames.{agentSubdirName, packageInstanceName}
+import compiler.gennames.{ClassesAndDirectoriesNames, FileExtensions}
 import compiler.irs.Asts.*
 import compiler.pipeline.CompilationStep.CodeGeneration
 import compiler.pipeline.CompilerStep
@@ -41,14 +41,21 @@ final class Backend[V <: ClassVisitor](
                                         javaVersionCode: Int
                                       ) extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
 
-  private val runtimeClassesDir =
+  private val rattlesnakeRootDir =
     new File("")
       .getCanonicalFile
       .getParentFile
       .toPath
+
+  private val runtimeTargetDirPath =
+    rattlesnakeRootDir
       .resolve("Rattlesnake-runtime")
       .resolve("target")
-      .resolve("classes")
+
+  private val agentTargetDirPath =
+    rattlesnakeRootDir
+      .resolve("Rattlesnake-agent")
+      .resolve("target")
 
   private var lastWrittenLine = -1
 
@@ -86,33 +93,38 @@ final class Backend[V <: ClassVisitor](
       generateTypes(structs, outputDir, generatedClassFiles)
 
       if (consts.nonEmpty) {
-        val constantsFilePath = outputDir.resolve(mode.withExtension(ClassesNames.constantsClassName))
+        val constantsFilePath = outputDir.resolve(mode.withExtension(ClassesAndDirectoriesNames.constantsClassName))
         generateConstantsFile(consts, constantsFilePath)
         generatedClassFiles.addOne(constantsFilePath)
       }
 
       if (mode.generateRuntime) {
-        try {
-          for (injectedFileName <- runtimeClassesDir.toFile.list()) {
-            val inDir = runtimeClassesDir.resolve(injectedFileName)
-            val outDirPath = outputDir.resolve(injectedFileName)
-            Using(new FileInputStream(inDir.toFile)) { inStream =>
-              Using(new FileOutputStream(outDirPath.toFile)) { outStream =>
-                inStream.transferTo(outStream)
-              }.get
-            }.get
-            generatedClassFiles.addOne(outDirPath)
-          }
-        } catch {
-          case thr: Throwable => throw Error("An error occured while copying the runtime environment classes into the " +
-            "generated program. This might be because you did not compile the runtime before executing the compiler.", thr)
-        }
+        copyJar(runtimeTargetDirPath, "Rattlesnake-runtime", outputDir)
+        copyJar(agentTargetDirPath, "Rattlesnake-agent", outputDir.resolve(agentSubdirName))
       }
 
       errorReporter.displayAndTerminateIfErrors()
       generatedClassFiles.toList
     }
 
+  }
+
+  private def copyJar(srcDirPath: Path, jarNamePrefix: String, destDirPath: Path): Unit = {
+    val jarFileName =
+      srcDirPath.toFile.list()
+        .find(f => f.startsWith(jarNamePrefix) && f.endsWith("with-dependencies.jar"))
+        .getOrElse {
+          throw new Error(s"jar not found: $jarNamePrefix. You may need to compile the runtime and the agent " +
+            "before running the compiler.")
+        }
+    val jarSrcFilePath = srcDirPath.resolve(jarFileName)
+    val jarDestFilePath = destDirPath.resolve(jarFileName)
+    Files.createDirectories(destDirPath)
+    Using(new FileInputStream(jarSrcFilePath.toFile)) { srcStream =>
+      Using(new FileOutputStream(jarDestFilePath.toFile)) { destStream =>
+        srcStream.transferTo(destStream)
+      }.get
+    }.get
   }
 
   /**
@@ -133,7 +145,7 @@ final class Backend[V <: ClassVisitor](
                                    (using AnalysisContext): Unit = {
     val ccv: V = mode.createVisitor(constantsFilePath)
     addSourceName(ccv, "<auto-gen-constants-file>")
-    ccv.visit(javaVersionCode, ACC_PUBLIC, ClassesNames.constantsClassName, null, objectTypeStr, null)
+    ccv.visit(javaVersionCode, ACC_PUBLIC, ClassesAndDirectoriesNames.constantsClassName, null, objectTypeStr, null)
     for const <- consts do {
       ccv.visitField(
         ACC_PUBLIC | ACC_STATIC,
@@ -407,7 +419,7 @@ final class Backend[V <: ClassVisitor](
           case None =>
             mv.visitFieldInsn(
               Opcodes.GETSTATIC,
-              ClassesNames.constantsClassName,
+              ClassesAndDirectoriesNames.constantsClassName,
               name.stringId,
               descriptorForType(varRef.getTypeShape)
             )
@@ -423,7 +435,7 @@ final class Backend[V <: ClassVisitor](
         mv.visitFieldInsn(Opcodes.GETSTATIC, internalName, packageInstanceName, descr)
 
       case DeviceRef(Device.FileSystem) =>
-        mv.visitFieldInsn(Opcodes.GETSTATIC, ClassesNames.fileSystemClassName, "$INSTANCE", "LFileSystem;")
+        mv.visitFieldInsn(Opcodes.GETSTATIC, ClassesAndDirectoriesNames.fileSystemClassName, "$INSTANCE", "LFileSystem;")
 
       case Call(None, funName, args) => {
         val generateArgs: () => Unit = { () =>
@@ -458,8 +470,9 @@ final class Backend[V <: ClassVisitor](
         val opcode = opcodeFor(elemType.shape, Opcodes.IALOAD, Opcodes.AALOAD)
         mv.visitInsn(opcode)
 
-      case arrayInit@ArrayInit(region, elemTypeTree, size) =>
+      case arrayInit@ArrayInit(regionOpt, elemTypeTree, size) =>
         val elemType = elemTypeTree.getResolvedType
+        regionOpt.foreach(generateCode(_, ctx))
         generateCode(size, ctx)
         elemType.shape match {
           case _: (PrimitiveTypeShape.StringType.type | NamedTypeShape | ArrayTypeShape | UnionTypeShape) =>
@@ -468,6 +481,11 @@ final class Backend[V <: ClassVisitor](
             val elemTypeCode = convertToAsmTypeCode(elemType.shape).get
             mv.visitIntInsn(Opcodes.NEWARRAY, elemTypeCode)
           case Types.UndefinedTypeShape => shouldNotHappen()
+        }
+        regionOpt.foreach { _ =>
+          mv.visitInsn(Opcodes.DUP_X1)
+          mv.visitInsn(Opcodes.SWAP)
+          RuntimeMethod.SaveObjectInRegion.generateCall(mv)
         }
 
       case StructOrModuleInstantiation(regionOpt, tid, args) =>
@@ -479,6 +497,11 @@ final class Backend[V <: ClassVisitor](
           generateCode(arg, ctx)
         }
         mv.visitMethodInsn(Opcodes.INVOKESPECIAL, tid.stringId, ConstructorFunId.stringId, constructorDescr, false)
+        regionOpt.foreach { region =>
+          mv.visitInsn(Opcodes.DUP)
+          generateCode(region, ctx)
+          RuntimeMethod.SaveObjectInRegion.generateCall(mv)
+        }
 
       case RegionCreation() =>
         RuntimeMethod.NewRegion.generateCall(mv)
@@ -730,7 +753,9 @@ final class Backend[V <: ClassVisitor](
         capturedExpressions.foreach {
           case DeviceRef(FileSystem) =>
             RuntimeMethod.AllowFilesystem.generateCall(mv)
-          case _ => ()
+          case capExpr =>
+            generateCode(capExpr, ctx)
+            RuntimeMethod.AllowRegion.generateCall(mv)
         }
         RuntimeMethod.PushEnvir.generateCall(mv)
         generateCode(body, ctx)

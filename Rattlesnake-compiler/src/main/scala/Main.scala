@@ -1,10 +1,10 @@
-import compiler.gennames.ClassesNames.packageInstanceName
-import compiler.gennames.{FileExtensions, ClassesNames}
+import compiler.gennames.ClassesAndDirectoriesNames.*
+import compiler.gennames.{ClassesAndDirectoriesNames, FileExtensions}
 import compiler.io.{SourceCodeProvider, SourceFile}
 import compiler.pipeline.TasksPipelines
 import org.objectweb.asm.Opcodes.{V11, V17, V1_8}
 
-import java.lang.reflect.{InvocationTargetException, Method}
+import java.lang.reflect.Method
 import java.nio.file.{Files, InvalidPathException, Path, Paths}
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -130,7 +130,7 @@ object Main {
     getValuedArg("out-file", argsMap, Some(defaultOutputName))
   }
 
-  private def getOutDirArg(argsMap: MutArgsMap): Path = {
+  private def getOutDirBaseArg(argsMap: MutArgsMap): Path = {
     Paths.get(getValuedArg("out-dir", argsMap, Some(".")))
   }
 
@@ -171,28 +171,34 @@ object Main {
    */
   private case class Run(argsMap: MutArgsMap) extends Action {
     override def run(sources: List[SourceCodeProvider]): Unit = {
+      val outDirBase = getOutDirBaseArg(argsMap)
       val compiler = TasksPipelines.compiler(
-        getOutDirArg(argsMap),
+        outDirBase,
         getJavaVersionArg(argsMap)
       )
       val programArgs = getProgramArgsArg(argsMap)
       reportUnknownArgsIfAny(argsMap)
       val writtenFilesPaths = compiler.apply(sources)
       val classes = getClasses(writtenFilesPaths)
-      val mainMethod = findMainMethod(classes)
-      val mainPkg = mainMethod.getDeclaringClass
-      val mainPkgInstance = mainPkg.getField(packageInstanceName).get(null)
-      try {
-        mainMethod.invoke(mainPkgInstance, programArgs)
-      } catch {
-        case e: InvocationTargetException =>
-          System.err.println("EXECUTION FAILED")
-          e.getCause.printStackTrace()
+      val mainClassName = findMainClassName(classes)
+      val agentJarName = outDirBase.resolve(outDirName).resolve(agentSubdirName).toFile.list()
+        .find(f => f.startsWith("Rattlesnake-agent") && f.endsWith("with-dependencies.jar"))
+        .getOrElse {
+          error("Rattlesnake agent not found")
+        }
+      val process = new ProcessBuilder()
+        .directory(outDirBase.resolve(outDirName).toFile)
+        .inheritIO()
+        .command("java", s"-javaagent:$agentSubdirName/$agentJarName", mainClassName)
+        .start()
+      val exitCode = process.waitFor()
+      if (exitCode != 0){
+        System.err.println(s"Program terminated with error code $exitCode")
       }
     }
   }
   
-  private def findMainMethod(classes: List[Class[?]]): Method = {
+  private def findMainClassName(classes: List[Class[?]]): String = {
     val mainMethods = mutable.ListBuffer.empty[Method]
     for
       clazz <- classes
@@ -204,7 +210,7 @@ object Main {
       error("no main method found")
     } else if (mainMethods.size > 1){
       error("more than one main methods found")
-    } else mainMethods.head
+    } else mainMethods.head.getDeclaringClass.getName
   }
   
   private def isMainMethod(mth: Method): Boolean =
@@ -217,7 +223,7 @@ object Main {
   private case class Compile(argsMap: MutArgsMap) extends Action {
     override def run(sources: List[SourceCodeProvider]): Unit = {
       val compiler = TasksPipelines.compiler(
-        getOutDirArg(argsMap),
+        getOutDirBaseArg(argsMap),
         getJavaVersionArg(argsMap)
       )
       reportUnknownArgsIfAny(argsMap)
@@ -232,7 +238,7 @@ object Main {
   private case class Asm(argsMap: MutArgsMap) extends Action {
     override def run(sources: List[SourceCodeProvider]): Unit = {
       val bytecodeWriter = TasksPipelines.bytecodeWriter(
-        getOutDirArg(argsMap),
+        getOutDirBaseArg(argsMap),
         getJavaVersionArg(argsMap)
       )
       reportUnknownArgsIfAny(argsMap)
@@ -250,7 +256,7 @@ object Main {
         error("format command requires exactly 1 input file")
       }
       val formatter = TasksPipelines.formatter(
-        getOutDirArg(argsMap),
+        getOutDirBaseArg(argsMap),
         getOutputNameArg(sources, argsMap, Path.of(sources.head.name).getFileName.toString),
         getIndentGranularityArg(argsMap),
         quest => yesNoQuestion(quest),
@@ -282,7 +288,7 @@ object Main {
         error("lower command requires exactly 1 input file")
       }
       val lowerer = TasksPipelines.lowerer(
-        getOutDirArg(argsMap),
+        getOutDirBaseArg(argsMap),
         getOutputNameArg(sources, argsMap, Path.of(sources.head.name).getFileName.toString),
         getIndentGranularityArg(argsMap),
         quest => yesNoQuestion(quest),

@@ -1,6 +1,6 @@
 package compiler
 
-import compiler.gennames.{FileExtensions, ClassesNames}
+import compiler.gennames.{FileExtensions, ClassesAndDirectoriesNames}
 import compiler.reporting.Errors.{ErrorReporter, ExitCode}
 import compiler.io.SourceFile
 import compiler.pipeline.TasksPipelines
@@ -406,7 +406,7 @@ class CompilerTests {
                                        ): List[Any] = {
     val classes = compileAndLoadClasses(srcFileName)
     val testedPkgClass = findClassWithName(classes, testedMethodPkgName)
-    val pkgInstance = testedPkgClass.getField(ClassesNames.packageInstanceName).get(null)
+    val pkgInstance = testedPkgClass.getField(ClassesAndDirectoriesNames.packageInstanceName).get(null)
     testedPkgClass.getDeclaredMethods.find(_.getName == testedMethodName) match {
       case None => throw AssertionError(s"specified test method '$testedMethodName' does not exist")
       case Some(method) => {
