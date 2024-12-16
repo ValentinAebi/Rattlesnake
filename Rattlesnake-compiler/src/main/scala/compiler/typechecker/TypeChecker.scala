@@ -486,12 +486,11 @@ final class TypeChecker(errorReporter: ErrorReporter)
       val captureSet = checkCaptureSet(captureSetTree, idsAreFields = false)
       for (capability <- captureSetTree.capturedExpressions) {
         val isRegion = capability.getTypeShape == RegionType
-        val isPackage = capability.isInstanceOf[PackageRef]
         val isDevice = capability.isInstanceOf[DeviceRef]
-        val isAllowed = isRegion || isDevice || isPackage
+        val isAllowed = isRegion || isDevice
         if (!isAllowed) {
           reportError(
-            s"only regions, devices, and packages may appear in the capture set of an enclosed block",
+            s"only regions and devices may appear in the capture set of an enclosed block",
             capability.getPosition
           )
         }
