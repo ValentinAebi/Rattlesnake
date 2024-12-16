@@ -17,4 +17,4 @@ jobs:
       - name: Compile runtime
         run: (cd Rattlesnake-runtime/ && mvn compile)
       - name: Build and Test
-        run: sbt -v +test
+        run: (cd Rattlesnake-compiler/ && sbt -v +test)
