@@ -16,12 +16,17 @@ public final class Transformer implements ClassFileTransformer {
             ProtectionDomain protectionDomain,
             byte[] classfileBuffer
     ) {
-        System.out.println("Transformation: " + className); // TODO remove (debug)
-        var reader = new ClassReader(classfileBuffer);
-        var writer = new ClassWriter(reader, ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
-        var transformer = new ClassTransformer(writer);
-        reader.accept(transformer, ClassReader.EXPAND_FRAMES);
-        return writer.toByteArray();
+        var isProgramClass = !className.contains("/");
+        if (isProgramClass) {
+            System.err.println("[DEBUG] Instrumenting " + className);   // TODO remove (debug)
+            var reader = new ClassReader(classfileBuffer);
+            var writer = new ClassWriter(reader, ClassWriter.COMPUTE_FRAMES | ClassWriter.COMPUTE_MAXS);
+            var transformer = new ClassTransformer(writer);
+            reader.accept(transformer, ClassReader.EXPAND_FRAMES);
+            return writer.toByteArray();
+        } else {
+            return classfileBuffer;
+        }
     }
 
 }
