@@ -1,3 +1,5 @@
+package compiler.runners
+
 import compiler.gennames.ClassesAndDirectoriesNames.*
 import compiler.gennames.{ClassesAndDirectoriesNames, FileExtensions}
 import compiler.io.{SourceCodeProvider, SourceFile}
@@ -173,9 +175,9 @@ object Main {
    */
   private case class Run(argsMap: MutArgsMap) extends Action {
     override def run(sources: List[SourceCodeProvider]): Unit = {
-      val outDirBase = getOutDirBaseArg(argsMap)
+      val outDirBasePath = getOutDirBaseArg(argsMap)
       val compiler = TasksPipelines.compiler(
-        outDirBase,
+        outDirBasePath,
         getJavaVersionArg(argsMap)
       )
       val programArgs = getProgramArgsArg(argsMap)
@@ -183,27 +185,12 @@ object Main {
       val writtenFilesPaths = compiler.apply(sources)
       val classes = getClasses(writtenFilesPaths)
       val mainClassName = findMainClassName(classes)
-      val agentJarName = findNameOfJarInDir(outDirBase.resolve(outDirName).resolve(agentSubdirName).toFile, "Rattlesnake-agent",
-        "Rattlesnake agent not found")
-      val runtimeJarName = findNameOfJarInDir(outDirBase.resolve(outDirName).toFile, "Rattlesnake-runtime",
-        "Rattlesnake runtime not found")
-      val process = new ProcessBuilder()
-        .directory(outDirBase.resolve(outDirName).toFile)
-        .inheritIO()
-        .command(s"java -cp \"./$runtimeJarName;.\" -javaagent:$agentSubdirName/$agentJarName $mainClassName")
-        .start()
-      val exitCode = process.waitFor()
+      val outDirPath = outDirBasePath.resolve(outDirName)
+      val exitCode = new Runner(error).runMain(outDirPath, mainClassName)
       if (exitCode != 0) {
         System.err.println(s"Process terminated with error code $exitCode")
       }
     }
-  }
-
-  private def findNameOfJarInDir(dir: File, jarNamePrefix: String, errorMsg: String): String = {
-    dir.list().find(f => f.startsWith(jarNamePrefix) && f.endsWith("with-dependencies.jar"))
-      .getOrElse {
-        error(errorMsg)
-      }
   }
 
   private def findMainClassName(classes: List[Class[?]]): String = {
