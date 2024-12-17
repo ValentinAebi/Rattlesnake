@@ -174,12 +174,32 @@ final class Backend[V <: ClassVisitor](
       cv.visitField(ACC_PRIVATE, varId.stringId, descriptorForType(moduleType.shape), null, null)
     }
     for func <- modOrPkg.functions do {
-      val desc = descriptorForFunc(func.getSignatureOpt.get)
+      val funSig = func.getSignatureOpt.get
+      val desc = descriptorForFunc(funSig)
       val mv = cv.visitMethod(ACC_PUBLIC, func.funName.stringId, desc, null, null)
       addFunction(modOrPkg.name, func, mv, ctx)
+      if (func.isMain) {
+        val staticMv = cv.visitMethod(ACC_PUBLIC | ACC_STATIC, "main", desc, null, null)
+        generateStaticMainFunction(staticMv, modOrPkg.name, funSig)
+      }
     }
     cv.visitEnd()
     mode.terminate(cv, path, errorReporter)
+  }
+
+  private def generateStaticMainFunction(mv: MethodVisitor, pkgName: TypeIdentifier, delegateFunSig: FunctionSignature)(using AnalysisContext): Unit = {
+    mv.visitCode()
+    mv.visitFieldInsn(Opcodes.GETSTATIC, pkgName.stringId, packageInstanceName, descriptorForType(NamedTypeShape(pkgName)))
+    mv.visitVarInsn(Opcodes.ALOAD, 0)
+    mv.visitMethodInsn(Opcodes.INVOKEVIRTUAL, pkgName.stringId, delegateFunSig.name.stringId,
+      descriptorForFunc(delegateFunSig), false)
+    val retType = delegateFunSig.retType
+    if (retType != VoidType && retType != NothingType){
+      mv.visitInsn(if TypesConverter.numSlotsFor(retType.shape) == 1 then Opcodes.POP else Opcodes.POP2)
+    }
+    mv.visitInsn(Opcodes.RETURN)
+    mv.visitMaxs(0, 0)
+    mv.visitEnd()
   }
 
   private def addInstanceFieldAndInitializer(modOrPkg: ModuleOrPackageDefTree, cv: V, pkgTypeDescr: String): Unit = {
@@ -226,7 +246,7 @@ final class Backend[V <: ClassVisitor](
     if (ctx.resolveFunc(owner, funDef.funName).getFunSigOrThrow().retType == VoidType) {
       mv.visitInsn(Opcodes.RETURN)
     }
-    mv.visitMaxs(0, 0) // parameters are ignored because mode is COMPUTE_FRAMES
+    mv.visitMaxs(0, 0) // arguments are ignored because mode is COMPUTE_FRAMES
     mv.visitEnd()
   }
 

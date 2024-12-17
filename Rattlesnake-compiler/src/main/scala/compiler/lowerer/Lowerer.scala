@@ -49,7 +49,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
   }
 
   private def lower(funDef: FunDef): FunDef = propagatePosition(funDef.getPosition) {
-    val loweredFunDef = FunDef(funDef.funName, funDef.params.map(lower), funDef.optRetType, lower(funDef.body))
+    val loweredFunDef = FunDef(funDef.funName, funDef.params.map(lower), funDef.optRetType, lower(funDef.body), funDef.isMain)
     loweredFunDef.setSignatureOpt(funDef.getSignatureOpt)
     loweredFunDef
   }

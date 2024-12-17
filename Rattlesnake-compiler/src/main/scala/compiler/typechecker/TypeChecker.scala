@@ -11,7 +11,7 @@ import compiler.reporting.Position
 import compiler.typechecker.SubcaptureRelation.{isCoveredBy, subcaptureOf}
 import compiler.typechecker.SubtypeRelation.subtypeOf
 import compiler.typechecker.TypeCheckingContext.LocalInfo
-import identifiers.{FunOrVarId, IntrinsicsPackageId, NormalTypeId, TypeIdentifier}
+import identifiers.*
 import lang.*
 import lang.Capturables.*
 import lang.CaptureDescriptors.{CaptureDescriptor, CaptureSet, Mark}
@@ -20,6 +20,8 @@ import lang.Operator.{Equality, Inequality, Sharp}
 import lang.Operators.{BinaryOpSignature, UnaryOpSignature, binaryOperators, unaryOperators}
 import lang.Types.*
 import lang.Types.PrimitiveTypeShape.*
+
+import scala.collection.mutable.ListBuffer
 
 final class TypeChecker(errorReporter: ErrorReporter)
   extends CompilerStep[(List[Source], AnalysisContext), (List[Source], AnalysisContext)] {
@@ -47,9 +49,15 @@ final class TypeChecker(errorReporter: ErrorReporter)
     case PackageDef(packageName, functions) =>
       val packageSig = analysisContext.resolveTypeAs[PackageSignature](packageName).get
       val environment = packageSig.getNonSubstitutedCaptureDescr
+      val mainFunctionsCollector = ListBuffer.empty[FunDef]
       for func <- functions do {
         checkFunction(func, analysisContext, packageName, packageSig.getNonSubstitutedCaptureDescr, langMode,
-          packageSig.importedPackages.toSet, packageSig.importedDevices.toSet)
+          packageSig.importedPackages.toSet, packageSig.importedDevices.toSet, Some(mainFunctionsCollector))
+      }
+      if (mainFunctionsCollector.size > 1) {
+        for (mainFun <- mainFunctionsCollector) {
+          reportError("more than one main function in the current package", mainFun.getPosition)
+        }
       }
 
     case ModuleDef(moduleName, imports, functions) =>
@@ -68,7 +76,7 @@ final class TypeChecker(errorReporter: ErrorReporter)
       val environment = moduleSig.getNonSubstitutedCaptureDescr
       for func <- functions do {
         checkFunction(func, analysisContext, moduleName, moduleSig.getNonSubstitutedCaptureDescr, OcapEnabled,
-          moduleSig.importedPackages.toSet, moduleSig.importedDevices.toSet)
+          moduleSig.importedPackages.toSet, moduleSig.importedDevices.toSet, None)
       }
 
     case StructDef(structName, fields, _, _) =>
@@ -136,11 +144,18 @@ final class TypeChecker(errorReporter: ErrorReporter)
                              meCaptureDescr: CaptureDescriptor,
                              langMode: LanguageMode,
                              allowedPackages: Set[TypeIdentifier],
-                             allowedDevices: Set[Device]
+                             allowedDevices: Set[Device],
+                             mainFunctionsCollectorOpt: Option[ListBuffer[FunDef]]
                            ): Unit = {
-    val FunDef(funName, params, optRetTypeTree, body) = funDef
-    val tcCtx = TypeCheckingContext(analysisContext, RootEnvir, meId, meCaptureDescr,
-      allowedPackages, allowedDevices)
+    val FunDef(funName, params, optRetTypeTree, body, isMain) = funDef
+    if (isMain) {
+      checkIsEligibleAsMain(funDef)
+      mainFunctionsCollectorOpt.foreach(_.addOne(funDef))
+    }
+    if (isMain && mainFunctionsCollectorOpt.isEmpty) {
+      reportError("only packages can contain a main function", funDef.getPosition)
+    }
+    val tcCtx = TypeCheckingContext(analysisContext, RootEnvir, meId, meCaptureDescr, allowedPackages, allowedDevices)
     for param <- params do {
       val paramType = checkType(param.tpe, idsAreFields = false)(using tcCtx, langMode)
       param.paramNameOpt.foreach { paramName =>
@@ -159,6 +174,19 @@ final class TypeChecker(errorReporter: ErrorReporter)
     val expRetType = optRetType.getOrElse(VoidType)
     checkStat(body)(using tcCtx, langMode, expRetType)
     tcCtx.writeLocalsRelatedWarnings(errorReporter)
+  }
+
+  private def checkIsEligibleAsMain(funDef: FunDef): Unit = {
+    import ArrayTypeShapeTree as ArrSh
+    import PrimitiveTypeShapeTree as PrimSh
+    funDef match {
+      case FunDef(_, List(Param(_, ArrSh(PrimSh(StringType), _), _)), _, _, _) => ()
+      case _ =>
+        val funSig = funDef.getSignatureOpt.get
+        val expectedHeader =
+          s"${Keyword.Main} ${Keyword.Fn} ${funDef.funName}(${ArrayTypeShape(StringType, false)}) -> ${funSig.retType}"
+        reportError(s"main function should have the following header: $expectedHeader", funDef.getPosition)
+    }
   }
 
   private def checkImport(imp: Import, tcCtx: TypeCheckingContext, langMode: LanguageMode): Unit = imp match {

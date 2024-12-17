@@ -4,7 +4,8 @@ import compiler.io.{SourceCodeProvider, SourceFile}
 import compiler.pipeline.TasksPipelines
 import org.objectweb.asm.Opcodes.{V11, V17, V1_8}
 
-import java.lang.reflect.Method
+import java.io.File
+import java.lang.reflect.{Method, Modifier}
 import java.nio.file.{Files, InvalidPathException, Path, Paths}
 import scala.annotation.tailrec
 import scala.collection.mutable
@@ -28,7 +29,7 @@ object Main {
     val cmdLine = args.mkString(" ")
     try {
       val (action, pathStrs) = parseCmdLine(splitAtSpacesExceptBetweenBrackets(cmdLine))
-      if (pathStrs.exists(!_.endsWith(FileExtensions.rattlesnake))){
+      if (pathStrs.exists(!_.endsWith(FileExtensions.rattlesnake))) {
         error(s"all sources must be .${FileExtensions.rattlesnake} files")
       }
       val sourceFiles = pathStrs.map(SourceFile.apply)
@@ -40,7 +41,7 @@ object Main {
 
   private def splitAtSpacesExceptBetweenBrackets(cmdLine: String): List[String] = {
 
-    val charsAndDepths = cmdLine.foldLeft(List((0.toChar, 0))){ (reversedCharsAndDepths, currChar) =>
+    val charsAndDepths = cmdLine.foldLeft(List((0.toChar, 0))) { (reversedCharsAndDepths, currChar) =>
       val currDepth = reversedCharsAndDepths.head._2
       currChar match {
         case '[' if currDepth > 0 => error("nested lists are not supported")
@@ -69,13 +70,13 @@ object Main {
     cmdLine match {
       case Nil => error("empty command")
       case cmd :: tail => {
-        if (cmd == "help"){
+        if (cmd == "help") {
           displayHelp()
           System.exit(0)
           throw new AssertionError() // should never happen because exit occurred before
         }
         val (args, files) = tail.span(_.startsWith("-"))
-        if (files.isEmpty){
+        if (files.isEmpty) {
           error("no input files")
         }
         val argsMap = parseArgs(Nil, args.map(_.substring(1)))
@@ -94,8 +95,9 @@ object Main {
 
   /**
    * Parse the arguments of a command
+   *
    * @param alrParsed already parsed
-   * @param rem remaining words to parse
+   * @param rem       remaining words to parse
    * @return a map arg -> value
    */
   @tailrec private def parseArgs(alrParsed: List[(String, Option[String])], rem: List[String]): MutArgsMap = {
@@ -141,7 +143,7 @@ object Main {
   private def getIndentGranularityArg(argsMap: MutArgsMap): Int = {
     val argStr = getValuedArg("indent", argsMap, Some("2"))
     val indent = argStr.toIntOption.getOrElse(error(s"could not convert $argStr to an integer"))
-    if (indent <= 0){
+    if (indent <= 0) {
       error("indent must be positive")
     }
     indent
@@ -154,7 +156,7 @@ object Main {
   private def getProgramArgsArg(argsMap: MutArgsMap): Array[String] = {
     val emptyArrStr = "[]"
     val arrayStr = getValuedArg("args", argsMap, Some(emptyArrStr))
-    if (!(arrayStr.startsWith("[") && arrayStr.endsWith("]"))){
+    if (!(arrayStr.startsWith("[") && arrayStr.endsWith("]"))) {
       error("program arguments must be given as a list (surrounded by brackets and separated by whitespaces)")
     }
     if arrayStr == emptyArrStr then Array.empty else arrayStr.tail.init.split(' ')
@@ -181,23 +183,29 @@ object Main {
       val writtenFilesPaths = compiler.apply(sources)
       val classes = getClasses(writtenFilesPaths)
       val mainClassName = findMainClassName(classes)
-      val agentJarName = outDirBase.resolve(outDirName).resolve(agentSubdirName).toFile.list()
-        .find(f => f.startsWith("Rattlesnake-agent") && f.endsWith("with-dependencies.jar"))
-        .getOrElse {
-          error("Rattlesnake agent not found")
-        }
+      val agentJarName = findNameOfJarInDir(outDirBase.resolve(outDirName).resolve(agentSubdirName).toFile, "Rattlesnake-agent",
+        "Rattlesnake agent not found")
+      val runtimeJarName = findNameOfJarInDir(outDirBase.resolve(outDirName).toFile, "Rattlesnake-runtime",
+        "Rattlesnake runtime not found")
       val process = new ProcessBuilder()
         .directory(outDirBase.resolve(outDirName).toFile)
         .inheritIO()
-        .command("java", s"-javaagent:$agentSubdirName/$agentJarName", mainClassName)
+        .command(s"java -cp \"./$runtimeJarName;.\" -javaagent:$agentSubdirName/$agentJarName $mainClassName")
         .start()
       val exitCode = process.waitFor()
-      if (exitCode != 0){
-        System.err.println(s"Program terminated with error code $exitCode")
+      if (exitCode != 0) {
+        System.err.println(s"Process terminated with error code $exitCode")
       }
     }
   }
-  
+
+  private def findNameOfJarInDir(dir: File, jarNamePrefix: String, errorMsg: String): String = {
+    dir.list().find(f => f.startsWith(jarNamePrefix) && f.endsWith("with-dependencies.jar"))
+      .getOrElse {
+        error(errorMsg)
+      }
+  }
+
   private def findMainClassName(classes: List[Class[?]]): String = {
     val mainMethods = mutable.ListBuffer.empty[Method]
     for
@@ -206,15 +214,18 @@ object Main {
       mth <- clazz.getDeclaredMethods
       if isMainMethod(mth)
     do mainMethods.addOne(mth)
-    if (mainMethods.isEmpty){
+    if (mainMethods.isEmpty) {
       error("no main method found")
-    } else if (mainMethods.size > 1){
+    } else if (mainMethods.size > 1) {
       error("more than one main methods found")
     } else mainMethods.head.getDeclaringClass.getName
   }
-  
+
   private def isMainMethod(mth: Method): Boolean =
-    mth.getName == "main"
+    Modifier.isPublic(mth.getModifiers)
+      && Modifier.isStatic(mth.getModifiers)
+      && mth.getReturnType == Void.TYPE
+      && mth.getName == "main"
       && mth.getParameterTypes.sameElements(Array(classOf[Array[String]]))
 
   /**
@@ -309,13 +320,13 @@ object Main {
   }
 
   private def reportUnknownArgsIfAny(argsMap: MutArgsMap): Unit = {
-    if (argsMap.nonEmpty){
+    if (argsMap.nonEmpty) {
       error(s"unknown argument(s): ${argsMap.keys.mkString(", ")}")
     }
   }
 
   private def succeed(msg: String = ""): Unit = {
-    if (msg.nonEmpty){
+    if (msg.nonEmpty) {
       println(msg)
     }
     println("task succeeded")
@@ -324,34 +335,34 @@ object Main {
   private def displayHelp(): Unit = {
     println(
       s"""
-        |Command: <cmd> [<arg>*] <file>*
-        |   e.g. run -out-dir=output examples/sorting.rsn
-        |
-        |run: compile and run the program
-        | args: -out-dir=...: required, directory where to write the output file
-        |       -java-version=...: optional, can be '$java8Tag', '$java11Tag' or '$java17Tag' (default is '$java8Tag')
-        |       -args=[...]: optional, arguments to be passed to the executed program (e.g. -args=[foo bar baz])
-        |compile: compile the program
-        | args: -out-dir=...: required, directory where to write the output file
-        |       -java-version=...: optional, can be '$java8Tag', '$java11Tag' or '$java17Tag' (default is '$java8Tag')
-        |asm: write JVM bytecode instructions to a text file
-        | args: -out-dir=...: required, directory where to write the output file
-        |       -java-version=...: optional, can be '$java8Tag', '$java11Tag' or '$java17Tag' (default is '$java8Tag')
-        |format: reformat file
-        | args: -out-dir=...: required, directory where to write the output file
-        |       -out-file=...: optional, output file name (by default same as input)
-        |       -indent=...: optional, indent granularity (2 by default)
-        |       -all-parenth: flag indicating that all parentheses should be displayed in expressions,
-        |                     regardless of the priority of operations (takes no value)
-        |typecheck: parse and typecheck the program
-        |lower: show the file after lowering
-        | args: -out-dir=...: required, directory where to write the output file
-        |       -out-file=...: optional, output file name (by default same as input)
-        |       -indent=...: optional, indent granularity (2 by default)
-        |       -all-parenth: flag indicating that all parentheses should be displayed in expressions,
-        |                     regardless of the priority of operations (takes no value)
-        |help: displays help (this)
-        |""".stripMargin)
+         |Command: <cmd> [<arg>*] <file>*
+         |   e.g. run -out-dir=output examples/sorting.rsn
+         |
+         |run: compile and run the program
+         | args: -out-dir=...: required, directory where to write the output file
+         |       -java-version=...: optional, can be '$java8Tag', '$java11Tag' or '$java17Tag' (default is '$java8Tag')
+         |       -args=[...]: optional, arguments to be passed to the executed program (e.g. -args=[foo bar baz])
+         |compile: compile the program
+         | args: -out-dir=...: required, directory where to write the output file
+         |       -java-version=...: optional, can be '$java8Tag', '$java11Tag' or '$java17Tag' (default is '$java8Tag')
+         |asm: write JVM bytecode instructions to a text file
+         | args: -out-dir=...: required, directory where to write the output file
+         |       -java-version=...: optional, can be '$java8Tag', '$java11Tag' or '$java17Tag' (default is '$java8Tag')
+         |format: reformat file
+         | args: -out-dir=...: required, directory where to write the output file
+         |       -out-file=...: optional, output file name (by default same as input)
+         |       -indent=...: optional, indent granularity (2 by default)
+         |       -all-parenth: flag indicating that all parentheses should be displayed in expressions,
+         |                     regardless of the priority of operations (takes no value)
+         |typecheck: parse and typecheck the program
+         |lower: show the file after lowering
+         | args: -out-dir=...: required, directory where to write the output file
+         |       -out-file=...: optional, output file name (by default same as input)
+         |       -indent=...: optional, indent granularity (2 by default)
+         |       -all-parenth: flag indicating that all parentheses should be displayed in expressions,
+         |                     regardless of the priority of operations (takes no value)
+         |help: displays help (this)
+         |""".stripMargin)
   }
 
   extension (str: String) private def withHeadUppercase: String = {
@@ -383,7 +394,7 @@ object Main {
     val lowerCaseInput = input.toLowerCase
     if (Set("y", "yes").contains(lowerCaseInput)) {
       true
-    } else if (Set("n", "no").contains(lowerCaseInput)){
+    } else if (Set("n", "no").contains(lowerCaseInput)) {
       false
     } else {
       println("expected 'yes' or 'no'")

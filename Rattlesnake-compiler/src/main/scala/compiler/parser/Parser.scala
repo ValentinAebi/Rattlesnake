@@ -116,10 +116,10 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "moduleDef"
 
   private lazy val funDef = {
-    kw(Fn).ignored ::: lowName ::: openParenth ::: repeatWithSep(param, comma) ::: closeParenth
+    opt(kw(Main)) ::: kw(Fn).ignored ::: lowName ::: openParenth ::: repeatWithSep(param, comma) ::: closeParenth
       ::: opt(-> ::: typeTree) ::: block map {
-      case funName ^: params ^: optRetType ^: body =>
-        FunDef(funName, params, optRetType, body)
+      case optMain ^: funName ^: params ^: optRetType ^: body =>
+        FunDef(funName, params, optRetType, body, optMain.isDefined)
     }
   } setName "funDef"
 

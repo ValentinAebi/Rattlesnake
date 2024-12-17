@@ -76,7 +76,12 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
           .newLine()
           .add("}")
 
-      case FunDef(funName, args, optRetTypeTree, body) =>
+      case FunDef(funName, args, optRetTypeTree, body, isMain) =>
+        if (isMain){
+          pps
+            .add(Main.str)
+            .addSpace()
+        }
         pps
           .add(Fn.str)
           .addSpace()
