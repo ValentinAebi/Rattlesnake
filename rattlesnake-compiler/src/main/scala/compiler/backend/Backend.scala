@@ -109,14 +109,11 @@ final class Backend[V <: ClassVisitor](
 
   }
 
-  private def copyJar(srcDirPath: Path, jarNamePrefix: String, destDirPath: Path): Unit = {
+  private def copyJar(srcDirPath: Path, jarNamePrefix: String, destDirPath: Path): Unit = try {
     val jarFileName =
       srcDirPath.toFile.list()
         .find(f => f.startsWith(jarNamePrefix) && f.endsWith("with-dependencies.jar"))
-        .getOrElse {
-          throw new Error(s"jar not found: $jarNamePrefix. You may need to compile the runtime and the agent " +
-            "before running the compiler.")
-        }
+        .get
     val jarSrcFilePath = srcDirPath.resolve(jarFileName)
     val jarDestFilePath = destDirPath.resolve(jarFileName)
     Files.createDirectories(destDirPath)
@@ -125,6 +122,11 @@ final class Backend[V <: ClassVisitor](
         srcStream.transferTo(destStream)
       }.get
     }.get
+  } catch {
+    case thr: Throwable =>
+      throw new Error(s"Could not copy jar (name starting with $jarNamePrefix). " +
+        "Note that you need to compile the runtime and the agent before running the compiler. " +
+        "Run 'mvn package' in the corresponding directories to do so.", thr)
   }
 
   /**
