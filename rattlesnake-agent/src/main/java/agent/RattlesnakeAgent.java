@@ -1,4 +1,4 @@
-package rattlesnake.agent;
+package agent;
 
 import java.lang.instrument.Instrumentation;
 

@@ -1,9 +1,9 @@
-package rattlesnake.agent;
+package agent;
 
 import org.objectweb.asm.MethodVisitor;
 import org.objectweb.asm.Opcodes;
 
-import static rattlesnake.agent.Config.ASM_VERSION;
+import static agent.Config.ASM_VERSION;
 
 public final class MethodTransformer extends MethodVisitor {
 

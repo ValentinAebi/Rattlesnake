@@ -39,7 +39,7 @@
                             <addDefaultSpecificationEntries>true</addDefaultSpecificationEntries>
                         </manifest>
                         <manifestEntries>
-                            <Premain-Class>rattlesnake.agent.RattlesnakeAgent</Premain-Class>
+                            <Premain-Class>agent.RattlesnakeAgent</Premain-Class>
                         </manifestEntries>
                     </archive>
                 </configuration>
