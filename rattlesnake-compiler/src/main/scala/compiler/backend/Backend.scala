@@ -82,25 +82,29 @@ final class Backend[V <: ClassVisitor](
       val consts = constsBuilder.result()
 
       // create output directory if it does not already exist
-      val outputDir = outputDirBase.resolve("out")
-      Files.createDirectories(outputDir)
+      val outputDirPath = outputDirBase.resolve("out")
+      val outputDirFile = outputDirPath.toFile
+      if (outputDirFile.exists()) {
+        outputDirFile.delete()
+      }
+      Files.createDirectories(outputDirPath)
 
       given AnalysisContext = analysisContext
 
       val generatedClassFiles = mutable.ListBuffer.empty[Path]
 
-      generateTypes(modulesAndPackages, outputDir, generatedClassFiles)
-      generateTypes(structs, outputDir, generatedClassFiles)
+      generateTypes(modulesAndPackages, outputDirPath, generatedClassFiles)
+      generateTypes(structs, outputDirPath, generatedClassFiles)
 
       if (consts.nonEmpty) {
-        val constantsFilePath = outputDir.resolve(mode.withExtension(ClassesAndDirectoriesNames.constantsClassName))
+        val constantsFilePath = outputDirPath.resolve(mode.withExtension(ClassesAndDirectoriesNames.constantsClassName))
         generateConstantsFile(consts, constantsFilePath)
         generatedClassFiles.addOne(constantsFilePath)
       }
 
       if (mode.generateRuntime) {
-        copyJar(runtimeTargetDirPath, "Rattlesnake-runtime", outputDir)
-        copyJar(agentTargetDirPath, "Rattlesnake-agent", outputDir.resolve(agentSubdirName))
+        copyJar(runtimeTargetDirPath, "Rattlesnake-runtime", outputDirPath)
+        copyJar(agentTargetDirPath, "Rattlesnake-agent", outputDirPath.resolve(agentSubdirName))
       }
 
       errorReporter.displayAndTerminateIfErrors()
