@@ -10,7 +10,7 @@ public final class Rattlesnake$runtime {
 
     private static final WeakHashMap<Object, Integer> objToRegion = new WeakHashMap<>();
 
-    public void saveObjectInRegion(Object obj, int region){
+    public static void saveObjectInRegion(Object obj, int region){
         objToRegion.put(obj, region);
     }
 
