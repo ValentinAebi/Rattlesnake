@@ -1,5 +1,6 @@
 */.idea
 
+*.jar
 *.class
 *.asm
 
