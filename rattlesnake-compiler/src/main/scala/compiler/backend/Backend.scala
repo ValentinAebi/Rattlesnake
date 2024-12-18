@@ -41,6 +41,8 @@ final class Backend[V <: ClassVisitor](
                                         javaVersionCode: Int
                                       ) extends CompilerStep[(List[Source], AnalysisContext), List[Path]] {
 
+  // TODO write in the class the information whether the file has been statically capture-checked or not
+
   private val rattlesnakeRootDir =
     new File("")
       .getCanonicalFile
@@ -130,7 +132,8 @@ final class Backend[V <: ClassVisitor](
     case thr: Throwable =>
       throw new Error(s"Could not copy jar (name starting with $jarNamePrefix). " +
         "Note that you need to compile the runtime and the agent before running the compiler. " +
-        "Run 'mvn package' in the corresponding directories to do so.", thr)
+        "Run 'mvn clean package' in the corresponding directories to do so (you need to have " +
+        "Maven installed on your machine).", thr)
   }
 
   /**
