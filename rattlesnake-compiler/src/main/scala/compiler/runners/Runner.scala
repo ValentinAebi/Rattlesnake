@@ -20,7 +20,7 @@ final class Runner(errorCallback: String => Nothing) {
       "Rattlesnake runtime not found")
     val agentJarFullPath = agentSubdirPath.resolve(agentJarName).toFile.getCanonicalFile
     val runtimeJarFullPath = workingDirectoryPath.resolve(runtimeJarName).toFile.getCanonicalFile
-    val process = new ProcessBuilder()
+    new ProcessBuilder()
       .directory(workingDirectoryPath.toFile)
       .inheritIO()
       .command(
@@ -28,9 +28,8 @@ final class Runner(errorCallback: String => Nothing) {
         "-cp", s"\"$runtimeJarFullPath$classPathsSep.\"",
         s"-javaagent:$agentJarFullPath",
         mainClassName
-      )
-      .start()
-    process.waitFor()
+      ).start()
+      .waitFor()
   }
 
   private def findNameOfJarInDir(dir: File, jarNamePrefix: String, errorMsg: String): String = {
