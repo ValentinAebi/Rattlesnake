@@ -16,7 +16,7 @@ public final class Transformer implements ClassFileTransformer {
             ProtectionDomain protectionDomain,
             byte[] classfileBuffer
     ) {
-        var isProgramClass = !className.contains("/");
+        var isProgramClass = !className.contains("/") && !className.contains("$") && !className.equals("FileSystem");
         if (isProgramClass) {
             System.err.println("[DEBUG] Instrumenting " + className);   // TODO remove (debug)
             var reader = new ClassReader(classfileBuffer);
