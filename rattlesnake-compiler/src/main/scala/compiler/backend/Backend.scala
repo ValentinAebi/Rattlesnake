@@ -114,7 +114,7 @@ final class Backend[V <: ClassVisitor](
     }
 
   }
-  
+
   private def deleteDirTree(root: File): Unit = {
     if (root.isDirectory){
       for (subFile <- root.listFiles()){
@@ -167,7 +167,7 @@ final class Backend[V <: ClassVisitor](
     ccv.visit(javaVersionCode, ACC_PUBLIC, ClassesAndDirectoriesNames.constantsClassName, null, objectTypeStr, null)
     for const <- consts do {
       ccv.visitField(
-        ACC_PUBLIC | ACC_STATIC,
+        ACC_PUBLIC | ACC_STATIC | ACC_FINAL,
         const.constName.stringId,
         descriptorForType(const.value.getTypeShape),
         null,
