@@ -156,7 +156,7 @@ final class Lowerer extends CompilerStep[(List[Source], AnalysisContext), (List[
       case regionCreation: RegionCreation => regionCreation
       
       // [x_1, ... , x_n] ---> explicit assignments
-      case filledArrayInit@FilledArrayInit(regionOpt, arrayElems) =>
+      case filledArrayInit@FilledArrayInit(arrayElems, regionOpt) =>
         /* Argument for soundness of creating a region here:
          * This creation happens only when the region is not specified in the original AST, i.e. when the array is 
          * meant to be immutable. The type of the expression is therefore an immutable array type that captures no 

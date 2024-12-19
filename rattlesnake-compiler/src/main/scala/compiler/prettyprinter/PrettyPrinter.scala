@@ -224,15 +224,12 @@ final class PrettyPrinter(indentGranularity: Int = 2, displayAllParentheses: Boo
         addAst(size)
         pps.add("]")
 
-      case FilledArrayInit(regionOpt, arrayElems) =>
-        regionOpt.foreach { region =>
-          pps
-            .add(Mut.str)
-            .add("@")
-          addAst(region)
-          pps.addSpace()
-        }
+      case FilledArrayInit(arrayElems, regionOpt) =>
         addParenthList(arrayElems, parenth = ("[", "]"))
+        regionOpt.foreach { region =>
+          pps.add("@")
+          addAst(region)
+        }
 
       case StructOrModuleInstantiation(regionOpt, structName, args) =>
         pps

@@ -602,10 +602,10 @@ final class TypeChecker(errorReporter: ErrorReporter)
         requireRegionIffOcapEnabled(regionOpt, arrayInit.getPosition, isMutableObj = true)
         ArrayTypeShape(elemType, modifiable = true) ^ computeCaptures(regionOpt.toList)
 
-      case filledArrayInit@FilledArrayInit(regionOpt, Nil) =>
+      case filledArrayInit@FilledArrayInit(Nil, regionOpt) =>
         reportError("cannot infer type of empty array, use 'arr <type>[0]' instead", filledArrayInit.getPosition)
 
-      case filledArrayInit@FilledArrayInit(regionOpt, arrayElems) =>
+      case filledArrayInit@FilledArrayInit(arrayElems, regionOpt) =>
         requireRegionIffOcapEnabled(regionOpt, filledArrayInit.getPosition, isMutableObj = regionOpt.isDefined)
         val types = arrayElems.map(checkExpr)
         computeJoinOf(types.toSet, tcCtx) match {

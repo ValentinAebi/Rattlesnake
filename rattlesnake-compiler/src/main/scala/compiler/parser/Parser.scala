@@ -271,7 +271,7 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "noBinopExpr"
 
   private lazy val binopArg = recursive {
-    (noBinopExpr OR mutPossiblyFilledArrayInit OR arrayInit OR structOrModuleInstantiation OR regionCreation)
+    (noBinopExpr OR arrayInit OR structOrModuleInstantiation OR regionCreation)
       ::: opt((kw(As) OR kw(Is)) ::: primOrNamedShape
     ) map {
       case expression ^: None => expression
@@ -319,17 +319,6 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
     openParenth ::: expr ::: closeParenth
   } setName "parenthesizedExpr"
 
-  private lazy val mutPossiblyFilledArrayInit = recursive {
-    kw(Mut).ignored ::: (arrayInit OR (at ::: expr ::: filledArrayInit)) map {
-      case arrayInit: ArrayInit =>
-        errorReporter.push(Errors.Warning(Parsing,
-          s"${Mut.str} is redundant in front of an uninitialized array declaration", arrayInit.getPosition))
-        arrayInit
-      case (region: Expr) ^: (filledArrayInit: FilledArrayInit) =>
-        filledArrayInit.copy(regionOpt = Some(region))
-    }
-  } setName "mutPossiblyFilledArrayInit"
-
   private lazy val arrayInit = recursive {
     kw(Arr).ignored ::: opt(at ::: expr) ::: typeTree ::: openingBracket ::: expr ::: closingBracket map {
       case regionOpt ^: elemType ^: size =>
@@ -338,8 +327,8 @@ final class Parser(errorReporter: ErrorReporter) extends CompilerStep[(List[Posi
   } setName "arrayInit"
 
   private lazy val filledArrayInit = recursive {
-    openingBracket ::: repeatWithSep(expr, comma) ::: closingBracket map {
-      case arrElems => FilledArrayInit(None, arrElems)
+    openingBracket ::: repeatWithSep(expr, comma) ::: closingBracket ::: opt(op(At).ignored ::: expr) map {
+      case arrElems ^: regionOpt => FilledArrayInit(arrElems, regionOpt)
     }
   } setName "filledArrayInit"
 

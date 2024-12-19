@@ -346,7 +346,7 @@ object Asts {
   /**
    * Initialization of an array that contains all the elements in `arrayElems` (in order)
    */
-  final case class FilledArrayInit(regionOpt: Option[Expr], arrayElems: List[Expr]) extends Expr {
+  final case class FilledArrayInit(arrayElems: List[Expr], regionOpt: Option[Expr]) extends Expr {
     override def children: List[Ast] = regionOpt.toList ++ arrayElems
   }
 
