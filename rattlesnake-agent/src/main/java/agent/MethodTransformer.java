@@ -27,6 +27,25 @@ public final class MethodTransformer extends MethodVisitor {
         }
     }
 
+    @Override
+    public void visitFieldInsn(int opcode, String owner, String name, String descriptor) {
+        if (opcode == Opcodes.PUTFIELD){
+            var fieldType = Type.getType(descriptor);
+            if (fieldType.getSize() == 2){
+                super.visitInsn(Opcodes.DUP2_X1);
+                super.visitInsn(Opcodes.POP2);
+                super.visitInsn(Opcodes.DUP_X2);
+            } else {
+                super.visitInsn(Opcodes.DUP_X1);
+                super.visitInsn(Opcodes.POP);
+                super.visitInsn(Opcodes.DUP_X1);
+            }
+            super.visitMethodInsn(Opcodes.INVOKESTATIC, RUNTIME_CLASS_NAME, "assertRegionAllowed",
+                    "(Ljava/lang/Object;)V", false);
+        }
+        super.visitFieldInsn(opcode, owner, name, descriptor);
+    }
+
     private Type arrayElemTypeForStoreInsn(int storeInsnOpcode){
         return switch (storeInsnOpcode){
             case Opcodes.IASTORE -> Type.INT_TYPE;
