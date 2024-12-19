@@ -129,7 +129,7 @@ final class Backend[V <: ClassVisitor](
     ccv.visit(javaVersionCode, ACC_PUBLIC, GenFilesNames.constantsFileName, null, objectTypeStr, null)
     for const <- consts do {
       ccv.visitField(
-        ACC_PUBLIC | ACC_STATIC,
+        ACC_PUBLIC | ACC_STATIC | ACC_FINAL,
         const.constName.stringId,
         descriptorForType(const.value.getType),
         null,
