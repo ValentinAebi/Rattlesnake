@@ -1,12 +1,31 @@
 
+struct Foo { var x: Int }
+
 package Main {
 
-    fn main(arr String){
-        val s: UnsafeStruct^ = Unsafe.create();
-        for var i = 0; i < #(s.xs); i += 1 {
-            s.xs[i] = 2*i + 1;
+    main fn program(arr String){
+        val s: UnsafeStruct^#;
+        enclosed {} {
+            s = Unsafe.create();
         };
-        print(intToString(Unsafe.computeSum(s)));
+        val r = newregion;
+        val array = [1, 2, 3]@r;
+        val q = newregion;
+        val foo = new@q Foo(101);
+        enclosed {r, q} {
+            for var i = 0; i < #(s.xs); i += 1 {
+                s.xs[i] = 2*i + 1;
+            };
+            printlnInt(Unsafe.computeSum(s));
+            array[0] = 42;
+            foo.x = 99;
+            printlnInt(array[0]);
+            printlnInt(foo.x);
+        }
+    }
+
+    fn printlnInt(i: Int){
+        print(intToString(i) + "\n");
     }
 
 }
