@@ -21,7 +21,7 @@ object RootEnvir extends Environment {
 final class EnclosedEnvir(val enclosingEnvir: Environment) extends Environment {
   override val insideEnclosure: Boolean = true
 
-  export enclosingEnvir.allowsCapturable
+  override def allowsCapturable(capturable: Capturable)(using TypeCheckingContext): Boolean = true
 }
 
 final class RestrictedEnvir(val cs: CaptureSet, val enclosingEnvir: Environment) extends Environment {
