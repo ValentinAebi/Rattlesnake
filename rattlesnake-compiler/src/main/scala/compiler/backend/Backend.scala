@@ -87,7 +87,7 @@ final class Backend[V <: ClassVisitor](
       val outputDirPath = outputDirBase.resolve("out")
       val outputDirFile = outputDirPath.toFile
       if (outputDirFile.exists()) {
-        outputDirFile.delete()
+        deleteDirTree(outputDirFile)
       }
       Files.createDirectories(outputDirPath)
 
@@ -113,6 +113,16 @@ final class Backend[V <: ClassVisitor](
       generatedClassFiles.toList
     }
 
+  }
+  
+  private def deleteDirTree(root: File): Unit = {
+    if (root.isDirectory){
+      for (subFile <- root.listFiles()){
+        deleteDirTree(subFile)
+      }
+    } else {
+      Files.delete(root.toPath)
+    }
   }
 
   private def copyJar(srcDirPath: Path, jarNamePrefix: String, destDirPath: Path): Unit = try {
