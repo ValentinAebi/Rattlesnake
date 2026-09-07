@@ -19,7 +19,7 @@ object Erasure {
     case NullableType(nullatedType) => NullableType(getRuntimeType(nullatedType))
     case UnionType(types) => UnionType(types.map(getRuntimeType))
     case IntersectionType(types) => IntersectionType(types.map(getRuntimeType))
-    case ClosureType(params, result, enforcedPure) => ???
+    case ClosureType(params, result, enforcedPure) => NamedType(StdLib.closureTypeId, List.empty, List.empty)
     case tpe: PrimitiveType => tpe
   }
 

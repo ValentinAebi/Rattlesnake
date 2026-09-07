@@ -60,6 +60,7 @@ object StdLib {
 
   // licorne.closures
   val licorneClosuresPkgPrefix: List[String] = licornePkgPrefix :+ "closures"
+  val closureTypeId: TypeIdentifier = TypeIdentifier(licorneClosuresPkgPrefix, "Closure")
   val heapVarTypeId: TypeIdentifier = TypeIdentifier(licorneClosuresPkgPrefix, "HeapVar")
   val heapVarGetFunId: FunOrVarId = NormalFunOrVarId("get")
   val heapVarSetFunId: FunOrVarId = NormalFunOrVarId("set")

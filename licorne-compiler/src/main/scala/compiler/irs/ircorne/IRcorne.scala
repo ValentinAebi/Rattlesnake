@@ -58,21 +58,26 @@ object IRcorne {
 
     def consumedVals: List[IdValue]
     
-    def producedValOpt: Option[IdValue] = this match {
-      case assign: AssigningInstr => Some(assign.assigned)
-      case _ => None
-    }
+    def producedVals: List[IdValue]
 
-    def freeVals: SeqSet[IdValue] = this match {
-      case mkClosure@MkClosure(assigned, params, body, isPure) =>
-        val paramsSet = params.map(_._1).toSet[IdValue]
-        body.freeVals.filter(!paramsSet.contains(_))
-      case _ =>
-        val prodOpt = producedValOpt
-        SeqSet(consumedVals.filterNot(prodOpt.contains))
+    def freeVals: SeqSet[IdValue] = {
+      val consumed = mutable.LinkedHashSet.empty[IdValue]
+      val produced = mutable.Set.empty[IdValue]
+      traverse { instr =>
+        consumed.addAll(instr.consumedVals)
+        produced.addAll(instr.producedVals)
+      }
+      SeqSet(consumed diff produced)
     }
     
     def children: List[Instr]
+    
+    def traverse(action: Instr => Unit): Unit = {
+      action(this)
+      for (child <- children) {
+        child.traverse(action)
+      }
+    }
   }
 
   final case class Function(owner: TypeIdentifier, funId: FunOrVarId, bodyOpt: Option[Scope]) {
@@ -134,6 +139,11 @@ object IRcorne {
     override final def consumedVals: List[IdValue] = List.empty
   }
   
+  sealed trait ProducesNoVal {
+    this: Instr =>
+    override def producedVals: List[IdValue] = List.empty
+  }
+  
   sealed trait NoChildren {
     this: Instr =>
     override def children: List[Instr] = List.empty
@@ -144,22 +154,28 @@ object IRcorne {
   final case class Loop(cond: Scope, condVal: IdValue, body: Scope, variables: List[LoopVarData]) extends ControlFlowInstr {
     override def consumedVals: List[IdValue] = condVal :: variables.flatMap(vd => List(vd.beforeLoopVal, vd.bodyLastVal))
 
+    override def producedVals: List[IdValue] = variables.map(_.inCondVal)
+
     override def children: List[Instr] = List(cond, body)
   }
 
   final case class Disjunction(condVal: IdValue, thenBr: Scope, elseBr: Scope, variables: List[DisjunctionVarData]) extends ControlFlowInstr {
     override def consumedVals: List[IdValue] = condVal :: variables.flatMap(vd => List(vd.afterThenVal, vd.afterElseVal))
 
+    override def producedVals: List[IdValue] = variables.map(_.joinedVal)
+
     override def children: List[Instr] = List(thenBr, elseBr)
   }
 
   // TODO maybe this should become a PseudoInstr?
-  final case class StaticTypeAssert(value: IdValue, var tpe: Type) extends RealInstr, PureInstr, NoChildren {
+  final case class StaticTypeAssert(value: IdValue, var tpe: Type) extends RealInstr, PureInstr, ProducesNoVal, NoChildren {
     override def consumedVals: List[IdValue] = List.empty
   }
 
   sealed trait AssigningInstr extends RealInstr {
     val assigned: IdValue
+
+    override def producedVals: List[IdValue] = List(assigned)
   }
 
   sealed trait UnaryOp extends NoChildren {
@@ -264,27 +280,27 @@ object IRcorne {
     override def consumedVals: List[IdValue] = List(inValue)
   }
 
-  final case class FieldWrite(owner: IdValue, var field: FieldResolutionTarget, rhs: IdValue) extends RealInstr, NoChildren {
+  final case class FieldWrite(owner: IdValue, var field: FieldResolutionTarget, rhs: IdValue) extends RealInstr, ProducesNoVal, NoChildren {
     override def consumedVals: List[IdValue] = List(owner, rhs)
   }
 
-  final case class HeapVarWrite(heapVar: HeapVarIdValue, newValue: IdValue) extends RealInstr, NoChildren {
+  final case class HeapVarWrite(heapVar: HeapVarIdValue, newValue: IdValue) extends RealInstr, ProducesNoVal, NoChildren {
     override def consumedVals: List[IdValue] = List(heapVar, newValue)
   }
 
-  final case class Return(retVal: IdValue) extends RealInstr, ScopeEndingInstr, PureInstr, NoChildren {
+  final case class Return(retVal: IdValue) extends RealInstr, ScopeEndingInstr, PureInstr, ProducesNoVal, NoChildren {
     override def consumedVals: List[IdValue] = List(retVal)
   }
 
-  final case class Panic(msg: IdValue) extends RealInstr, ScopeEndingInstr, PureInstr, NoChildren {
+  final case class Panic(msg: IdValue) extends RealInstr, ScopeEndingInstr, PureInstr, ProducesNoVal, NoChildren {
     override def consumedVals: List[IdValue] = List(msg)
   }
 
-  final case class Cast(inValue: IdValue, target: TypeIdentifier) extends RealInstr, PureInstr, NoChildren {
+  final case class Cast(inValue: IdValue, target: TypeIdentifier) extends RealInstr, PureInstr, ProducesNoVal, NoChildren {
     override def consumedVals: List[IdValue] = List(inValue)
   }
 
-  final case class HybridCast(inValue: IdValue) extends RealInstr, PureInstr, NoChildren {
+  final case class HybridCast(inValue: IdValue) extends RealInstr, PureInstr, ProducesNoVal, NoChildren {
     private var modeOpt = Option.empty[HybridCastMode]
 
     def setMode(mode: HybridCastMode): Unit = {
@@ -305,13 +321,13 @@ object IRcorne {
     override def consumedVals: List[IdValue] = List.empty
   }
 
-  final case class LocalDecl(localId: FunOrVarId, var tpe: Type) extends RealInstr, ConsumesNoVal, NoChildren
+  final case class LocalDecl(localId: FunOrVarId, var tpe: Type) extends RealInstr, ConsumesNoVal, ProducesNoVal, NoChildren
 
   final class Scope private(
                              val outScopeOpt: Option[Scope],
                              val valuesCtx: ValuesContext,
                              private val proxyStore: ProxyStore
-                           ) extends RealInstr {
+                           ) extends RealInstr, ConsumesNoVal, ProducesNoVal {
     private var enclosingFunctionOpt = Option.empty[Function]
 
     private val types = mutable.Map.empty[IdValue, Type]
@@ -502,8 +518,6 @@ object IRcorne {
       getLocalValuesContextUnsafe.reportHasExitedIfNeeded(er, posOpt)
     }
 
-    override def consumedVals: List[IdValue] = List.empty
-    
     def writeInstrIndices(): Unit = {
       for ((instr, idx) <- instructions.zipWithIndex) {
         instr.setIdxInScope(idx)
@@ -594,7 +608,7 @@ object IRcorne {
 
   sealed trait PseudoInstr extends Instr
 
-  final case class Unreachable() extends PseudoInstr, ScopeEndingInstr, ConsumesNoVal, NoChildren
+  final case class Unreachable() extends PseudoInstr, ScopeEndingInstr, ConsumesNoVal, ProducesNoVal, NoChildren
 
   enum HybridCastMode {
     case AssertNonNull

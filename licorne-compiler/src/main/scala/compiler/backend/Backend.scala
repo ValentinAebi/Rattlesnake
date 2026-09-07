@@ -4,7 +4,7 @@ import compiler.backend.Boxing.{boxDesc, unboxDesc}
 import compiler.backend.Erasure.getRuntimeType
 import compiler.gennames.FileExtensions
 import compiler.identifiers.TypeIdentifier
-import compiler.irs.ircorne.Formulas.{IdValue, IntermediateIdValue, NamedIdValue}
+import compiler.irs.ircorne.Formulas.{IdValue, IntermediateIdValue, NamedIdValue, UninterpretedConstIdValue}
 import compiler.irs.ircorne.IRcorne.*
 import compiler.irs.ircorne.{Formulas, IRcorne, SourceLevelFormulaPrinter}
 import compiler.lang
@@ -30,6 +30,7 @@ import java.lang.constant.ConstantDescs.*
 import java.lang.constant.{ClassDesc, MethodTypeDesc}
 import java.nio.file.{Files, Path}
 import java.{lang, util}
+import scala.collection.immutable.SeqMap
 import scala.collection.mutable
 
 // TODO make sure that main functions have input type Array[String] (or possibly take no argument)
@@ -53,6 +54,7 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
   private val assertionErrorConstrDesc = MethodTypeDesc.of(CD_void, CD_Object)
   private val heapVarDesc = ClassDesc.of(heapVarTypeId.stringId)
   private val assertionErrorDesc = ClassDesc.ofInternalName(assertionErrorInternalName)
+  private val closureFunName = "run"
 
   private val javaLangMathDesc = ClassDesc.ofInternalName("java/lang/Math")
 
@@ -67,24 +69,25 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
 
     given ResolutionContext = ResolutionContext(program, er)(using CodeGen)
 
-    val classHierarchyResolver = mkClassHierarchyResolver(subtypingInfo)
+    given classHierarchyResolver: ClassHierarchyResolver = mkClassHierarchyResolver(subtypingInfo)
+
     val mainClasses = mutable.LinkedHashSet.empty[String]
     for (tSig <- program.runtimeSignatures) {
       if (tSig.functions.exists(_._2.isMain)) {
         mainClasses.add(tSig.id.stringId)
       }
-      generateTypeDecl(tSig, program, classHierarchyResolver)
+      generateTypeDecl(tSig, program)
     }
     er.displayAndTerminateIfErrors()
     mainClasses.toList
   }
 
-  private def generateTypeDecl(tSig: RuntimeTypeSignature, program: Program, classHierarchyResolver: ClassHierarchyResolver)
-                              (using DealiasingContext, SimplifiedSubtypingContext, ResolutionContext): Unit = {
+  private def generateTypeDecl(tSig: RuntimeTypeSignature, program: Program)
+                              (using DealiasingContext, SimplifiedSubtypingContext, ResolutionContext, ClassHierarchyResolver): Unit = {
     val tid = tSig.id
     val path = mkPathToClass(tid)
     Files.createDirectories(path.getParent)
-    ClassFile.of(ClassHierarchyResolverOption.of(classHierarchyResolver)).buildTo(
+    ClassFile.of(ClassHierarchyResolverOption.of(summon[ClassHierarchyResolver])).buildTo(
       path,
       ClassDesc.of(tid.stringId),
       cb => {
@@ -120,6 +123,7 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
     )
   }
 
+  // TODO maybe there could be an issue with the ClassHierarchyResolver not being aware of the subtyping relationship between closures and the Closure interface
   private def mkClassHierarchyResolver(subtypingInfo: SubtypingInfo)(using dealiasingCtx: DealiasingContext, resolCtx: ResolutionContext): ClassHierarchyResolver = {
     val tConv = NonBoxingTypesConverter.fromAmbientDealiasingCtx
     val interfaces = util.ArrayList[ClassDesc]()
@@ -199,7 +203,8 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
 
   private def generateFunctions(ownerTypeSig: RuntimeTypeSignature, cb: ClassBuilder)
                                (using program: Program, dealiasingCtx: DealiasingContext,
-                                simplifiedSubtypingCtx: SimplifiedSubtypingContext, resolCtx: ResolutionContext): Unit = {
+                                simplifiedSubtypingCtx: SimplifiedSubtypingContext, resolCtx: ResolutionContext,
+                                classHierarchyResolver: ClassHierarchyResolver): Unit = {
     given GlobalValuesContext = program.globalValuesContext
 
     val ownerId = ownerTypeSig.id
@@ -229,7 +234,7 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
   }
 
   private def generateFunc(funSig: FunctionSignature, bodyOpt: Option[IRcorne.Scope], ownerSig: TypeSignature, cb: ClassBuilder)
-                          (using DealiasingContext, SimplifiedSubtypingContext, GlobalValuesContext, ResolutionContext): Unit = {
+                          (using DealiasingContext, SimplifiedSubtypingContext, GlobalValuesContext, ResolutionContext, ClassHierarchyResolver): Unit = {
     given tpCtx: TypeParamsContext = TypeParamsContext(ownerSig.typeParams ++ funSig.typeParams)
 
     val tConv = NonBoxingTypesConverter.fromAmbientDealiasingCtx
@@ -253,7 +258,7 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
           bodyOpt.foreach { body =>
             mb.withCode(cb => {
 
-              given funGenCtx: FunctionGenerationContext = FunctionGenerationContext(summon[GlobalValuesContext], tpCtx, funSig)
+              given funGenCtx: FunctionGenerationContext = FunctionGenerationContext(summon[GlobalValuesContext], tpCtx, funSig.isSyntheticAccessor, funSig.ownerName, funSig.retType, closureInfoOpt = None)
 
               for ((idVal, tpe) <- funSig.paramsInclThis) {
                 allocateAndDeclare(idVal, cb, body)
@@ -282,15 +287,16 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
     MethodTypeDesc.of(CD_void, tSig.fields.values.map(f => tConv.descriptorFor(f.tpe)(using TypeParamsContext(tSig.typeParams))).toArray *)
   }
 
-  private def mkPathToClass(typeId: TypeIdentifier): Path = {
+  private def mkPathToClass(typeId: TypeIdentifier, innerClassNameOpt: Option[String] = None): Path = {
     typeId.prefixes
       .foldLeft(outputDirectoryPath)(_.resolve(_))
-      .resolve(typeId.nonPrefixedId + FileExtensions.dot(_.clazz))
+      .resolve(typeId.nonPrefixedId + innerClassNameOpt.map("$" + _).getOrElse("") + FileExtensions.dot(_.clazz))
   }
 
   private def generateScope(scope: IRcorne.Scope, cb: CodeBuilder)
                            (using funGenCtx: FunctionGenerationContext, dealiasingCtx: DealiasingContext,
-                            simplifiedSubtypingCtx: SimplifiedSubtypingContext, resolCtx: ResolutionContext, globalValsCtx: GlobalValuesContext): Unit = {
+                            simplifiedSubtypingCtx: SimplifiedSubtypingContext, resolCtx: ResolutionContext,
+                            globalValsCtx: GlobalValuesContext, classHierarchyResolver: ClassHierarchyResolver): Unit = {
     scope.writeInstrIndices()
     try {
       for (instr <- scope.instructions) {
@@ -306,7 +312,8 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
 
   private def generateInstr(instr: IRcorne.Instr, cb: CodeBuilder, currScope: IRcorne.Scope)
                            (using funGenCtx: FunctionGenerationContext, dealiasingCtx: DealiasingContext,
-                            simplifiedSubtypingCtx: SimplifiedSubtypingContext, resolCtx: ResolutionContext, globalValsCtx: GlobalValuesContext): Unit = {
+                            simplifiedSubtypingCtx: SimplifiedSubtypingContext, resolCtx: ResolutionContext,
+                            globalValsCtx: GlobalValuesContext, classHierarchyResolver: ClassHierarchyResolver): Unit = {
     given TypeParamsContext = funGenCtx.typeParamsCtx
 
     instr match {
@@ -458,7 +465,7 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
         val ownerDesc = tConv.descriptorFor(field.getReceiverSigUnsafe.id)
         genValueLoad(owner, currScope, cb)
         cb.getfield(ownerDesc, field.fieldId.stringId, tConv.descriptorFor(field.getReceiverSigUnsafe.fields.apply(field.fieldId).tpe))
-        if (!(funGenCtx.enclosingFunc.isSyntheticAccessor && fr.getIdxInScopeOpt.get == 0)) {
+        if (!(funGenCtx.isSyntheticAccessor && fr.getIdxInScopeOpt.get == 0)) {
           ensureAssignable(dealiasedTypeOf(assigned, currScope), field.getFieldUnsafe.tpe, cb)
           genValueStore(assigned, currScope, cb)
         }
@@ -524,7 +531,33 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
         ensureAssignable(dealiasedTypeOf(assigned, currScope), funSig.retType.substitute(typeArgsSubst, Map.empty), cb)
         genValueStore(assigned, currScope, cb)
 
-      case IRcorne.InvokeClosure(assigned, callee, closureTypingTarget, args) => ???
+      case IRcorne.InvokeClosure(assigned, callee, closureTypingTarget, args) =>
+        genValueLoad(callee, currScope, cb)
+        cb.loadConstant(args.size)
+        val argsArraySlot = funGenCtx.allocateSlotOfSize(1)
+        cb.anewarray(CD_Object)
+        cb.dup()
+        cb.astore(argsArraySlot)
+        for ((arg, idx) <- args.zipWithIndex) {
+          cb.aload(argsArraySlot)
+          cb.loadConstant(idx)
+          genValueLoad(arg, currScope, cb)
+          if (typeKindOf(arg, currScope) != TypeKind.REFERENCE) {
+            val unboxedDesc = typeDescOf(arg, currScope)
+            val boxedDesc = boxDesc(unboxedDesc)
+            cb.invokestatic(boxedDesc, "valueOf", MethodTypeDesc.of(boxedDesc, unboxedDesc))
+          }
+          cb.aastore()
+        }
+        cb.invokeinterface(ClassDesc.of(StdLib.closureTypeId.stringId), closureFunName, MethodTypeDesc.of(CD_Object, CD_Object.arrayType()))
+        if (typeKindOf(assigned, currScope) != TypeKind.REFERENCE) {
+          val unboxedDesc = typeDescOf(assigned, currScope)
+          val boxedDesc = boxDesc(unboxedDesc)
+          cb.checkcast(boxedDesc)
+          cb.invokevirtual(boxedDesc, unboxingFunc(boxedDesc), MethodTypeDesc.of(unboxedDesc))
+        }
+        genValueStore(assigned, currScope, cb)
+
 
       case instantiate@IRcorne.Instantiate(assigned, StdLib.arrayTypeId, _, List((_, sizeVal))) =>
         val tConv = NonBoxingTypesConverter.fromAmbientDealiasingCtx
@@ -549,7 +582,22 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
         cb.invokespecial(desc, INIT_NAME, mkConstrDesc(createdObjTypeSig))
         genValueStore(assigned, currScope, cb)
 
-      case IRcorne.MkClosure(assigned, params, body, isPure) => ???
+      case IRcorne.MkClosure(assigned, params, body, isPure) =>
+        val tConv = NonBoxingTypesConverter.fromAmbientDealiasingCtx
+        val paramsSet = params.map(_._1).toSet[IdValue]
+        val freeVals = SeqMap.from(
+          body.freeVals.toList.filterNot(paramsSet.contains)
+            .filterNot(_.isInstanceOf[UninterpretedConstIdValue])
+            .map(fv => fv -> getRuntimeType(dealiasedTypeOf(fv, currScope)))
+        )
+        val closureClassDesc = generateClosureClass(mkClosureName(assigned), params, body, freeVals, funGenCtx.rootEnclosingTypeName)
+        cb.new_(closureClassDesc)
+        cb.dup()
+        for ((fv, tpe) <- freeVals) {
+          genValueLoad(fv, currScope, cb)
+        }
+        cb.invokespecial(closureClassDesc, INIT_NAME, MethodTypeDesc.of(CD_void, freeVals.map((_, tpe) => tConv.descriptorFor(tpe)).toSeq *))
+        genValueStore(assigned, currScope, cb)
 
       case IRcorne.MkHeapVar(assigned) =>
         cb.new_(heapVarDesc)
@@ -628,8 +676,8 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
 
       case ret@IRcorne.Return(retVal) =>
         val tConv = NonBoxingTypesConverter.fromAmbientDealiasingCtx
-        val retType = funGenCtx.enclosingFunc.retType
-        if (!(funGenCtx.enclosingFunc.isSyntheticAccessor && ret.getIdxInScopeOpt.get == 1)) {
+        val retType = funGenCtx.expRetType
+        if (!(funGenCtx.isSyntheticAccessor && ret.getIdxInScopeOpt.get == 1)) {
           genValueLoad(retVal, currScope, cb)
           ensureAssignable(retType, dealiasedTypeOf(retVal, currScope), cb)
         }
@@ -656,6 +704,88 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
     }
   }
 
+  private def generateClosureClass(closureClassNameShort: String, params: List[(Formulas.ParamIdValue, Type)], body: Scope, freeVals: SeqMap[IdValue, Type], enclosingClassId: TypeIdentifier)
+                                  (using tpCtx: TypeParamsContext, dealiasingCtx: DealiasingContext, classHierarchyResolver: ClassHierarchyResolver,
+                                   globalValsCtx: GlobalValuesContext, subtypingCtx: SimplifiedSubtypingContext, resolCtx: ResolutionContext): ClassDesc = {
+    val tConv = NonBoxingTypesConverter.fromAmbientDealiasingCtx
+    val freeValFields = freeVals.map((fv, tpe) => mkFieldNameForFreeVal(fv) -> (fv, tpe))
+    val closureClassNameLong = enclosingClassId.stringId + "$" + closureClassNameShort
+    val closureClassDesc = ClassDesc.of(closureClassNameLong)
+    ClassFile.of(ClassHierarchyResolverOption.of(classHierarchyResolver)).buildTo(
+      mkPathToClass(enclosingClassId, innerClassNameOpt = Some(closureClassNameShort)),
+      closureClassDesc,
+      clb => {
+
+        clb.withInterfaceSymbols(ClassDesc.of(StdLib.closureTypeId.stringId))
+
+        // generate fields
+        for ((fldId, (fv, tpe)) <- freeValFields) {
+          clb.withField(fldId, tConv.descriptorFor(tpe), ClassFile.ACC_PRIVATE | ClassFile.ACC_FINAL)
+        }
+
+        // generate constructor
+        clb.withMethod(INIT_NAME, MethodTypeDesc.of(CD_void, freeVals.map((_, tpe) => tConv.descriptorFor(tpe)).toSeq *), ClassFile.ACC_PUBLIC, mb => {
+          mb.withCode(cb => {
+            cb.aload(0)
+            cb.invokespecial(CD_Object, INIT_NAME, MethodTypeDesc.of(CD_void))
+            var slotIdx = 1
+            for ((fldName, (fldFv, fldType)) <- freeValFields) {
+              val k = tConv.kindFor(fldType)
+              cb.aload(0)
+              cb.loadLocal(k, slotIdx)
+              cb.putfield(closureClassDesc, fldName, tConv.descriptorFor(fldType))
+              slotIdx += k.slotSize()
+            }
+            cb.return_()
+          })
+        })
+
+        // generate apply method
+        val applyFunGenCtx = FunctionGenerationContext(globalValsCtx, tpCtx, isSyntheticAccessor = false, enclosingClassId, NullableType(AnyType), Some(
+          freeValFields.map { case (fldName, (fv, tpe)) => (fv, (fldName, tpe)) }, closureClassDesc
+        ))
+        clb.withMethod(closureFunName, MethodTypeDesc.of(CD_Object, CD_Object.arrayType()), ClassFile.ACC_PUBLIC, mb => {
+          mb.withCode(cb => {
+            applyFunGenCtx.allocateSlotOfSize(1)  // slot for this
+            val argsArraySlot = applyFunGenCtx.allocateSlotOfSize(1)
+            for (((paramVal, paramType), paramIdx) <- params.zipWithIndex) {
+              val paramSlot = allocateAndDeclare(paramVal, cb, body)(using applyFunGenCtx)
+              cb.aload(argsArraySlot)
+              cb.loadConstant(paramIdx)
+              cb.aaload()
+              val paramKind = tConv.kindFor(paramType)
+              if (paramKind != TypeKind.REFERENCE) {
+                val unboxedTypeDesc = tConv.descriptorFor(paramType)
+                val boxedTypeDesc = boxDesc(unboxedTypeDesc)
+                cb.checkcast(boxedTypeDesc)
+                cb.invokevirtual(boxedTypeDesc, unboxingFunc(boxedTypeDesc), MethodTypeDesc.of(unboxedTypeDesc))
+              }
+              cb.storeLocal(paramKind, paramSlot)
+            }
+            generateScope(body, cb)(using applyFunGenCtx)
+            if (!body.hasExited) {
+              cb.aconst_null()
+              cb.areturn()
+            }
+          })
+        })
+
+      }
+    )
+    closureClassDesc
+  }
+
+  private def mkClosureName(closureVal: IdValue): String = "Closure" + closureVal.uid + (closureVal match {
+    case value: NamedIdValue => value.name
+    case IntermediateIdValue(definingScope, uid, nameHint) => nameHint
+  })
+
+  private def mkFieldNameForFreeVal(fv: IdValue): String =
+    s"fv${fv.uid}" ++ (fv match {
+      case fv: NamedIdValue => fv.name
+      case IntermediateIdValue(definingScope, uid, nameHint) => nameHint
+    })
+
   private def genValueMove(to: IdValue, from: IdValue, currScope: Scope, cb: CodeBuilder)
                           (using funcGenCtx: FunctionGenerationContext, dealiasingCtx: DealiasingContext, simplifiedSubtypingCtx: SimplifiedSubtypingContext, globalValsCtx: GlobalValuesContext): Unit = {
     given TypeParamsContext = funcGenCtx.typeParamsCtx
@@ -676,6 +806,12 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
     idVal match {
       case _ if funcGenCtx.isNullVal(idVal) =>
         cb.aconst_null()
+      case _ if funcGenCtx.isFieldLoad(idVal) =>
+        val tConv = NonBoxingTypesConverter.fromAmbientDealiasingCtx
+        val closureInfo = funcGenCtx.closureInfoOpt.get
+        val (fldName, fldType) = closureInfo.freeValFields.apply(idVal)
+        cb.aload(0)
+        cb.getfield(closureInfo.closureClassDesc, fldName, tConv.descriptorFor(fldType))
       case _ =>
         val kind = typeKindOf(idVal, currScope)
         if (kind != VOID) {

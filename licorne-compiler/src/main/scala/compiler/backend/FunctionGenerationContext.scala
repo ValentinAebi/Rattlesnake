@@ -1,5 +1,6 @@
 package compiler.backend
 
+import compiler.identifiers.TypeIdentifier
 import compiler.irs.ircorne.Formulas.IdValue
 import compiler.lang.FunctionSignature
 import compiler.lang.Types.Type
@@ -8,24 +9,35 @@ import compiler.typing.contexts.TypeParamsContext
 import compiler.valuesconversion.GlobalValuesContext
 
 import java.lang.classfile.TypeKind
+import java.lang.constant.ClassDesc
 import scala.collection.mutable
 
 
 // TODO slots assignment could be optimized (using register allocation techniques...)
-final class FunctionGenerationContext(globalValsCtx: GlobalValuesContext, val typeParamsCtx: TypeParamsContext, val enclosingFunc: FunctionSignature) {
+final class FunctionGenerationContext(
+                                       globalValsCtx: GlobalValuesContext,
+                                       val typeParamsCtx: TypeParamsContext,
+                                       val isSyntheticAccessor: Boolean,
+                                       val rootEnclosingTypeName: TypeIdentifier,
+                                       val expRetType: Type,
+                                       val closureInfoOpt: Option[(freeValFields: Map[IdValue, (String, Type)], closureClassDesc: ClassDesc)]
+                                     ) {
   private val slotsAssignment = mutable.Map.empty[IdValue, Int]
   private var nextFreeSlot = 0
   private var currLineNumber = 0
 
   def isNullVal(idVal: IdValue): Boolean =
     idVal == globalValsCtx.nullVal
-  
+
   def onNewLineNumber(posOpt: Option[Position])(action: Int => Unit): Unit = posOpt match {
     case Some(Position(srcCodeProviderName, line, col)) if line != currLineNumber =>
       currLineNumber = line
       action(line)
     case _ => ()
   }
+  
+  def isFieldLoad(idVal: IdValue): Boolean =
+    closureInfoOpt.exists(_.freeValFields.contains(idVal))
 
   def getSlot(idVal: IdValue): Int =
     slotsAssignment.apply(idVal)
@@ -57,7 +69,7 @@ final class FunctionGenerationContext(globalValsCtx: GlobalValuesContext, val ty
     slotsAssignment(newVal) = getSlot(alrKnownVal)
   }
 
-  private def allocateSlotOfSize(size: Int): Int = {
+  def allocateSlotOfSize(size: Int): Int = {
     val slot = nextFreeSlot
     nextFreeSlot += size
     slot
