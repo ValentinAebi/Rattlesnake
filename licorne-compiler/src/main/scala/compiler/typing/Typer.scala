@@ -386,7 +386,7 @@ final class Typer(
             er.reportError(s"type $classOrRecordName not found or not instantiable", instantiate.getPosition)
         }
 
-      case mkClosure@MkClosure(assigned, params, body, knownPureBeforeTyping) =>
+      case mkClosure@MkClosure(assigned, params, body, knownPureBeforeTyping, closureTypeName) =>
         val id = NormalFunOrVarId(assigned match {
           case assigned: NamedIdValue => IRLevelFormulaPrinter.prettyprint(assigned)
           case assigned: IntermediateIdValue => assigned.toString

@@ -48,6 +48,10 @@ object StdLib {
   val stringJavaIndexOfFunId: FunOrVarId = NormalFunOrVarId("javaIndexOf")
   val stringJavaLastIndexOfFunId: FunOrVarId = NormalFunOrVarId("javaLastIndexOf")
 
+  // licorne.core.Strings
+  val stringsTypeId: TypeIdentifier = TypeIdentifier(licorneCorePkgPrefix, "Strings")
+  val stringificationFunId: FunOrVarId = NormalFunOrVarId("str")
+
   // licorne.io
   val licorneIoPkgPrefix: List[String] = licornePkgPrefix :+ "io"
   val consoleTypeId: TypeIdentifier = TypeIdentifier(licorneIoPkgPrefix, "Console")
@@ -79,7 +83,8 @@ object StdLib {
   val automaticFuncImports: Iterable[(FunOrVarId, (TypeIdentifier, FunOrVarId))] = List(
     consolePrintFunId -> (consoleTypeId, consolePrintFunId),
     consolePrintlnFunId -> (consoleTypeId, consolePrintlnFunId),
-    consoleReadlineFunId -> (consoleTypeId, consoleReadlineFunId)
+    consoleReadlineFunId -> (consoleTypeId, consoleReadlineFunId),
+    stringificationFunId -> (stringsTypeId, stringificationFunId)
   )
 
 }

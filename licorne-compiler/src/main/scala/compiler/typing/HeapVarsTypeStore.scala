@@ -12,6 +12,8 @@ final class HeapVarsTypeStore {
   export types.get as getType
   export types.apply as getTypeUnsafe
   export types.contains
+  
+  def typesView: scala.collection.Map[HeapVarIdValue, Type] = types
 
 }
 

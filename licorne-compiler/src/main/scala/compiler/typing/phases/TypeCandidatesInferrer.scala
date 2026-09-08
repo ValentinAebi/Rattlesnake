@@ -155,7 +155,7 @@ final class TypeCandidatesInferrer(
           typeCandidatesStore.offerCandidate(fldVal, expFldType)
         }
       }
-    case mkClosure@MkClosure(assigned, params, body, declaredPure) =>
+    case mkClosure@MkClosure(assigned, params, body, declaredPure, closureTypeName) =>
       val closureInfo = ClosureInfo(params, body, typeVarsCtx.newTypeVariable(NormalFunOrVarId(assigned.toString), None, None, typeParamsCtx, mkClosure.getPosition), BranchingInfo.empty, declaredPure, currEnvir, TypeParamsContext.empty /* TODO check this */)
       traverseScope(body, closureInfo)
     case MkHeapVar(assigned) => ()

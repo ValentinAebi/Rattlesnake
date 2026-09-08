@@ -3,7 +3,7 @@ package compiler.pipeline
 import compiler.backend.Backend
 import compiler.display.IRcornePrinter
 import compiler.io.{SourceCodeProvider, StringWriter}
-import compiler.ircornegen.{IRcorneGenerator, ImportsScanner}
+import compiler.ircornegen.{ClosuresNamer, IRcorneGenerator, ImportsScanner}
 import compiler.irs.asts.Asts
 import compiler.lexer.Lexer
 import compiler.parser.Parser
@@ -33,8 +33,9 @@ object TasksPipelines {
                 srcRootForPkgMismatchCheckOpt: Option[Path],
                 er: ErrorReporter = defaultErrorReporter
               ): CompilerStep[List[SourceCodeProvider], List[String]] = {
-    typeCheckerImpl(ihm, er, counterExBoxOpt, irDirectoryPathOpt, srcRootForPkgMismatchCheckOpt)
-      .andThen(Backend(outputDirectoryPath, disableOverflowChecks = ihm.isInstanceOf[BvInt32Mode.type], er))
+    val closuresNamer = new ClosuresNamer
+    typeCheckerImpl(ihm, er, counterExBoxOpt, closuresNamer, irDirectoryPathOpt, srcRootForPkgMismatchCheckOpt)
+      .andThen(Backend(outputDirectoryPath, disableOverflowChecks = ihm.isInstanceOf[BvInt32Mode.type], closuresNamer, er))
   }
 
   def typeChecker(
@@ -45,7 +46,7 @@ object TasksPipelines {
                    er: ErrorReporter = defaultErrorReporter,
                    okReporter: String => Unit = println
                  ): CompilerStep[List[SourceCodeProvider], Unit] = {
-    typeCheckerImpl(ihm, er, counterExBoxOpt, irDirectoryPathOpt, srcRootForPkgMismatchCheckOpt)
+    typeCheckerImpl(ihm, er, counterExBoxOpt, new ClosuresNamer, irDirectoryPathOpt, srcRootForPkgMismatchCheckOpt)
       .andThen(_ => ())
   }
 
@@ -59,6 +60,7 @@ object TasksPipelines {
                                ihm: IntHandlingMode[?],
                                er: ErrorReporter,
                                counterExBoxOpt: Option[CounterexampleBox],
+                               closuresNamer: ClosuresNamer,
                                irDirPathOpt: Option[Path],
                                srcRootForPkgMismatchCheckOpt: Option[Path]
                              ): CompilerStep[List[SourceCodeProvider], (Program, SubtypingInfo)] = {
@@ -68,7 +70,7 @@ object TasksPipelines {
     val heapVarsTypeStore = HeapVarsTypeStore()
     multiFrontEnd(er)
       .andThen(ImportsScanner())
-      .andThen(IRcorneGenerator(typeVarsCtx, proxyStore, er, srcRootForPkgMismatchCheckOpt))
+      .andThen(IRcorneGenerator(typeVarsCtx, proxyStore, closuresNamer, er, srcRootForPkgMismatchCheckOpt))
       .andThen(MaybePrintIRcorne("ir1-after-ir-gen.ircorne", proxyStore, typeCandidatesStore, identity, er, irDirPathOpt))
       .andThen(SubtypingChecker(proxyStore, er))
       .andThen(TypeAliasesAnalyzer(ihm, typeVarsCtx, proxyStore, typeCandidatesStore, heapVarsTypeStore, er, counterExBoxOpt))

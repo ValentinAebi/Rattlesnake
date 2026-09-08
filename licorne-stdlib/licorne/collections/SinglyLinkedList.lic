@@ -15,6 +15,12 @@ datatype SinglyLinkedList[+T] : Seq[T] {
         panic "out of bounds";
     }
 
+    fn foreach(this, action: fn (T) -> Unit) {
+        for (var ls = this; ls is Cons; ls = ls.tail()) {
+            action(ls.head());
+        }
+    }
+
 }
 
 record Cons[+T](head: T, tail: SinglyLinkedList[T]) : SinglyLinkedList[T] {

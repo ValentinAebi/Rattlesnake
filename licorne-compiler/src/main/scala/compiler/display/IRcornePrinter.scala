@@ -267,9 +267,9 @@ final class IRcornePrinter(
       case Instantiate(assigned, classOrRecordName, typeArgs, fieldsInit) =>
         pps.add(s"INSTANTIATE ${maybeTyped(assigned, scope)} := new $classOrRecordName" ++ fieldsInit.map((fldId, rhsVal) => s"$fldId := $rhsVal").mkString("(", ", ", ")"))
         printTypeArgsList(typeArgs)
-      case MkClosure(assigned, params, body, declaredPure) =>
+      case MkClosure(assigned, params, body, declaredPure, closureTypeName) =>
         val purityDescr = if declaredPure then " (pure)" else ""
-        pps.add(s"MK-CLOSURE$purityDescr ${maybeTyped(assigned, scope)} := ").add(mkFunctionParamsDescr(params, precondOpt = None)).add(" ->").indent {
+        pps.add(s"MK-CLOSURE<$closureTypeName>$purityDescr ${maybeTyped(assigned, scope)} := ").add(mkFunctionParamsDescr(params, precondOpt = None)).add(" ->").indent {
           pps.add("body: ")
           printScope(body)
         }

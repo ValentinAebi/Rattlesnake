@@ -72,3 +72,9 @@ class String : Indexed {
         when i == -1 then null else i
 
 }
+
+object Strings {
+    fn str(a: Any?) -> String {
+        panic "compiler stub"
+    }
+}

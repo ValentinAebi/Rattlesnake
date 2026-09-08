@@ -5,7 +5,7 @@ import compiler.io.SourceFile
 import compiler.pipeline.TasksPipelines
 import compiler.reporting.Errors.*
 import compiler.reasoning.{ArithIntMode, CounterexampleBox}
-import compiler.ircornegen.{ImportsScanner, IRcorneGenerator}
+import compiler.ircornegen.{ClosuresNamer, IRcorneGenerator, ImportsScanner}
 import compiler.typing.contexts.TypeVariablesContext
 import compiler.typing.phases.*
 import compiler.typing.{HeapVarsTypeStore, TypeCandidatesStore}
@@ -121,7 +121,7 @@ class AnalyzerTests(fileName: String) {
     val counterExBoxOpt = Option.empty[CounterexampleBox]
     val pipeline = TasksPipelines.multiFrontEnd(er)
       .andThen(ImportsScanner())
-      .andThen(IRcorneGenerator(typeVarsCtx, proxyStore, er, srcRootForPkgMismatchCheckOpt = None))
+      .andThen(IRcorneGenerator(typeVarsCtx, proxyStore, new ClosuresNamer, er, srcRootForPkgMismatchCheckOpt = None))
       .andThen(SubtypingChecker(proxyStore, er))
       .andThen(TypeAliasesAnalyzer(ihm, typeVarsCtx, proxyStore, typeCandidatesStore, heapVarsTypeStore, er, counterExBoxOpt))
       .andThen(DeclarationsChecker(ihm, typeVarsCtx, proxyStore, typeCandidatesStore, heapVarsTypeStore, er, counterExBoxOpt))

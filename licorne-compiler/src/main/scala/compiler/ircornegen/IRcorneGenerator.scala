@@ -29,7 +29,13 @@ import java.nio.file.Path
 import scala.collection.{SeqMap, mutable}
 
 
-final class IRcorneGenerator(typeVarsCtx: TypeVariablesContext, proxyStore: ProxyStore, er: ErrorReporter, srcRootForPkgMismatchCheckOpt: Option[Path]) extends CompilerStep[(List[Asts.Source], PackagesInfo), Program] {
+final class IRcorneGenerator(
+                              typeVarsCtx: TypeVariablesContext,
+                              proxyStore: ProxyStore,
+                              closuresNamer: ClosuresNamer,
+                              er: ErrorReporter,
+                              srcRootForPkgMismatchCheckOpt: Option[Path]
+                            ) extends CompilerStep[(List[Asts.Source], PackagesInfo), Program] {
 
   private type SeqMapBuilder[A, B] = mutable.Builder[(A, B), SeqMap[A, B]]
 
@@ -549,7 +555,7 @@ final class IRcorneGenerator(typeVarsCtx: TypeVariablesContext, proxyStore: Prox
     case Some(body) =>
       val funScope = Scope.nestedInside(funSigScope, body)
       for (stat <- body.stats) {
-        generateIR(stat, funScope, newScopeIfBlock = false)(using currImplicitFields, ReturnCollector.doNothingCollector, FunctionInfo(funSigScope))
+        generateIR(stat, funScope, newScopeIfBlock = false)(using currImplicitFields, ReturnCollector.doNothingCollector, FunctionInfo(funSigScope, owner.prefixes, funId))
       }
       IRcorne.Function(owner, funId, Some(funScope))
     case None =>
@@ -775,10 +781,10 @@ final class IRcorneGenerator(typeVarsCtx: TypeVariablesContext, proxyStore: Prox
   }
 
   private def generateIRExpr(
-                               resultVal: IdValue,
-                               expr: Asts.Expr,
-                               currScope: Scope
-                             )(using currImplicitFields: collection.Map[FunOrVarId, Field], importsCtx: ImportsContext, typeParamsCtx: TypeParamsContext): Option[Formula] = {
+                              resultVal: IdValue,
+                              expr: Asts.Expr,
+                              currScope: Scope
+                            )(using currImplicitFields: collection.Map[FunOrVarId, Field], importsCtx: ImportsContext, typeParamsCtx: TypeParamsContext, functionInfo: FunctionInfo): Option[Formula] = {
 
     def recurseOnDesugared(desugaredExpr: Asts.Expr): Option[Formula] =
       generateIRExpr(resultVal, desugaredExpr.withDesugaringSource(expr), currScope)
@@ -1049,10 +1055,10 @@ final class IRcorneGenerator(typeVarsCtx: TypeVariablesContext, proxyStore: Prox
         }
         val closureBodyScope = Scope.nestedInside(closureParamsScope, closureDefTree)
         val retValCollector = ReturnCollector.freshUniqueCollector
-        generateIR(bodyTree, closureBodyScope, newScopeIfBlock = false)(using currImplicitFields, retValCollector, FunctionInfo(closureParamsScope))
+        generateIR(bodyTree, closureBodyScope, newScopeIfBlock = false)(using currImplicitFields, retValCollector, FunctionInfo(closureParamsScope, functionInfo.packagePrefix, functionInfo.funId))
         val isPure = declaredPure || isObviouslyPure(closureBodyScope)
         val paramValsAndTypes = paramValsAndTypesB.result()
-        currScope.saveInstr(MkClosure(resultVal, paramValsAndTypes, closureBodyScope, isPure), closureDefTree)
+        currScope.saveInstr(MkClosure(resultVal, paramValsAndTypes, closureBodyScope, isPure, closuresNamer.mkName(functionInfo.packagePrefix, functionInfo.funId.stringId)), closureDefTree)
         retValCollector.getUniqueRet.flatMap { closureRetVal =>
           val closure = PureClosureValue(paramValsAndTypes.map(_._1), closureRetVal, resultVal)
           if isPure then Some(closure)
@@ -1354,6 +1360,6 @@ final class IRcorneGenerator(typeVarsCtx: TypeVariablesContext, proxyStore: Prox
     er.report(Warning(IRcorneGeneration, msg, posOpt))
   }
 
-  private case class FunctionInfo(funSigScope: Scope)
+  private case class FunctionInfo(funSigScope: Scope, packagePrefix: List[String], funId: FunOrVarId)
 
 }

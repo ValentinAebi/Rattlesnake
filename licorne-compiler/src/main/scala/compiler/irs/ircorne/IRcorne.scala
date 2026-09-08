@@ -258,7 +258,7 @@ object IRcorne {
     override def consumedVals: List[IdValue] = fieldsInit.map(_._2)
   }
 
-  final case class MkClosure(assigned: IdValue, params: List[(ParamIdValue, Type)], body: Scope, var isPure: Boolean) extends AssigningInstr, ConsumesNoVal {
+  final case class MkClosure(assigned: IdValue, params: List[(ParamIdValue, Type)], body: Scope, var isPure: Boolean, closureTypeName: TypeIdentifier) extends AssigningInstr, ConsumesNoVal {
     override def children: List[Instr] = List(body)
   }
 

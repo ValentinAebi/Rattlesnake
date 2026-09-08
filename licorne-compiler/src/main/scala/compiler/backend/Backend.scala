@@ -4,12 +4,13 @@ import compiler.backend.Boxing.{boxDesc, unboxDesc}
 import compiler.backend.Erasure.getRuntimeType
 import compiler.gennames.FileExtensions
 import compiler.identifiers.TypeIdentifier
-import compiler.irs.ircorne.Formulas.{IdValue, IntermediateIdValue, NamedIdValue, UninterpretedConstIdValue}
+import compiler.ircornegen.ClosuresNamer
+import compiler.irs.ircorne.Formulas.*
 import compiler.irs.ircorne.IRcorne.*
 import compiler.irs.ircorne.{Formulas, IRcorne, SourceLevelFormulaPrinter}
 import compiler.lang
 import compiler.lang.*
-import compiler.lang.Types.PrimitiveType.{AnyType, NothingType, NullType, UnitType}
+import compiler.lang.Types.PrimitiveType.{AnyType, NothingType, NullType}
 import compiler.lang.Types.{NamedType, NullableType, Type}
 import compiler.pipeline.CompilationStep.CodeGen
 import compiler.pipeline.CompilerStep
@@ -34,7 +35,12 @@ import scala.collection.immutable.SeqMap
 import scala.collection.mutable
 
 // TODO make sure that main functions have input type Array[String] (or possibly take no argument)
-final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, er: ErrorReporter) extends CompilerStep[(Program, SubtypingInfo), List[String]] {
+final class Backend(
+                     outputDirectoryPath: Path,
+                     disableOverflowChecks: Boolean,
+                     closuresNamer: ClosuresNamer,
+                     er: ErrorReporter
+                   ) extends CompilerStep[(Program, SubtypingInfo), List[String]] {
 
   // TODO see if lower JVM versions can be supported
   private val javaVersionCode = (ClassFile.JAVA_25_VERSION, 0)
@@ -137,6 +143,11 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
       for ((superTid, _) <- superClassesMap) {
         superClasses.put(tDesc, tConv.descriptorFor(superTid))
       }
+    }
+    val closureTypeDesc = ClassDesc.of(StdLib.closureTypeId.stringId)
+    interfaces.add(closureTypeDesc)
+    for (closure <- closuresNamer.closures) {
+      superClasses.put(ClassDesc.of(closure.stringId), closureTypeDesc)
     }
     ClassHierarchyResolver.of(interfaces, superClasses)
       .orElse(ClassHierarchyResolver.defaultResolver())
@@ -287,10 +298,10 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
     MethodTypeDesc.of(CD_void, tSig.fields.values.map(f => tConv.descriptorFor(f.tpe)(using TypeParamsContext(tSig.typeParams))).toArray *)
   }
 
-  private def mkPathToClass(typeId: TypeIdentifier, innerClassNameOpt: Option[String] = None): Path = {
+  private def mkPathToClass(typeId: TypeIdentifier): Path = {
     typeId.prefixes
       .foldLeft(outputDirectoryPath)(_.resolve(_))
-      .resolve(typeId.nonPrefixedId + innerClassNameOpt.map("$" + _).getOrElse("") + FileExtensions.dot(_.clazz))
+      .resolve(typeId.nonPrefixedId + FileExtensions.dot(_.clazz))
   }
 
   private def generateScope(scope: IRcorne.Scope, cb: CodeBuilder)
@@ -478,6 +489,14 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
         ensureAssignable(field.getFieldUnsafe.tpe, dealiasedTypeOf(rhs, currScope), cb)
         cb.putfield(ownerDesc, field.fieldId.stringId, tConv.descriptorFor(field.getReceiverSigUnsafe.fields.apply(field.fieldId).tpe))
 
+      case InvokeFunc(assigned, receiver, func, typeArgs, args) if StdLibFunctions.staticRedirectFor(func.getFunSigUnsafe).isDefined =>
+        val funSig = func.getFunSigUnsafe
+        val (definingClassDesc, funName, funDesc) = StdLibFunctions.staticRedirectFor(funSig).get
+        generateArgsList(args, funSig, Map.empty, cb, currScope)
+        cb.invokestatic(definingClassDesc, funName, funDesc)
+        ensureAssignable(dealiasedTypeOf(assigned, currScope), funSig.retType, cb)
+        genValueStore(assigned, currScope, cb)
+
       // Array methods
       case IRcorne.InvokeFunc(assigned, receiver, func, typeArgs, args) if isFunc(arrayTypeId, arrayGetFunId)(func.getFunSigUnsafe) =>
         val elemKind = arrayElemKindOf(receiver, currScope)
@@ -512,11 +531,7 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
         val NamedType(receiverTypeId, receiverTypeArgs, _) = funSig.receiverType: @unchecked
         val recTypeSig = resolCtx.resolveTypeSigAs[RuntimeTypeSignature](receiverTypeId).get
         val typeArgsSubst = Map.from(recTypeSig.typeParams.map(_.tid).zip(receiverTypeArgs) ++ funSig.typeParams.map(_.tid).zip(typeArgs))
-        val paramTypes = funSig.paramsWithoutThis.map(_._2.substitute(typeArgsSubst, Map.empty))
-        for ((arg, paramType) <- args.zip(paramTypes)) {
-          genValueLoad(arg, currScope, cb)
-          ensureAssignable(paramType, dealiasedTypeOf(arg, currScope), cb)
-        }
+        generateArgsList(args, funSig, typeArgsSubst, cb, currScope)
         val (targetReceiverDesc, targetFunName, targetFunDesc) = StdLibFunctions.stringFuncRedirectFor(funSig) match {
           case Some(targetFunId, targetFunDesc) => (CD_String, targetFunId, targetFunDesc)
           case None => (tConv.descriptorFor(receiverTypeId), funSig.functionName.stringId, mkFunDesc(funSig, extractParams = if isStaticStringFunc then _.paramsInclThis else _.paramsWithoutThis))
@@ -550,7 +565,10 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
           cb.aastore()
         }
         cb.invokeinterface(ClassDesc.of(StdLib.closureTypeId.stringId), closureFunName, MethodTypeDesc.of(CD_Object, CD_Object.arrayType()))
-        if (typeKindOf(assigned, currScope) != TypeKind.REFERENCE) {
+        val assignedKind = typeKindOf(assigned, currScope)
+        if (assignedKind == TypeKind.VOID) {
+          cb.pop()
+        } else if (assignedKind != TypeKind.REFERENCE) {
           val unboxedDesc = typeDescOf(assigned, currScope)
           val boxedDesc = boxDesc(unboxedDesc)
           cb.checkcast(boxedDesc)
@@ -582,7 +600,7 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
         cb.invokespecial(desc, INIT_NAME, mkConstrDesc(createdObjTypeSig))
         genValueStore(assigned, currScope, cb)
 
-      case IRcorne.MkClosure(assigned, params, body, isPure) =>
+      case IRcorne.MkClosure(assigned, params, body, isPure, closureTypeName) =>
         val tConv = NonBoxingTypesConverter.fromAmbientDealiasingCtx
         val paramsSet = params.map(_._1).toSet[IdValue]
         val freeVals = SeqMap.from(
@@ -590,7 +608,7 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
             .filterNot(_.isInstanceOf[UninterpretedConstIdValue])
             .map(fv => fv -> getRuntimeType(dealiasedTypeOf(fv, currScope)))
         )
-        val closureClassDesc = generateClosureClass(mkClosureName(assigned), params, body, freeVals, funGenCtx.rootEnclosingTypeName)
+        val closureClassDesc = generateClosureClass(closureTypeName, params, body, freeVals, funGenCtx.rootEnclosingTypeName)
         cb.new_(closureClassDesc)
         cb.dup()
         for ((fv, tpe) <- freeVals) {
@@ -600,22 +618,35 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
         genValueStore(assigned, currScope, cb)
 
       case IRcorne.MkHeapVar(assigned) =>
+        val slot = allocateAndDeclare(assigned, cb, currScope)
         cb.new_(heapVarDesc)
         cb.dup()
         cb.aconst_null()
         cb.invokespecial(heapVarDesc, INIT_NAME, MethodTypeDesc.of(CD_void, CD_Object))
-        genValueStore(assigned, currScope, cb)
+        cb.astore(slot)
 
       case IRcorne.HeapVarRead(assigned, heapVar) =>
-        cb.aload(funGenCtx.getSlot(heapVar))
+        genValueLoad(heapVar, currScope, cb)
         cb.invokevirtual(heapVarDesc, heapVarGetFunId.stringId, MethodTypeDesc.of(CD_Object))
-        ensureAssignable(dealiasedTypeOf(assigned, currScope), dealiasedTypeOf(heapVar, currScope), cb)
+        val kindOfAssigned = typeKindOf(assigned, currScope)
+        if (kindOfAssigned == TypeKind.VOID) {
+          cb.pop()
+        } else if (kindOfAssigned != TypeKind.REFERENCE) {
+          val assignedTypeDescUnboxed = typeDescOf(assigned, currScope)
+          val assignedTypeDescBoxed = boxDesc(assignedTypeDescUnboxed)
+          cb.checkcast(assignedTypeDescBoxed)
+          cb.invokevirtual(assignedTypeDescBoxed, unboxingFunc(assignedTypeDescBoxed), MethodTypeDesc.of(assignedTypeDescUnboxed))
+        }
         genValueStore(assigned, currScope, cb)
 
       case IRcorne.HeapVarWrite(heapVar, newValue) =>
-        cb.aload(funGenCtx.getSlot(heapVar))
+        genValueLoad(heapVar, currScope, cb)
         genValueLoad(newValue, currScope, cb)
-        ensureAssignable(AnyType, dealiasedTypeOf(heapVar, currScope), cb)
+        if (typeKindOf(newValue, currScope) != TypeKind.REFERENCE) {
+          val assignedTypeDescUnboxed = typeDescOf(newValue, currScope)
+          val assignedTypeDescBoxed = boxDesc(assignedTypeDescUnboxed)
+          cb.invokestatic(assignedTypeDescBoxed, "valueOf", MethodTypeDesc.of(assignedTypeDescBoxed, assignedTypeDescUnboxed))
+        }
         cb.invokevirtual(heapVarDesc, heapVarSetFunId.stringId, MethodTypeDesc.of(CD_void, CD_Object))
 
       case IRcorne.TypeTest(assigned, testedValue, testedTypeId) =>
@@ -704,15 +735,22 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
     }
   }
 
-  private def generateClosureClass(closureClassNameShort: String, params: List[(Formulas.ParamIdValue, Type)], body: Scope, freeVals: SeqMap[IdValue, Type], enclosingClassId: TypeIdentifier)
+  private def generateArgsList(args: List[IdValue], funSig: FunctionSignature, typeArgsSubst: Map[TypeIdentifier, Type], cb: CodeBuilder, currScope: Scope)
+                              (using TypeParamsContext, FunctionGenerationContext, DealiasingContext, SimplifiedSubtypingContext, GlobalValuesContext): Unit = {
+    for ((arg, paramType) <- args.zip(funSig.paramsWithoutThis.map(_._2.substitute(typeArgsSubst, Map.empty)))) {
+      genValueLoad(arg, currScope, cb)
+      ensureAssignable(paramType, dealiasedTypeOf(arg, currScope), cb)
+    }
+  }
+
+  private def generateClosureClass(closureTypeName: TypeIdentifier, params: List[(Formulas.ParamIdValue, Type)], body: Scope, freeVals: SeqMap[IdValue, Type], enclosingClassId: TypeIdentifier)
                                   (using tpCtx: TypeParamsContext, dealiasingCtx: DealiasingContext, classHierarchyResolver: ClassHierarchyResolver,
                                    globalValsCtx: GlobalValuesContext, subtypingCtx: SimplifiedSubtypingContext, resolCtx: ResolutionContext): ClassDesc = {
     val tConv = NonBoxingTypesConverter.fromAmbientDealiasingCtx
     val freeValFields = freeVals.map((fv, tpe) => mkFieldNameForFreeVal(fv) -> (fv, tpe))
-    val closureClassNameLong = enclosingClassId.stringId + "$" + closureClassNameShort
-    val closureClassDesc = ClassDesc.of(closureClassNameLong)
+    val closureClassDesc = ClassDesc.of(closureTypeName.stringId)
     ClassFile.of(ClassHierarchyResolverOption.of(classHierarchyResolver)).buildTo(
-      mkPathToClass(enclosingClassId, innerClassNameOpt = Some(closureClassNameShort)),
+      mkPathToClass(closureTypeName),
       closureClassDesc,
       clb => {
 
@@ -746,7 +784,7 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
         ))
         clb.withMethod(closureFunName, MethodTypeDesc.of(CD_Object, CD_Object.arrayType()), ClassFile.ACC_PUBLIC, mb => {
           mb.withCode(cb => {
-            applyFunGenCtx.allocateSlotOfSize(1)  // slot for this
+            applyFunGenCtx.allocateSlotOfSize(1) // slot for this
             val argsArraySlot = applyFunGenCtx.allocateSlotOfSize(1)
             for (((paramVal, paramType), paramIdx) <- params.zipWithIndex) {
               val paramSlot = allocateAndDeclare(paramVal, cb, body)(using applyFunGenCtx)
@@ -775,11 +813,6 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
     closureClassDesc
   }
 
-  private def mkClosureName(closureVal: IdValue): String = "Closure" + closureVal.uid + (closureVal match {
-    case value: NamedIdValue => value.name
-    case IntermediateIdValue(definingScope, uid, nameHint) => nameHint
-  })
-
   private def mkFieldNameForFreeVal(fv: IdValue): String =
     s"fv${fv.uid}" ++ (fv match {
       case fv: NamedIdValue => fv.name
@@ -799,7 +832,7 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
     }
   }
 
-  private def genValueLoad(idVal: IdValue, currScope: Scope, cb: CodeBuilder)
+  private def genValueLoad(idVal: IdValue, currScope: Scope, cb: CodeBuilder, isHeapVarRefLoad: Boolean = false)
                           (using funcGenCtx: FunctionGenerationContext, dealiasingCtx: DealiasingContext, globalValsCtx: GlobalValuesContext): Unit = {
     given TypeParamsContext = funcGenCtx.typeParamsCtx
 
@@ -813,7 +846,7 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
         cb.aload(0)
         cb.getfield(closureInfo.closureClassDesc, fldName, tConv.descriptorFor(fldType))
       case _ =>
-        val kind = typeKindOf(idVal, currScope)
+        val kind = if idVal.isInstanceOf[HeapVarIdValue] then TypeKind.REFERENCE else typeKindOf(idVal, currScope)
         if (kind != VOID) {
           if (funcGenCtx.hasSlotFor(idVal)) {
             val slot = funcGenCtx.getSlot(idVal)
@@ -859,11 +892,11 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
       cb.ldc(nullUnboxingMessage)
       cb.invokespecial(assertionErrorDesc, INIT_NAME, assertionErrorConstrDesc)
       cb.athrow()
-    } else if (srcType == NullType) {
+    } else if (srcType == NullType || srcKind == TypeKind.VOID && dstKind == TypeKind.VOID) {
       // nothing to do
-    } else if (srcType == UnitType && dstType != UnitType) {
+    } else if (srcKind == TypeKind.VOID && dstKind != TypeKind.VOID) {
       cb.iconst_0()
-    } else if (dstType == UnitType && srcType != UnitType) {
+    } else if (dstKind == TypeKind.VOID && srcKind != TypeKind.VOID) {
       cb.pop()
     } else if (srcDesc.isPrimitive && !dstDesc.isPrimitive) {
       val srcBoxedDesc = boxDesc(srcDesc)
@@ -894,7 +927,7 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
     given TypeParamsContext = funGenCtx.typeParamsCtx
 
     val tConv = NonBoxingTypesConverter.fromAmbientDealiasingCtx
-    val tpe = currScope.typeOfNoSmartcast(idVal).get
+    val tpe = rawTypeOf(idVal, currScope).get
     val kind = tConv.kindFor(tpe)
     val descr = tConv.descriptorFor(tpe)
     val slot = funGenCtx.allocateSlot(kind, idVal)
@@ -917,24 +950,29 @@ final class Backend(outputDirectoryPath: Path, disableOverflowChecks: Boolean, e
   }
 
   private def dealiasedTypeOf(idVal: IdValue, currScope: Scope)(using dealiasingCtx: DealiasingContext): Type =
-    dealiasingCtx.dealiasType(currScope.typeOfNoSmartcast(idVal).getOrElse(NothingType))
+    dealiasingCtx.dealiasType(rawTypeOf(idVal, currScope).getOrElse(NothingType))
+
+  private def rawTypeOf(idVal: IdValue, currScope: Scope): Option[Type] = idVal match {
+    case idVal: HeapVarIdValue => Some(NamedType(StdLib.heapVarTypeId, List.empty, List.empty))
+    case _ => currScope.typeOfNoSmartcast(idVal)
+  }
 
   private def typeDescOf(idVal: IdValue, currScope: Scope)(using TypeParamsContext, DealiasingContext): ClassDesc = {
     val tConv = NonBoxingTypesConverter.fromAmbientDealiasingCtx
-    val tpe = currScope.typeOfNoSmartcast(idVal).get
+    val tpe = rawTypeOf(idVal, currScope).get
     tConv.descriptorFor(tpe)
   }
 
   private def typeKindOf(idVal: IdValue, currScope: Scope)(using TypeParamsContext, DealiasingContext): TypeKind = {
     val tConv = NonBoxingTypesConverter.fromAmbientDealiasingCtx
-    currScope.typeOfNoSmartcast(idVal) match {
+    rawTypeOf(idVal, currScope) match {
       case Some(tpe) => tConv.kindFor(tpe)
       case None => VOID
     }
   }
 
   private def arrayElemKindOf(idVal: IdValue, currScope: Scope)(using TypeParamsContext, DealiasingContext): TypeKind = {
-    currScope.typeOfNoSmartcast(idVal).map(getRuntimeType) match {
+    rawTypeOf(idVal, currScope).map(getRuntimeType) match {
       case Some(NamedType(tid, typeArgs, Nil)) if tid == arrayTypeId && typeArgs.size == 1 =>
         val tConv = NonBoxingTypesConverter.fromAmbientDealiasingCtx
         tConv.kindFor(typeArgs.head)

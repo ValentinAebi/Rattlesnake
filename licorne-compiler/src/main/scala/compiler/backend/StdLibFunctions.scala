@@ -17,6 +17,11 @@ object StdLibFunctions {
     // TODO FileWriter::write
   )
   
+  private val staticRedirects = Map(
+    (stringsTypeId, stringificationFunId) -> (ClassDesc.ofInternalName("java/util/Objects"), "toString", javaSig(CD_String, CD_Object)),
+    // TODO conversions (Int to Double, etc.)
+  )
+  
   private val stringFuncRedirect = Map(
     stringSizeFunId -> ("length", javaSig(CD_int)),
     stringIsEmptyFunId -> ("isEmpty", javaSig(CD_boolean)),
@@ -41,6 +46,11 @@ object StdLibFunctions {
   
   def stringFuncRedirectFor(sig: FunctionSignature): Option[(String, MethodTypeDesc)] = sig.receiverType match {
     case NamedType(tid, _, _) if tid == stringTypeId => stringFuncRedirect.get(sig.functionName)
+    case _ => None
+  }
+
+  def staticRedirectFor(sig: FunctionSignature): Option[(ClassDesc, String, MethodTypeDesc)] = sig.receiverType match {
+    case NamedType(typeName, Nil, Nil) => staticRedirects.get(typeName, sig.functionName)
     case _ => None
   }
 
