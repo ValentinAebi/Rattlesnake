@@ -1048,8 +1048,11 @@ final class IRcorneGenerator(
         for (varId <- externalVarsAssignedIn(bodyTree)) {
           val heapAddr = currScope.newHeapVar(varId, closureDefTree.getPosition)
           currScope.saveInstr(MkHeapVar(heapAddr), closureDefTree)
-          currScope.getLocalValuesContextUnsafe.valueOf(varId).toOption.foreach { initVal =>
-            currScope.saveInstr(HeapVarWrite(heapAddr, initVal), closureDefTree)
+          currScope.getLocalValuesContextUnsafe.valueOf(varId) match {
+            case KnownAndInitialized(initVal, defScope, reassigStatus, typeAnnotOpt) =>
+              currScope.saveInstr(HeapVarWrite(heapAddr, initVal), closureDefTree)
+              heapAddr.offerAnnotType(typeAnnotOpt)
+            case _ => ()
           }
           currScope.getLocalValuesContextUnsafe.remap(varId, heapAddr)
         }

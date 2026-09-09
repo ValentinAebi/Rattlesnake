@@ -353,6 +353,11 @@ final class Typer(
         forbiddenIfImpure(s"illegal access to impure closure-captured variable $heapVar in a pure method or closure", heapVarRd.getPosition)
 
       case heapVarWr@HeapVarWrite(heapVar, newValue) =>
+        if (!heapVarsTypeStore.contains(heapVar)) {
+          heapVar.getAnnotTypeOpt.foreach { annot =>
+            heapVarsTypeStore.saveType(heapVar, annot)
+          }
+        }
         val newValType = currScope.computeCurrentType(newValue, heapVarWr.getPosition)
         heapVarsTypeStore.getType(heapVar) match {
           case Some(expType) =>

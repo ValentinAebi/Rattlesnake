@@ -79,6 +79,16 @@ object Formulas {
   }
 
   final case class HeapVarIdValue(id: FunOrVarId, definingScope: Scope, uid: Long, posOpt: Option[Position]) extends NamedIdValue("h") {
+    private var annotTypeOpt: Option[Type] = None
+
+    def offerAnnotType(annotOpt: Option[Type]): Unit = {
+      if (annotTypeOpt.isEmpty && annotOpt.nonEmpty) {
+        annotTypeOpt = annotOpt
+      }
+    }
+    
+    def getAnnotTypeOpt: Option[Type] = annotTypeOpt
+
     override def name: String = id.stringId
   }
 

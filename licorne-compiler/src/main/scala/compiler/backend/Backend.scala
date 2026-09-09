@@ -573,6 +573,8 @@ final class Backend(
           val boxedDesc = boxDesc(unboxedDesc)
           cb.checkcast(boxedDesc)
           cb.invokevirtual(boxedDesc, unboxingFunc(boxedDesc), MethodTypeDesc.of(unboxedDesc))
+        } else {
+          cb.checkcast(typeDescOf(assigned, currScope))
         }
         genValueStore(assigned, currScope, cb)
 
@@ -636,6 +638,8 @@ final class Backend(
           val assignedTypeDescBoxed = boxDesc(assignedTypeDescUnboxed)
           cb.checkcast(assignedTypeDescBoxed)
           cb.invokevirtual(assignedTypeDescBoxed, unboxingFunc(assignedTypeDescBoxed), MethodTypeDesc.of(assignedTypeDescUnboxed))
+        } else {
+          cb.checkcast(typeDescOf(assigned, currScope))
         }
         genValueStore(assigned, currScope, cb)
 
